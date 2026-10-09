@@ -1,0 +1,143 @@
+# Builds the game on every push. Pushes to main also publish the browser version to
+# GitHub Pages. Pushing a version tag (v0.1.0, ...) creates a GitHub Release with the
+# single-file browser build plus Windows, macOS and Linux downloads.
+name: Build
+
+# Rust is pinned to the exact version the game is developed and tested with (see
+# rust-toolchain.toml), so a new stable release can't break the build.
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Tests (headless sim)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.91.1"
+      - uses: Swatinem/rust-cache@v2
+      - name: Linux libraries (sound + controllers)
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev pkg-config
+      - run: cargo test
+
+  web:
+    name: Browser build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.91.1"
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --release --target wasm32-unknown-unknown
+      - run: python3 build_web.py
+      - name: Stage files
+        run: |
+          mkdir -p site
+          cp dist/index.html site/index.html
+          cp dist/index.html pilgrim-browser.html
+      - uses: actions/upload-artifact@v6
+        with:
+          name: release-browser
+          path: pilgrim-browser.html
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+
+  # Only main deploys: the github-pages environment rejects tags, which is what
+  # failed every tagged Shinjuku run.
+  pages:
+    name: Publish to GitHub Pages
+    needs: [test, web]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v5
+
+  native:
+    name: Desktop build (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            name: linux-x86_64
+          - os: windows-latest
+            name: windows-x86_64
+          - os: macos-latest
+            name: macos-universal
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.91.1"
+      - uses: Swatinem/rust-cache@v2
+      # same Python on every OS (Windows runners don't ship a `python3` command)
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Linux libraries (sound + controllers)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libudev-dev pkg-config
+      - name: Build
+        if: runner.os != 'macOS'
+        run: cargo build --release
+      - name: Build universal binary (Apple Silicon + Intel)
+        if: runner.os == 'macOS'
+        run: |
+          rustup target add --toolchain 1.91.1 aarch64-apple-darwin x86_64-apple-darwin
+          cargo build --release --target aarch64-apple-darwin
+          cargo build --release --target x86_64-apple-darwin
+          mkdir -p target/release
+          lipo -create -output target/release/pilgrim \
+            target/aarch64-apple-darwin/release/pilgrim \
+            target/x86_64-apple-darwin/release/pilgrim
+      - name: Package
+        run: python .github/package.py ${{ matrix.name }}
+      - uses: actions/upload-artifact@v6
+        with:
+          name: release-${{ matrix.name }}
+          path: pilgrim-${{ matrix.name }}.zip
+
+  release:
+    name: GitHub Release
+    needs: [test, web, native]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      # only the release-* artifacts (skips the GitHub Pages bundle)
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: release-*
+          path: out
+          merge-multiple: true
+      - name: Release notes from CHANGELOG.md
+        run: python3 .github/notes.py "${GITHUB_REF_NAME}" "${GITHUB_REPOSITORY}" > notes.md
+      - uses: softprops/action-gh-release@v3
+        with:
+          name: PILGRIM ${{ github.ref_name }}
+          body_path: notes.md
+          files: out/*

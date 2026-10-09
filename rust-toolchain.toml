@@ -1,0 +1,6 @@
+# The exact Rust the game is developed and tested with. CI uses the same version
+# (.github/workflows/build.yml), so a new stable release can't break the build.
+[toolchain]
+channel = "1.91.1"
+targets = ["wasm32-unknown-unknown"]
+profile = "minimal"
