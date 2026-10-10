@@ -3,6 +3,54 @@
 Every version is one build sprint. Newest first. Versions are tagged in git, and
 each tag publishes a GitHub Release with downloads.
 
+## [0.2.0] - 2026-10-10 - The Pilgrim
+
+Sprint 1: the ship feels instant and fast before anything shoots back.
+
+### Added
+- **The Pilgrim**, rebuilt pixel by pixel from the sheet: the gothic spire, the
+  cross on the spine (the hitbox sits on it), three red reactor dots that glow
+  brighter while you fire, hatched buttress wings, and two wing pods with red tips
+  and red/teal wingtip lights. Idle, thrust, fire and hit-flash animations, a roll
+  left and right as you move sideways, a teal engine plume and trail, and teal
+  afterimages at full speed. The pods trail a couple of pixels behind the hull and
+  tuck in when you focus. `PG_SHEET=1` saves the whole animation sheet.
+- **Movement with no inertia.** The ship moves on the frame the input arrives,
+  diagonals are the same speed as straight lines (4 px a frame), and it stops dead
+  when you let go. **Focus** slows it to 0.55x over 5 frames and shows the hitbox
+  dot and its ring.
+- **The wide shot:** twin red bolts down the middle and angled streams from the
+  pods, a volley every 3 frames. Shots start at the ship, so a target you're
+  sitting on still gets hit. **The focus beam:** fire while focused for a 12 px
+  beam that stops at the first thing in its lane, does 1.6x the wide shot's
+  damage, and burns anything within 28 px with its aura.
+- **Three target dummies** (still, moving, big) that flash, break, come back, and
+  show the damage per second they're taking, for comparing the wide shot and the
+  beam. Flying into one flashes the hull (nothing can hurt you yet).
+- **Controllers**, on desktop and in the browser: the D-pad or left stick (8-way
+  by default, analog in the options), A fire, RB/RT focus, B bomb, Start pause.
+- **Rumble**, on desktop and in the browser: a soft hum while firing, a stronger
+  one for the beam, kicks when targets break, and a big one on the bomb button.
+  Off, low or full in the options. Phones playing by touch get a short buzz on the
+  big moments (Android; iPhones don't allow it).
+- **Touch:** drag anywhere to steer (the ship follows your finger 1:1, up to its
+  speed, so your thumb never covers it), it fires while you steer, a second finger
+  focuses, and there are bomb and pause buttons.
+- **Keyboard:** arrows or WASD, Z fire, Shift focus, X bomb, Esc pause, M sound.
+- **The live tuning panel.** Pause to change speed, focus ratio (stepping through
+  0.45, 0.50, 0.55, 0.60, 0.67, 0.75), blend frames, touch sensitivity, stick mode
+  and rumble. The current values show beside the playfield, keys 1 to 6 change
+  them while you fly, and everything is saved (in the browser too).
+- **First sounds**, synthesized like Shinjuku's: a soft, throttled shot, the beam's
+  hum, a hit tick, breaking targets, and a "not yet" for the bomb button (the bomb
+  arrives in v0.5).
+- Debug: `PG_AUTO=1` autopilot, `PG_SCENE=shots:<n>`, `PG_SHEET`, `PG_WAV`,
+  `PG_MENU`, `PG_FRESH`, and in debug builds F1 hitboxes, F2 grayscale, F3 quarter
+  speed, F4 frame step, F9 sprite sheet.
+
+### Performance
+- 500 player shots: 60.0 fps at 1080p, 0.40 ms of CPU per frame (2,000 shots: 0.80 ms).
+
 ## [0.1.0] - 2026-10-10 - First light
 
 Sprint 0: the empty game runs everywhere and ships itself.

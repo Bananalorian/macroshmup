@@ -6,10 +6,13 @@ use super::art::Atlas;
 use super::font::{self, text_width};
 use super::layout::{IRect, Layout, Orient};
 use super::palette::{ASH, CREAM, DUSK, SLATE, STRIP, VOID, tone};
+use crate::input::{Button, Mode, touch_buttons};
+use crate::menu::{self, ITEMS};
+use crate::storage::Settings;
 use crate::tune::{BLINK_FRAMES, TITLE_SCALE, TITLE_TRACK, TRACK};
 use macroquad::color::Color;
 
-/// `V0.1 // PILGRIM`, from the crate version.
+/// `V0.2 // PILGRIM`, from the crate version.
 pub fn version_stamp() -> String {
     let mut v = env!("CARGO_PKG_VERSION").split('.');
     format!("V{}.{} // PILGRIM", v.next().unwrap_or("0"), v.next().unwrap_or("0"))
@@ -25,6 +28,12 @@ pub fn text(a: &Atlas, s: &str, x: i32, y: i32, scale: i32, track: i32, c: Color
     }
 }
 
+/// Small spaced text on a VOID backing, so a passing star never reads as a glyph.
+fn small(a: &Atlas, s: &str, x: i32, y: i32, c: Color) {
+    a.fill(x - 1, y - 1, text_width(s, 1, TRACK) + 2, font::GH as i32 + 2, VOID);
+    text(a, s, x, y, 1, TRACK, c);
+}
+
 /// Small spaced text, right edge at `x`.
 fn text_r(a: &Atlas, s: &str, x: i32, y: i32, c: Color) {
     small(a, s, x - text_width(s, 1, TRACK), y, c);
@@ -35,12 +44,6 @@ fn text_c(a: &Atlas, s: &str, cx: i32, y: i32, scale: i32, track: i32, c: Color)
     let (w, x) = (text_width(s, scale, track), cx - text_width(s, scale, track) / 2);
     a.fill(x - scale, y - scale, w + 2 * scale, (font::GH as i32 + 2) * scale, VOID);
     text(a, s, x, y, scale, track, c);
-}
-
-/// Small spaced text on a VOID backing, so a passing star never reads as a glyph.
-fn small(a: &Atlas, s: &str, x: i32, y: i32, c: Color) {
-    a.fill(x - 1, y - 1, text_width(s, 1, TRACK) + 2, font::GH as i32 + 2, VOID);
-    text(a, s, x, y, 1, TRACK, c);
 }
 
 fn hrule(a: &Atlas, x0: i32, x1: i32, y: i32) {
@@ -72,8 +75,17 @@ fn stamps(a: &Atlas, x0: i32, x1: i32, y: i32, right: bool) {
     }
 }
 
-/// The placeholder title: the name, the tagline, PRESS START.
-pub fn title(r: &Renderer, lay: &Layout, t: u64) {
+fn start_hint(mode: Option<Mode>) -> &'static str {
+    match mode {
+        None => "PRESS Z  //  TAP TO START",
+        Some(Mode::Keys) => "PRESS Z TO START",
+        Some(Mode::Pad) => "PRESS A TO START",
+        Some(Mode::Touch) => "TAP TO START",
+    }
+}
+
+/// The title: the name, the tagline, PRESS START.
+pub fn title(r: &Renderer, lay: &Layout, t: u64, mode: Option<Mode>) {
     let a = &r.atlas;
     r.stars.draw(a, IRect::new(0, 0, lay.cw, lay.ch), t);
     let blink_on = t % (BLINK_FRAMES * 3) < BLINK_FRAMES * 2;
@@ -92,7 +104,7 @@ pub fn title(r: &Renderer, lay: &Layout, t: u64) {
             hrule(a, cx - w / 2, cx + w / 2, ty + 32);
             text_c(a, "SOMEWHERE BEYOND THE EVENT HORIZON", cx, ty + 42, 1, TRACK, ASH);
             if blink_on {
-                text_c(a, "PRESS Z  //  TAP TO START", cx, 240, 1, TRACK, CREAM);
+                text_c(a, start_hint(mode), cx, 240, 1, TRACK, CREAM);
             }
             stamps(a, m, lay.cw - m, lay.ch - 32, true);
         }
@@ -109,21 +121,64 @@ pub fn title(r: &Renderer, lay: &Layout, t: u64) {
             text_c(a, "SOMEWHERE BEYOND", cx, ty + 42, 1, TRACK, ASH);
             text_c(a, "THE EVENT HORIZON", cx, ty + 52, 1, TRACK, ASH);
             if blink_on {
-                text_c(a, "TAP TO START", cx, 316, 1, TRACK, CREAM);
+                text_c(a, if mode == Some(Mode::Pad) { "PRESS A TO START" } else { "TAP TO START" }, cx, 316, 1, TRACK, CREAM);
             }
             stamps(a, m, lay.cw - m, lay.ch - 32, false);
         }
     }
 }
 
-/// The empty playfield with its starfield, framed by the HUD panels.
-pub fn stage(r: &Renderer, lay: &Layout, frame: u64) {
+/// Everything the stage HUD shows besides the playfield.
+pub struct HudView<'a> {
+    pub settings: &'a Settings,
+    pub mode: Mode,
+    /// The pause menu's selected row, when paused.
+    pub menu: Option<usize>,
+    pub toast: Option<(&'a str, u32)>,
+    pub bomb_flash: u32,
+}
+
+fn controls(mode: Mode) -> &'static [(&'static str, &'static str)] {
+    match mode {
+        Mode::Keys => &[("ARROWS", "MOVE"), ("Z", "FIRE"), ("SHIFT", "FOCUS"), ("Z+SHIFT", "BEAM"), ("X", "BOMB"), ("ESC", "PAUSE"), ("M", "SOUND"), ("F11", "FULLSCREEN")],
+        Mode::Pad => &[("STICK", "MOVE"), ("A", "FIRE"), ("RB / RT", "FOCUS"), ("A+RB", "BEAM"), ("B", "BOMB"), ("START", "PAUSE")],
+        Mode::Touch => &[("DRAG", "FLY + FIRE"), ("2ND FINGER", "FOCUS"), ("II", "PAUSE")],
+    }
+}
+
+fn tuning_lines(s: &Settings) -> [(&'static str, String); 3] {
+    use crate::menu::Item;
+    [("SPEED", menu::value(s, Item::Speed)), ("FOCUS", menu::value(s, Item::Focus)), ("BLEND", menu::value(s, Item::Blend))]
+}
+
+/// The on-screen touch buttons.
+fn buttons(a: &Atlas, lay: &Layout, v: &HudView) {
+    for (b, cx, cy, r) in touch_buttons(lay) {
+        let (cx, cy) = (cx as i32, cy as i32);
+        let n = (r * 1.6) as i32;
+        let lit = b == Button::Bomb && v.bomb_flash > 0;
+        for k in 0..n {
+            let ang = k as f32 / n as f32 * std::f32::consts::TAU;
+            a.fill(cx + (ang.cos() * r).round() as i32, cy + (ang.sin() * r).round() as i32, 1, 1, if lit { CREAM } else { SLATE });
+        }
+        match b {
+            Button::Bomb => text_c(a, "BOMB", cx, cy - 3, 1, 1, if lit { CREAM } else { ASH }),
+            Button::Pause => {
+                a.fill(cx - 3, cy - 4, 2, 9, ASH);
+                a.fill(cx + 2, cy - 4, 2, 9, ASH);
+            }
+        }
+    }
+}
+
+/// The stage's frame: masks over the playfield's overflow, then the panels.
+pub fn stage(r: &Renderer, lay: &Layout, v: &HudView) {
     let a = &r.atlas;
     let f = lay.field;
-    r.stars.draw(a, f, frame);
     match lay.orient {
         Orient::Landscape => {
-            // rules down both sides of the playfield
+            a.fill(0, 0, f.x, lay.ch, VOID);
+            a.fill(f.right(), 0, lay.cw - f.right(), lay.ch, VOID);
             a.fill(f.x - 1, 0, 1, lay.ch, DUSK);
             a.fill(f.right(), 0, 1, lay.ch, DUSK);
 
@@ -131,9 +186,25 @@ pub fn stage(r: &Renderer, lay: &Layout, frame: u64) {
             small(a, "PILGRIM", l0, 12, CREAM);
             small(a, "TYPE-07", l0, 22, ASH);
             hrule(a, l0, l1, 34);
-            small(a, "STAGE 1", l0, 42, SLATE);
-            small(a, "ESC   TITLE", l0, 290, SLATE);
-            small(a, "F11   FULLSCREEN", l0, 300, SLATE);
+            small(a, "STAGE 1  //  SANDBOX", l0, 42, SLATE);
+            small(a, "TUNING", l0, 64, ASH);
+            for (i, (k, val)) in tuning_lines(v.settings).iter().enumerate() {
+                let y = 76 + i as i32 * 10;
+                small(a, k, l0, y, SLATE);
+                text_r(a, val, l1, y, CREAM);
+            }
+            let hint = match v.mode {
+                Mode::Keys => "1-6 TO CHANGE",
+                _ => "PAUSE TO CHANGE",
+            };
+            small(a, hint, l0, 108, SLATE);
+            let rows = controls(v.mode);
+            let y0 = lay.ch - 42 - rows.len() as i32 * 10;
+            for (i, (k, act)) in rows.iter().enumerate() {
+                let y = y0 + i as i32 * 10;
+                small(a, k, l0, y, ASH);
+                text_r(a, act, l1, y, SLATE);
+            }
             stamps(a, l0, l1, lay.ch - 32, false);
 
             let (r0, r1) = (f.right() + 13, lay.cw - 12);
@@ -144,17 +215,103 @@ pub fn stage(r: &Renderer, lay: &Layout, frame: u64) {
             hrule(a, r0, r1, lay.ch - 32);
             text_r(a, "A SMALL SHIP", r1, lay.ch - 26, ASH);
             text_r(a, "A LONG WAY FROM HOME", r1, lay.ch - 16, SLATE);
+            if v.mode == Mode::Touch {
+                buttons(a, lay, v);
+            }
         }
         Orient::Portrait => {
+            a.fill(0, 0, lay.cw, f.y, VOID);
+            a.fill(0, f.bottom(), lay.cw, lay.ch - f.bottom(), VOID);
             small(a, "PILGRIM", 8, 8, CREAM);
-            text_r(a, &version_stamp(), lay.cw - 8, 8, ASH);
+            text_r(a, &version_stamp(), lay.cw - 32, 8, ASH);
             hrule(a, 0, lay.cw, f.y - 1);
             hrule(a, 0, lay.cw, f.bottom());
-            let cx = lay.cw / 2;
-            text_c(a, "A SMALL SHIP", cx, f.bottom() + 36, 1, TRACK, SLATE);
-            text_c(a, "A LONG WAY FROM HOME", cx, f.bottom() + 46, 1, TRACK, SLATE);
+            let t = tuning_lines(v.settings);
+            let line = format!("SPD {}  FOC {}  BLD {}", t[0].1.trim_end_matches(" PX"), t[1].1, t[2].1.trim_end_matches(" F"));
+            text(a, &line, 8, f.bottom() + 8, 1, 1, SLATE);
+            let hint = if v.mode == Mode::Pad { "START: PAUSE + TUNING" } else { "DRAG ANYWHERE TO FLY" };
+            small(a, hint, 8, f.bottom() + 24, ASH);
+            small(a, "2ND FINGER: FOCUS", 8, f.bottom() + 36, SLATE);
+            buttons(a, lay, v);
         }
     }
+    if let Some((msg, left)) = v.toast {
+        if left > 0 && (left > 20 || left % 6 < 3) {
+            text_c(a, msg, f.x + f.w / 2, f.y + 40, 1, TRACK, CREAM);
+        }
+    }
+    if let Some(sel) = v.menu {
+        pause_menu(a, lay, v, sel);
+    }
+}
+
+/// The pause menu's geometry, shared by drawing and tapping.
+pub struct MenuBox {
+    pub panel: IRect,
+    pub row0: i32,
+    pub row_h: i32,
+    /// The value column: taps left of its middle step down, right of it step up.
+    pub val0: i32,
+    pub val1: i32,
+}
+
+pub fn menu_box(lay: &Layout) -> MenuBox {
+    let f = lay.field;
+    let row_h = 16;
+    let h = 34 + ITEMS.len() as i32 * row_h + 22;
+    let panel = IRect::new(f.x + 14, f.y + (f.h - h) / 2, f.w - 28, h);
+    MenuBox { panel, row0: panel.y + 30, row_h, val0: panel.x + panel.w / 2, val1: panel.right() - 8 }
+}
+
+/// What a tap at canvas `(x, y)` means in the menu: (row, step) where step is
+/// -1 or 1 on a value, 0 elsewhere on the row.
+pub fn menu_tap(lay: &Layout, x: f32, y: f32) -> Option<(usize, i32)> {
+    let m = menu_box(lay);
+    let (x, y) = (x as i32, y as i32);
+    if x < m.panel.x || x >= m.panel.right() || y < m.row0 - 4 {
+        return None;
+    }
+    let row = ((y - m.row0 + 4) / m.row_h) as usize;
+    let item = *ITEMS.get(row)?;
+    let step = if item.adjustable() && x >= m.val0 - 8 {
+        if x < (m.val0 + m.val1) / 2 { -1 } else { 1 }
+    } else {
+        0
+    };
+    Some((row, step))
+}
+
+fn pause_menu(a: &Atlas, lay: &Layout, v: &HudView, sel: usize) {
+    let m = menu_box(lay);
+    let p = m.panel;
+    a.fill(p.x, p.y, p.w, p.h, Color { a: 0.94, ..VOID });
+    hrule(a, p.x, p.right(), p.y);
+    hrule(a, p.x, p.right(), p.bottom() - 1);
+    text(a, "PAUSED // TUNING", p.x + 10, p.y + 10, 1, TRACK, CREAM);
+    for (i, item) in ITEMS.iter().enumerate() {
+        let y = m.row0 + i as i32 * m.row_h;
+        let on = i == sel;
+        let c = if on { CREAM } else { ASH };
+        if on {
+            a.fill(p.x + 4, y - 3, p.w - 8, m.row_h - 3, Color { a: 0.5, ..DUSK });
+            text(a, ">", p.x + 6, y, 1, 1, CREAM);
+        }
+        text(a, item.label(), p.x + 16, y, 1, 1, c);
+        if item.adjustable() {
+            let val = menu::value(v.settings, *item);
+            let cxv = (m.val0 + m.val1) / 2;
+            let w = text_width(&val, 1, 1);
+            text(a, &val, cxv - w / 2, y, 1, 1, c);
+            text(a, "<", m.val0 - 4, y, 1, 1, if on { CREAM } else { SLATE });
+            text(a, ">", m.val1 - 5, y, 1, 1, if on { CREAM } else { SLATE });
+        }
+    }
+    let hint = match v.mode {
+        Mode::Keys => "ARROWS CHANGE  Z OK  ESC BACK",
+        Mode::Pad => "D-PAD CHANGE  A OK  B BACK",
+        Mode::Touch => "TAP < > TO CHANGE",
+    };
+    text(a, hint, p.x + 10, p.bottom() - 14, 1, 1, SLATE);
 }
 
 #[cfg(test)]
@@ -179,12 +336,47 @@ mod tests {
         }
         let port = (PORTRAIT_W as i32) - 24;
         assert!(text_width("PILGRIM", TITLE_SCALE, TITLE_TRACK) <= port);
-        for s in ["HUMANITY STILL LOOKS UP", "THE EVENT HORIZON", "A LONG WAY FROM HOME"] {
+        for s in ["HUMANITY STILL LOOKS UP", "THE EVENT HORIZON", "A LONG WAY FROM HOME", "DRAG ANYWHERE TO FLY", "START: PAUSE + TUNING"] {
             assert!(text_width(s, 1, TRACK) <= port, "{s}");
         }
-        // the side panels in landscape are 185 px wide with 12 px margins
-        for s in ["HUMANITY STILL LOOKS UP", "A LONG WAY FROM HOME", "F11   FULLSCREEN"] {
-            assert!(text_width(s, 1, TRACK) <= 185 - 25, "{s}");
+    }
+
+    #[test]
+    fn panel_text_fits_the_side_panels() {
+        // the landscape side panels are 185 px wide with 12 px margins
+        let room = 185 - 25;
+        for s in ["HUMANITY STILL LOOKS UP", "A LONG WAY FROM HOME", "STAGE 1  //  SANDBOX", "PAUSE TO CHANGE"] {
+            assert!(text_width(s, 1, TRACK) <= room, "{s}");
+        }
+        for mode in [Mode::Keys, Mode::Pad, Mode::Touch] {
+            for (k, act) in controls(mode) {
+                assert!(text_width(k, 1, TRACK) + 8 + text_width(act, 1, TRACK) <= room, "{k} {act}");
+            }
+        }
+    }
+
+    #[test]
+    fn the_menu_fits_and_taps_land_on_rows() {
+        for (w, h) in [(1280, 720), (390, 844), (844, 390)] {
+            let lay = Layout::fit(w, h);
+            let m = menu_box(&lay);
+            assert!(m.panel.y >= lay.field.y && m.panel.bottom() <= lay.field.bottom());
+            for (i, item) in ITEMS.iter().enumerate() {
+                let y = (m.row0 + i as i32 * m.row_h + 3) as f32;
+                assert_eq!(menu_tap(&lay, (m.panel.x + 20) as f32, y), Some((i, 0)));
+                if item.adjustable() {
+                    assert_eq!(menu_tap(&lay, m.val0 as f32, y), Some((i, -1)));
+                    assert_eq!(menu_tap(&lay, (m.val1 - 2) as f32, y), Some((i, 1)));
+                }
+            }
+            for mode in [Mode::Keys, Mode::Pad, Mode::Touch] {
+                let hint = match mode {
+                    Mode::Keys => "ARROWS CHANGE  Z OK  ESC BACK",
+                    Mode::Pad => "D-PAD CHANGE  A OK  B BACK",
+                    Mode::Touch => "TAP < > TO CHANGE",
+                };
+                assert!(text_width(hint, 1, 1) <= m.panel.w - 20);
+            }
         }
     }
 }

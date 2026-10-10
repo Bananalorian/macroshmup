@@ -3,6 +3,47 @@
 Session notes for Claude Code: what shipped, tuning that changed, known issues, what's next.
 Newest first.
 
+## v0.2.0 The Pilgrim (Sprint 1) - 2026-10-10
+
+**Shipped**
+- `sim/`: `player.rs` (Controls, Tuning, Player: focus blend, no-inertia move, touch drag capped
+  at speed, pod lag, bank, history), `shots.rs` (wide volley: 2 bolts + 2 angled pod shots),
+  `dummy.rs` (still/moving/big, DPS log, rate-limited flash, respawn), `geom.rs`, World events
+  (Volley, Hit, Break, Bump, BombStub), beam (stops at nearest target in its lane) + aura.
+- `render/ship.rs`: the Pilgrim as half-grids mirrored (BODY 11x34, anchor = cross arms (10,11);
+  POD 7x18, spine col 4). Bank frames made by dropping wing columns + darkening the dipping side.
+  Lights ('L','W','M','P','N' chars) are drawn unlit in the atlas and lit at draw time.
+- `render/art.rs` is now a shelf packer (512x256 atlas) with silhouettes for flashes/afterimages.
+- `render/particles.rs` (minimal: sparks, dots, rings; cosmetic RNG; cap 4096), `render/scene.rs`.
+- Ported from Shinjuku: `pad.rs` (gilrs + web plugin, `pg_*`), `synth.rs` (core + tick/hit/
+  explosion/select), `audio.rs` (throttle, beam loop), `storage.rs` (now holds Settings).
+  New: `input.rs`, `menu.rs` (pause = tuning panel), `rumble.rs`, `sheet.rs` (native only).
+- Web: `pg_vibrate` added to the template's plugin (phone buzz).
+- 93 tests.
+
+**Tuning (tune.rs)**: speed 4.0, focus 0.55 over 5 frames, pods ±11 (focus ±7), follow 0.6,
+max lag 3; volley every 3 frames; bolt 14 px/f, 18 long, dmg 3; pods 13 px/f at 4/9 deg, dmg 1.5;
+beam 12 wide, 3.2/frame (1.6x); aura 28 px, 1/frame. Dummy HP 120/80/1500.
+Rumble: fire (0, .07), beam (.10, .18) every 4 frames; break (.35,.45,140ms); big (.8,.7,380);
+bomb (1,.8,450); connect (.3,.3,160). Sounds: shot gap 95 ms, vol .16.
+
+**Verified**
+- 500 shots: 60.0 fps at 1080p, cpu 0.40 ms/frame (2000: 0.80 ms) (`PG_SCENE=shots:500 PG_PERF=1`).
+- Browser via Playwright/Edge: keyboard (menu change saved to localStorage), a fake gamepad
+  (stick, A, RB, B; 31 rumble calls recorded incl. connect, fire hum, beam hum, bomb kick), touch
+  drag + second-finger beam on a 390x844 @3x phone. No console errors.
+- Crisp check on all screenshots (title/stage at 1280, 1920, 390x844 and the web phone at 4x).
+
+**Known issues / decisions pending**
+- Jason to pick the focus ratio (pause menu, presets 0.45-0.75).
+- The thrust plume is teal (art bible) though the sheet's thrust frames show a red-white plume.
+- Bumping a dummy flashes the hull (a stand-in so the hit animation shows; Sprint 5 makes contact lethal).
+- Bank frames are subtle; touch steering cap = ship speed (fast flicks get clipped, no lag).
+- `AGENTS.md` (Jason's Codex copy of CLAUDE.md) is untracked; not committed.
+- Native rumble untested on real hardware by me (gilrs did detect a controller on this PC).
+
+**Next: Sprint 2, Danmaku engine** (v0.3.0): bullet pool, bullet types, patterns, the bot, sandbox, stress.
+
 ## v0.1.0 First light (Sprint 0) - 2026-10-10
 
 **Shipped**
