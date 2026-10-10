@@ -76,6 +76,24 @@ impl Particles {
         }
     }
 
+    /// A graze: a couple of teal sparks flicking away from the bullet.
+    pub fn graze(&mut self, x: f32, y: f32, px: f32, py: f32) {
+        let away = (y - py).atan2(x - px);
+        for _ in 0..2 {
+            let a = away + self.rng.range(-0.6, 0.6);
+            let s = self.rng.range(1.0, 2.2);
+            self.push(P { x, y, vx: a.cos() * s, vy: a.sin() * s, life: 8, max: 8, kind: Kind::Spark, color: TEAL, grow: 0.0 });
+        }
+    }
+
+    /// A bullet cancelled by a death: a red pop.
+    pub fn cancel(&mut self, x: f32, y: f32) {
+        let a = self.rng.range(0.0, std::f32::consts::TAU);
+        let life = self.rng.range(8.0, 16.0) as u16;
+        let color = if self.rng.chance(0.3) { CREAM } else { SIGNAL };
+        self.push(P { x, y, vx: a.cos() * 0.6, vy: a.sin() * 0.6, life, max: life, kind: Kind::Dot, color, grow: 0.0 });
+    }
+
     /// A target breaking: a ring, shards with red and teal fringes, embers.
     pub fn burst(&mut self, x: f32, y: f32, big: bool) {
         let scale = if big { 2.2 } else { 1.0 };

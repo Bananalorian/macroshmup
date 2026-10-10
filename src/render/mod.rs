@@ -4,6 +4,7 @@
 
 pub mod art;
 pub mod bg;
+pub mod bullets;
 pub mod font;
 pub mod hud;
 pub mod layout;
@@ -45,6 +46,7 @@ pub struct Renderer {
     pub atlas: art::Atlas,
     pub stars: bg::Starfield,
     pub fx: particles::Particles,
+    pub flash: Flash,
     /// Show the canvas in grayscale (F2).
     pub gray: bool,
     gray_mat: Material,
@@ -77,6 +79,7 @@ impl Renderer {
             // enough sky for the biggest canvas (portrait is 270x480, landscape 640x360)
             stars: bg::Starfield::new(640.0 * 480.0),
             fx: particles::Particles::new(),
+            flash: Flash::default(),
             gray: false,
             gray_mat,
             canvas: make_canvas(lay.cw, lay.ch),
@@ -123,5 +126,50 @@ impl Renderer {
         if self.gray {
             gl_use_default_material();
         }
+    }
+}
+
+/// Full-screen flashes, never more than 3 a second (WCAG 2.3.1).
+#[derive(Default)]
+pub struct Flash {
+    last: Option<u64>,
+    left: u32,
+}
+
+impl Flash {
+    /// Ask for a flash on sim frame `frame`; returns whether it was allowed.
+    pub fn trigger(&mut self, frame: u64) -> bool {
+        if self.last.is_some_and(|l| frame.saturating_sub(l) < crate::tune::FLASH_GAP) {
+            return false;
+        }
+        self.last = Some(frame);
+        self.left = crate::tune::FLASH_FRAMES;
+        true
+    }
+
+    pub fn tick(&mut self) {
+        self.left = self.left.saturating_sub(1);
+    }
+
+    /// How strong the flash is now, 0..1.
+    pub fn level(&self) -> f32 {
+        self.left as f32 / crate::tune::FLASH_FRAMES as f32
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn never_more_than_three_flashes_a_second() {
+        let mut f = Flash::default();
+        // ask every frame for 10 seconds
+        let allowed: Vec<u64> = (0..600).filter(|&fr| f.trigger(fr)).collect();
+        for w in 0..540 {
+            let in_window = allowed.iter().filter(|&&a| a >= w && a < w + 60).count();
+            assert!(in_window <= 3, "{in_window} flashes in the second from frame {w}");
+        }
+        assert!(allowed.len() >= 29, "but it does flash");
     }
 }

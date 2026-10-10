@@ -2,8 +2,13 @@
 //! or touches macroquad, so `cargo test` can play the game headlessly in CI.
 //! The same seed with the same inputs always gives the same run.
 
+pub mod bot;
+pub mod bullets;
 pub mod dummy;
+#[cfg(test)]
+mod fairness;
 pub mod geom;
+pub mod pattern;
 pub mod player;
 pub mod rng;
 pub mod shots;
@@ -11,6 +16,7 @@ pub mod shots;
 use crate::tune::*;
 use dummy::Dummy;
 use geom::Rect;
+use pattern::Hazards;
 use player::{Controls, Player, Tuning};
 use rng::Rng;
 use shots::{Shot, ShotKind};
@@ -28,6 +34,10 @@ pub enum Event {
     Bump,
     /// The bomb button (the bomb itself arrives in Sprint 4).
     BombStub,
+    /// A bullet's core passed close by.
+    Graze { x: f32, y: f32 },
+    /// The placeholder death: the Pilgrim was hit at `(x, y)` and the screen resets.
+    Death { x: f32, y: f32 },
 }
 
 /// The focus beam this frame, in playfield px.
@@ -47,7 +57,8 @@ impl Beam {
     }
 }
 
-/// One run of the game: for now the Pilgrim and three target dummies.
+/// One run of the game: for now the Pilgrim, three target dummies and the
+/// pattern sandbox's guns.
 pub struct World {
     pub seed: u64,
     /// Ticks since the run began. Every gameplay timing counts these.
@@ -63,6 +74,14 @@ pub struct World {
     pub events: Vec<Event>,
     /// Debug: keep this many extra shots alive (the 500-shot performance check).
     pub fill_shots: usize,
+    /// The guns and their bullets.
+    pub hazards: Hazards,
+    /// Bullets can't hurt you (sandbox option, F5).
+    pub invincible: bool,
+    pub deaths: u32,
+    pub grazes: u32,
+    /// Where bullets were when a death cleared them (for the effects), this frame only.
+    pub cancelled: Vec<(f32, f32)>,
 }
 
 impl World {
@@ -78,17 +97,40 @@ impl World {
             beam: None,
             events: Vec::with_capacity(64),
             fill_shots: 0,
+            hazards: Hazards::new(0, seed),
+            invincible: false,
+            deaths: 0,
+            grazes: 0,
+            cancelled: Vec::with_capacity(crate::tune::BULLET_CAP),
         }
+    }
+
+    /// Switch the sandbox to preset `i`.
+    pub fn set_pattern(&mut self, i: usize) {
+        self.hazards.load(i);
+    }
+
+    /// Where the target dummies are, for guns that ride them.
+    pub fn mounts(&self, buf: &mut [(f32, f32, bool); 8]) -> usize {
+        let n = self.dummies.len().min(8);
+        for (i, d) in self.dummies.iter().take(n).enumerate() {
+            buf[i] = (d.x, d.y, d.alive());
+        }
+        n
     }
 
     /// Advance the game by exactly one 60 Hz tick, with this frame's input.
     pub fn tick(&mut self, c: Controls) {
         self.frame += 1;
         let f = self.frame;
+        self.cancelled.clear();
         self.player.step(&c, &self.tuning);
         for d in &mut self.dummies {
             d.tick(f);
         }
+        let mut m = [(0.0, 0.0, false); 8];
+        let n = self.mounts(&mut m);
+        self.hazards.step((self.player.x, self.player.y), &m[..n]);
 
         for s in &mut self.shots {
             s.x += s.vx;
@@ -113,6 +155,7 @@ impl World {
         self.collide_shots();
         self.fire_beam();
         self.bump();
+        self.collide_bullets();
         if c.bomb {
             self.events.push(Event::BombStub);
         }
@@ -184,6 +227,42 @@ impl World {
             self.player.bump_cd = BUMP_COOLDOWN;
             self.events.push(Event::Bump);
         }
+    }
+
+    /// Enemy bullets against the hitbox: hits, and grazes (once per bullet).
+    fn collide_bullets(&mut self) {
+        let (px, py) = (self.player.x, self.player.y);
+        let safe = self.invincible || self.hazards.preset().fill > 0;
+        let b = &mut self.hazards.bullets;
+        let mut hit = false;
+        for i in 0..b.len() {
+            if b.age[i] < BLOOM_FRAMES {
+                continue; // still blooming: harmless
+            }
+            let d = b.core_dist(i, px, py);
+            if d < b.kind[i].hit_r() + HITBOX_R {
+                hit |= !safe;
+            } else if d <= GRAZE_R && !b.grazed[i] {
+                b.grazed[i] = true;
+                self.grazes += 1;
+                self.events.push(Event::Graze { x: b.x[i], y: b.y[i] });
+            }
+        }
+        if hit {
+            self.die();
+        }
+    }
+
+    /// The placeholder death: flash, clear the screen, start again from the bottom.
+    fn die(&mut self) {
+        let b = &self.hazards.bullets;
+        self.cancelled.extend((0..b.len()).map(|i| (b.x[i], b.y[i])));
+        self.events.push(Event::Death { x: self.player.x, y: self.player.y });
+        self.hazards.reset();
+        self.deaths += 1;
+        self.player = Player::new();
+        self.player.hit_t = BUMP_FLASH;
+        self.player.bump_cd = BUMP_COOLDOWN;
     }
 
     fn refill_shots(&mut self) {

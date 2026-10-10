@@ -3,6 +3,49 @@
 Session notes for Claude Code: what shipped, tuning that changed, known issues, what's next.
 Newest first.
 
+## v0.3.0 Danmaku engine (Sprint 2) - 2026-10-10
+
+**Jason's calls (after v0.2):** keep every tuning option so he can circle back; teal plume
+stays; the bump hit-flash stays. Focus ratio still undecided (default 0.55). AGENTS.md
+still untracked (not answered; leave it out of commits).
+
+**Shipped**
+- `sim/bullets.rs`: SoA pool (cap 8192, never reallocates), kinds Small/Orb/Large/Rice/Needle,
+  behaviors Straight/Accel/SlowAim/Curve/Split/Pull, capsule hit test (`seg_dist`).
+- `sim/pattern.rs`: Gun {mount, shape, kind, speed, every, delay, behavior}; shapes Fan/Ring/
+  Spiral/Stream/Cone; mounts At/Dummy(i)/Sweep; `Hazards` (emitters + bullets + own rng, hold
+  after death, fill for stress). Preset data lives in `tune::SANDBOX` (14 entries, 0 = OFF).
+- `sim/bot.rs`: 17 candidates (9 dirs x full/focus) over a 12-frame lookahead of cloned hazards;
+  `trial()` for tests and PG_SIM. `sim/fairness.rs`: the Sprint 2 checks.
+- World: bullets vs hitbox after the bloom (age >= 4), graze once per bullet (14 px), placeholder
+  death (Event::Death, cancel all, reset player, guns hold 60 frames), `invincible`.
+- Render: `render/bullets.rs` (draw order, bloom ring, wobble every 4 frames, 8 pre-drawn turns
+  for rice/needle, trails on Curve/Pull), turrets with red muzzle telegraph, `Flash` limiter
+  (>= 20 frames apart), starfield dims to 50% at 1500 bullets. Atlas is now 512x512.
+- Palette: CORE #F4F1E6 (luma .946), EMBER #FF6A50 (wobble rim), INK #000.
+- Pause menu = sandbox switches (pattern, autopilot, slow-mo, invincible, hitboxes, grayscale,
+  fps; `Settings.view`, not saved) + tuning. `[ ]` / LB / NEXT touch button step patterns.
+- `main()` is hand-written now (no #[macroquad::main]) so PG_SIM runs before a window opens.
+- Cargo: dev opt-level 1, test opt-level 3 (fairness tests play ~300k frames). 124 tests, ~7 s.
+
+**Verified**
+- PG_SIM=200: 100% survival on all 11 gun patterns (47 s on 16 threads). Peaks: PULL 379 bullets.
+- Desktop 1080p: 2000 bullets 60 fps, cpu 0.79 ms (1.75 ms with the bot); 4000: 60 fps, 1.39 ms.
+  500 player shots still 60 fps / 0.31 ms.
+- Browser, phone viewport 390x844 @3x (canvas x4), real GPU (RTX 2070): 60 fps at 2000 and 4000.
+  SwiftShader (software GL): ~28-30 fps even with an empty screen, so not bullet-bound.
+  A real phone is unmeasured: Jason can check with SHOW FPS in the pause menu.
+- Grayscale shot: max value 241 = bullet cores (550 px for 50 bullets), next 214 (cream).
+- Web: tapping NEXT x3 goes OFF -> SPIRAL 4/14 (screenshot).
+
+**Known issues / notes**
+- The sandbox patterns are gentle on purpose (the bot never dies); real difficulty comes with
+  the stage and boss. "Standing still gets hit" test proves they're threats.
+- Hitbox dot draws above enemy bullets (treated as HUD).
+- A real phone's frame rate hasn't been measured by me.
+
+**Next: Sprint 3, Light & particles** (v0.4.0): post shader, particles, explosions, the black hole.
+
 ## v0.2.0 The Pilgrim (Sprint 1) - 2026-10-10
 
 **Shipped**

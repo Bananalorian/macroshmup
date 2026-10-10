@@ -22,6 +22,18 @@ impl Rumble {
     }
 }
 
+/// The pattern sandbox's switches. They last for the session and aren't saved.
+#[derive(Clone, Copy, Debug, PartialEq, Default)]
+pub struct View {
+    pub pattern: usize,
+    pub autopilot: bool,
+    pub slowmo: bool,
+    pub invincible: bool,
+    pub hitboxes: bool,
+    pub gray: bool,
+    pub fps: bool,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Settings {
     pub tuning: Tuning,
@@ -30,11 +42,12 @@ pub struct Settings {
     /// The left stick: false snaps to 8 directions (the default), true is analog.
     pub analog: bool,
     pub muted: bool,
+    pub view: View,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Settings { tuning: Tuning::default(), touch_sens: TOUCH_SENS, rumble: Rumble::Full, analog: false, muted: false }
+        Settings { tuning: Tuning::default(), touch_sens: TOUCH_SENS, rumble: Rumble::Full, analog: false, muted: false, view: View::default() }
     }
 }
 
@@ -167,6 +180,7 @@ mod tests {
             rumble: Rumble::Low,
             analog: true,
             muted: true,
+            view: View::default(),
         };
         assert_eq!(Settings::parse(&s.format()), s);
         assert_eq!(Settings::parse(&Settings::default().format()), Settings::default());

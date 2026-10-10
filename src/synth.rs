@@ -283,6 +283,34 @@ pub fn not_yet() -> Vec<f32> {
     b
 }
 
+/// A graze: a tiny bright tick, quiet enough to hear dozens of.
+pub fn graze(seed: u32) -> Vec<f32> {
+    let mut b = buf(0.045);
+    let mut r = Rng::new(seed);
+    let mut hp = Hp::default();
+    for (i, s) in b.iter_mut().enumerate() {
+        let t = i as f32 / SR;
+        *s = hp.run(r.noise(), 5000.0) * (-t * 140.0).exp() * 0.6 + (TAU * 2900.0 * t).sin() * (-t * 90.0).exp() * 0.5;
+    }
+    normalize(&mut b, 0.6);
+    b
+}
+
+/// The placeholder death: a crunch and a falling tone.
+pub fn death(seed: u32) -> Vec<f32> {
+    let mut b = explosion(seed, false);
+    b.truncate((0.9 * SR) as usize);
+    let mut ph = 0.0f32;
+    for (i, s) in b.iter_mut().enumerate() {
+        let t = i as f32 / SR;
+        ph += (520.0 * (-t * 3.0).exp() + 60.0) / SR;
+        *s = *s * 0.8 + sq(ph, 0.5) * (-t * 4.0).exp() * 0.25;
+        *s *= (1.0 - t / 0.9).max(0.0);
+    }
+    normalize(&mut b, 0.9);
+    b
+}
+
 // ---------------------------------------------------------------- the whole bank
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -295,6 +323,8 @@ pub enum Id {
     NotYet,
     Select,
     Beam,
+    Graze,
+    Death,
 }
 
 /// Every sound as (id, wav bytes). Variants share an id.
@@ -315,6 +345,10 @@ pub fn bank() -> Vec<(Id, Vec<u8>)> {
     v.push((Id::NotYet, mono(not_yet())));
     v.push((Id::Select, mono(select())));
     v.push((Id::Beam, mono(beam_hum())));
+    for k in 0..2 {
+        v.push((Id::Graze, mono(graze(400 + k))));
+    }
+    v.push((Id::Death, mono(death(500))));
     v
 }
 
@@ -333,7 +367,7 @@ mod tests {
 
     #[test]
     fn nothing_clips() {
-        for b in [pilgrim_shot(1, 900.0), beam_hum(), not_yet(), tick(2), explosion(3, true)] {
+        for b in [pilgrim_shot(1, 900.0), beam_hum(), not_yet(), tick(2), explosion(3, true), graze(4), death(5)] {
             assert!(b.iter().all(|s| s.is_finite() && s.abs() <= 1.0));
         }
     }

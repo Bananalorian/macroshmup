@@ -90,9 +90,10 @@ impl Starfield {
         })
     }
 
-    pub fn draw(&self, atlas: &Atlas, rect: IRect, frame: u64) {
+    /// Draw the stars; `dim` scales their brightness (1 is full).
+    pub fn draw(&self, atlas: &Atlas, rect: IRect, frame: u64, dim: f32) {
         for d in self.at(rect, frame) {
-            let c = tone(d.value);
+            let c = tone(d.value * dim);
             if d.plus {
                 atlas.blit(atlas.r.plus, d.x - 1, d.y - 1, 1, c);
             } else {

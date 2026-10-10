@@ -4,7 +4,7 @@
 pub const GW: usize = 5;
 pub const GH: usize = 7;
 
-pub const CHARS: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.,:!?-+/'%()<>=\"";
+pub const CHARS: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.,:!?-+/'%()<>=\"[]";
 
 pub fn glyph(c: char) -> [&'static str; 7] {
     match c.to_ascii_uppercase() {
@@ -60,6 +60,8 @@ pub fn glyph(c: char) -> [&'static str; 7] {
         '<' => ["   # ", "  #  ", " #   ", "#    ", " #   ", "  #  ", "   # "],
         '=' => ["     ", "     ", "#####", "     ", "#####", "     ", "     "],
         '"' => [" # # ", " # # ", "     ", "     ", "     ", "     ", "     "],
+        '[' => [" ### ", " #   ", " #   ", " #   ", " #   ", " #   ", " ### "],
+        ']' => [" ### ", "   # ", "   # ", "   # ", "   # ", "   # ", " ### "],
         _ => ["     "; 7],
     }
 }

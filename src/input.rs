@@ -39,25 +39,31 @@ pub struct Ui {
     pub tap: Option<(f32, f32)>,
     /// Keyboard tuning hotkeys while flying: (which knob 0..3, -1 or 1).
     pub tune: Option<(usize, i32)>,
+    /// Step the sandbox pattern: -1 or 1.
+    pub pattern: i32,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Button {
     Bomb,
     Pause,
+    /// The sandbox's next-pattern button.
+    Next,
 }
 
 /// The on-screen touch buttons, in canvas px: (which, center x, center y, radius).
-pub fn touch_buttons(lay: &Layout) -> [(Button, f32, f32, f32); 2] {
+pub fn touch_buttons(lay: &Layout) -> [(Button, f32, f32, f32); 3] {
     let f = lay.field;
     match lay.orient {
         Orient::Portrait => [
             (Button::Bomb, (lay.cw - 34) as f32, (f.bottom() + 46) as f32, 17.0),
             (Button::Pause, (lay.cw - 12) as f32, 12.0, 10.0),
+            (Button::Next, (lay.cw - 80) as f32, (f.bottom() + 52) as f32, 13.0),
         ],
         Orient::Landscape => [
             (Button::Bomb, (f.right() + 92) as f32, (lay.ch - 96) as f32, 20.0),
             (Button::Pause, (f.right() + 92) as f32, 70.0, 12.0),
+            (Button::Next, (f.right() + 92) as f32, (lay.ch - 156) as f32, 15.0),
         ],
     }
 }
@@ -168,6 +174,10 @@ impl Input {
                         ui.pause = true;
                         self.button_fingers.push(t.id);
                     }
+                    Some(Button::Next) => {
+                        ui.pattern += 1;
+                        self.button_fingers.push(t.id);
+                    }
                     None if started => {
                         if self.steer.is_none() {
                             self.steer = Some((t.id, pos));
@@ -234,6 +244,7 @@ impl Input {
             ui.confirm |= p.pressed(pad::A);
             ui.back |= p.pressed(pad::B);
             ui.pause |= p.pressed(pad::START) || p.pressed(pad::BACK);
+            ui.pattern += p.pressed(pad::LB) as i32;
             let n = p.nav();
             ui.nav.0 += n.x;
             ui.nav.1 += n.y;
@@ -272,6 +283,7 @@ impl Input {
         ui.back |= hit(&[KeyCode::Escape, KeyCode::Backspace, KeyCode::X]);
         ui.pause |= hit(&[KeyCode::Escape, KeyCode::P]);
         ui.mute |= hit(&[KeyCode::M]);
+        ui.pattern += hit(&[KeyCode::RightBracket]) as i32 - hit(&[KeyCode::LeftBracket]) as i32;
         if hit(&[KeyCode::Left, KeyCode::A]) {
             ui.nav.0 -= 1;
         }

@@ -1,5 +1,6 @@
-//! The pause menu, which is also the live tuning panel: speed, focus ratio and
-//! blend frames change the game the moment you resume (and are saved).
+//! The pause menu, which is also the pattern sandbox's controls and the live
+//! tuning panel: speed, focus ratio and blend frames change the game the moment
+//! you resume (and are saved). The sandbox switches last for the session.
 
 use crate::storage::{Rumble, Settings};
 use crate::tune::*;
@@ -7,6 +8,13 @@ use crate::tune::*;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Item {
     Resume,
+    Pattern,
+    Autopilot,
+    SlowMo,
+    Invincible,
+    Hitboxes,
+    Gray,
+    Fps,
     Speed,
     Focus,
     Blend,
@@ -17,12 +25,36 @@ pub enum Item {
     Quit,
 }
 
-pub const ITEMS: [Item; 9] = [Item::Resume, Item::Speed, Item::Focus, Item::Blend, Item::Touch, Item::Stick, Item::Rumble, Item::Reset, Item::Quit];
+pub const ITEMS: [Item; 16] = [
+    Item::Resume,
+    Item::Pattern,
+    Item::Autopilot,
+    Item::SlowMo,
+    Item::Invincible,
+    Item::Hitboxes,
+    Item::Gray,
+    Item::Fps,
+    Item::Speed,
+    Item::Focus,
+    Item::Blend,
+    Item::Touch,
+    Item::Stick,
+    Item::Rumble,
+    Item::Reset,
+    Item::Quit,
+];
 
 impl Item {
     pub fn label(self) -> &'static str {
         match self {
             Item::Resume => "RESUME",
+            Item::Pattern => "PATTERN",
+            Item::Autopilot => "AUTOPILOT",
+            Item::SlowMo => "SLOW-MO",
+            Item::Invincible => "INVINCIBLE",
+            Item::Hitboxes => "HITBOXES",
+            Item::Gray => "GRAYSCALE",
+            Item::Fps => "SHOW FPS",
             Item::Speed => "SPEED",
             Item::Focus => "FOCUS",
             Item::Blend => "BLEND",
@@ -40,9 +72,21 @@ impl Item {
     }
 }
 
+fn on_off(b: bool) -> String {
+    (if b { "ON" } else { "OFF" }).to_string()
+}
+
 /// The value as shown, e.g. `4.00 PX`.
 pub fn value(s: &Settings, item: Item) -> String {
+    let v = &s.view;
     match item {
+        Item::Pattern => SANDBOX[v.pattern % SANDBOX.len()].name.to_string(),
+        Item::Autopilot => on_off(v.autopilot),
+        Item::SlowMo => on_off(v.slowmo),
+        Item::Invincible => on_off(v.invincible),
+        Item::Hitboxes => on_off(v.hitboxes),
+        Item::Gray => on_off(v.gray),
+        Item::Fps => on_off(v.fps),
         Item::Speed => format!("{:.2} PX", s.tuning.speed),
         Item::Focus => format!("{:.2}X", s.tuning.focus_ratio),
         Item::Blend => format!("{} F", s.tuning.focus_blend),
@@ -65,6 +109,18 @@ fn step(v: f32, (lo, hi, by): (f32, f32, f32), dir: i32) -> f32 {
 
 /// Change an item's value one step left (-1) or right (1).
 pub fn adjust(s: &mut Settings, item: Item, dir: i32) {
+    let n = SANDBOX.len() as i32;
+    let v = &mut s.view;
+    match item {
+        Item::Pattern => v.pattern = (v.pattern as i32 + dir).rem_euclid(n) as usize,
+        Item::Autopilot => v.autopilot = !v.autopilot,
+        Item::SlowMo => v.slowmo = !v.slowmo,
+        Item::Invincible => v.invincible = !v.invincible,
+        Item::Hitboxes => v.hitboxes = !v.hitboxes,
+        Item::Gray => v.gray = !v.gray,
+        Item::Fps => v.fps = !v.fps,
+        _ => {}
+    }
     let t = &mut s.tuning;
     match item {
         Item::Speed => t.speed = step(t.speed, SPEED_RANGE, dir),
@@ -138,6 +194,23 @@ mod tests {
         adjust(&mut s, Item::Reset, 0);
         assert_eq!(s.tuning, Default::default());
         assert_eq!(s.rumble, Rumble::Off, "reset only touches the tuning");
+    }
+
+    #[test]
+    fn the_sandbox_switches_flip_and_patterns_wrap() {
+        let mut s = Settings::default();
+        adjust(&mut s, Item::Pattern, -1);
+        assert_eq!(s.view.pattern, SANDBOX.len() - 1);
+        assert_eq!(value(&s, Item::Pattern), SANDBOX[SANDBOX.len() - 1].name);
+        adjust(&mut s, Item::Pattern, 1);
+        assert_eq!(s.view.pattern, 0);
+        for item in [Item::Autopilot, Item::SlowMo, Item::Invincible, Item::Hitboxes, Item::Gray, Item::Fps] {
+            assert_eq!(value(&s, item), "OFF");
+            adjust(&mut s, item, 1);
+            assert_eq!(value(&s, item), "ON");
+        }
+        let saved = Settings::parse(&s.format());
+        assert_eq!(saved.view, Default::default(), "the sandbox switches aren't saved");
     }
 
     #[test]

@@ -1,6 +1,6 @@
 # PILGRIM
 
-![The Pilgrim firing at the target dummies](docs/screenshots/stage.png)
+![The Pilgrim in the pattern sandbox, a spiral](docs/screenshots/stage.png)
 
 > SOMEWHERE BEYOND THE EVENT HORIZON. A SMALL SHIP, A LONG WAY FROM HOME.
 
@@ -17,16 +17,20 @@ the font and every sound are built when the game starts. Written in Rust on
 
 | | |
 |---|---|
-| ![The focus beam](docs/screenshots/beam.png) | ![On a phone](docs/screenshots/phone.png) |
-| ![The tuning panel](docs/screenshots/tuning.png) | ![The title](docs/screenshots/title.png) |
+| ![Layered rings and aimed fans](docs/screenshots/layered.png) | ![On a phone](docs/screenshots/phone.png) |
+| ![The same in grayscale: bullet cores are the brightest pixels](docs/screenshots/layered-gray.png) | ![Large orbs splitting into rings](docs/screenshots/split.png) |
+| ![The pause menu: sandbox and tuning](docs/screenshots/tuning.png) | ![The title](docs/screenshots/title.png) |
 
 ![The Pilgrim's animation sheet](docs/screenshots/pilgrim-sheet.png)
 
 ## Status
 
-**v0.2, The Pilgrim:** the ship flies, shoots and beams at three target dummies,
-with keyboard, controller (with rumble) and touch. Nothing shoots back yet; that's
-v0.3. See [SPRINTS.md](SPRINTS.md) for the plan.
+**v0.3, Danmaku engine:** the bullets and the pattern sandbox. Fly against 13
+patterns (fans, rings, spirals, streams, cones, accelerating, pausing, curving,
+splitting and pulled bullets) plus 2,000- and 4,000-bullet stress scenes, with
+keyboard, controller and touch. A dodging bot can fly for you. A hit just resets
+the screen for now; lives, bombs and the real death arrive in v0.5.
+See [SPRINTS.md](SPRINTS.md) for the plan.
 
 ## Controls
 
@@ -36,13 +40,16 @@ v0.3. See [SPRINTS.md](SPRINTS.md) for the plan.
 | Fire | Z | A | automatic while you steer |
 | Focus (slow + beam) | Shift | RB or RT | a second finger |
 | Bomb (arrives in v0.5) | X | B | BOMB button |
-| Pause and tuning | Esc | Start | II button |
+| Next sandbox pattern | `]` (`[` goes back) | LB | NEXT button |
+| Pause, sandbox and tuning | Esc | Start | II button |
 | Sound on/off | M | | |
 | Fullscreen | F11 or Alt+Enter | | |
 
-The pause menu is also the tuning panel: speed, focus ratio, blend frames, touch
-sensitivity, 8-way or analog stick, and rumble (off, low, full). On a keyboard,
-1 to 6 change speed, focus and blend while you fly. Everything is saved.
+The pause menu holds the sandbox switches (pattern, autopilot, slow-mo,
+invincible, hitboxes, grayscale, FPS) and the tuning panel: speed, focus ratio,
+blend frames, touch sensitivity, 8-way or analog stick, and rumble (off, low,
+full). On a keyboard, 1 to 6 change speed, focus and blend while you fly. The
+tuning is saved; the sandbox switches last for the session.
 
 ## Build
 
@@ -60,9 +67,10 @@ Rust is pinned to 1.91.1 in `rust-toolchain.toml`, the same version CI uses.
 
 | Hook | What it does |
 |---|---|
-| `PG_SCENE=title` / `stage:<seconds>` / `shots:<n>` | jump straight there (`shots`: keep n player shots alive) |
+| `PG_SCENE=title` / `stage:<seconds>` / `sandbox:<pattern>` / `stress` / `shots:<n>` | jump straight there (`sandbox:3` or `sandbox:spiral`; `shots`: keep n player shots alive) |
 | `PG_SHOTS=60,300` | save those frames to `./shots/` and quit |
-| `PG_AUTO=1` | the autopilot flies, fires and beams |
+| `PG_AUTO=1` | the dodging bot plays |
+| `PG_SIM=200` | 200 headless seeded bot runs per pattern, with a balance report |
 | `PG_SEED=<n>` | fixed seed |
 | `PG_GRAY=1` | grayscale screenshots (value check) |
 | `PG_SIZE=1280x720` | window size |
@@ -73,7 +81,8 @@ Rust is pinned to 1.91.1 in `rust-toolchain.toml`, the same version CI uses.
 | `PG_FRESH=1` | ignore the save file |
 
 Debug builds: F1 hitboxes · F2 grayscale · F3 quarter speed · F4 frame step (Enter
-resumes) · F8 performance overlay · F9 save the sprite sheet.
+resumes) · F5 invincible · F7 next pattern · F8 performance overlay · F9 save the
+sprite sheet.
 
 ## Credits
 

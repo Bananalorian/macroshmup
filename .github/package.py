@@ -10,6 +10,7 @@ Somewhere beyond the event horizon. A small ship, a long way from home.
 Keyboard: arrows or WASD move, Z fire, Shift focus (fire + focus = the beam),
 X bomb, Esc pause and tuning, M sound, F11 or Alt+Enter fullscreen.
 Controller: D-pad or left stick move, A fire, RB/RT focus, B bomb, Start pause.
+The pattern sandbox: ] and [ (or LB) change the pattern; the pause menu has more.
 
 Windows: if SmartScreen warns you, click "More info" then "Run anyway".
 macOS: the first time, right-click the app and choose Open (it isn't signed).

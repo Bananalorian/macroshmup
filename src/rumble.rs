@@ -16,6 +16,8 @@ pub fn for_event(e: &Event) -> Option<Kick> {
         Event::Break { big: true, .. } => Some(RUMBLE_BIG_BREAK),
         Event::Bump => Some(RUMBLE_BUMP),
         Event::BombStub => Some(RUMBLE_BOMB),
+        Event::Death { .. } => Some(RUMBLE_DEATH),
+        Event::Graze { .. } => Some(RUMBLE_GRAZE),
         Event::Volley { .. } | Event::Hit { .. } => None,
     }
 }
@@ -46,6 +48,7 @@ pub fn buzz(e: &Event) -> Option<u32> {
     match e {
         Event::Break { big: true, .. } => Some(40),
         Event::BombStub => Some(60),
+        Event::Death { .. } => Some(80),
         Event::Bump => Some(15),
         _ => None,
     }

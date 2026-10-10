@@ -1,9 +1,10 @@
 //! Debug hooks. Environment variables work in native builds only (the browser has
 //! none); the debug keys work in debug builds only.
 //!
-//!   PG_SCENE=title | stage:<seconds> | shots:<n>   jump straight there (shots: n player shots alive)
+//!   PG_SCENE=title | stage:<seconds> | shots:<n> | sandbox:<pattern> | stress   jump straight there
 //!   PG_SHOTS=60,300                    save those frames to ./shots/ and quit
-//!   PG_AUTO=1                          the autopilot flies (weaves, fires, beams)
+//!   PG_AUTO=1                          the dodging bot plays
+//!   PG_SIM=<n>                         n seeded bot runs per pattern, headless, with a report
 //!   PG_SEED=<n>                        fixed gameplay seed
 //!   PG_GRAY=1                          grayscale screenshots (the value check)
 //!   PG_SIZE=1280x720                   window size, for screenshots
@@ -14,15 +15,16 @@
 //!   PG_MENU=1                          open the pause menu (for screenshots)
 //!
 //! F1 hitboxes, F2 grayscale, F3 quarter speed, F4 frame step (Enter resumes),
-//! F8 performance overlay, F9 export the ship sheet.
+//! F5 invincible, F7 next pattern, F8 performance overlay, F9 export the ship sheet.
+//! (F1-F3, F5, F7 and F8 are also in the pause menu, in every build.)
 
 use crate::render::Renderer;
 use crate::render::art::Atlas;
 use crate::render::hud::text;
 use crate::render::layout::Layout;
 use crate::render::palette::{ASH, CREAM, VOID};
-use crate::sim::World;
-use crate::sim::player::Controls;
+use crate::storage::View;
+use crate::tune::SANDBOX;
 use crate::tune::PERF_WINDOW;
 use macroquad::prelude::*;
 
@@ -33,10 +35,21 @@ pub enum SceneReq {
     Stage(f32),
     /// The stage with this many extra player shots kept alive (performance check).
     Shots(usize),
+    /// The stage with sandbox pattern `i` running.
+    Sandbox(usize),
 }
 
 /// Scenes from the plan that later sprints will build.
-const LATER: [&str; 4] = ["midboss", "boss", "sandbox", "stress"];
+const LATER: [&str; 2] = ["midboss", "boss"];
+
+/// A sandbox pattern by number or by name (`3`, `spiral`, `slow-pause-aim`).
+fn find_pattern(arg: &str) -> Option<usize> {
+    if let Ok(n) = arg.parse::<usize>() {
+        return (n < SANDBOX.len()).then_some(n);
+    }
+    let squash = |s: &str| s.chars().filter(|c| c.is_ascii_alphanumeric()).collect::<String>().to_ascii_lowercase();
+    SANDBOX.iter().position(|p| squash(p.name) == squash(arg))
+}
 
 pub fn parse_scene(s: &str) -> Result<SceneReq, String> {
     let s = s.trim().to_ascii_lowercase();
@@ -59,8 +72,10 @@ pub fn parse_scene(s: &str) -> Result<SceneReq, String> {
             .filter(|n| *n <= 5000)
             .map(SceneReq::Shots)
             .ok_or_else(|| "PG_SCENE=shots:<n> wants a count up to 5000".to_string()),
+        "sandbox" => find_pattern(arg.unwrap_or("1")).map(SceneReq::Sandbox).ok_or_else(|| format!("no sandbox pattern {arg:?}")),
+        "stress" => Ok(SceneReq::Sandbox(SANDBOX.iter().position(|p| p.fill >= 4000).unwrap_or(0))),
         n if LATER.contains(&n) => Err(format!("PG_SCENE={n} arrives in a later sprint")),
-        _ => Err(format!("unknown PG_SCENE {s:?} (try title, stage:<seconds> or shots:<n>)")),
+        _ => Err(format!("unknown PG_SCENE {s:?} (try title, stage:<seconds>, shots:<n>, sandbox:<pattern> or stress)")),
     }
 }
 
@@ -126,31 +141,66 @@ pub fn hooks() -> Hooks {
     }
 }
 
-/// The debug keys' state (debug builds only).
+/// PG_SIM=<n>: `n` seeded bot runs of 60 s on every sandbox pattern, in parallel,
+/// with a balance report. Headless; runs before any window opens.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn sim_report(seeds: u32) {
+    use crate::sim::bot;
+    use crate::tune::{SANDBOX, TICK_HZ};
+    let frames = 60 * TICK_HZ;
+    let presets: Vec<usize> = (0..SANDBOX.len()).filter(|&i| !SANDBOX[i].guns.is_empty()).collect();
+    let threads = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4);
+    let start = std::time::Instant::now();
+    println!("PG_SIM: {seeds} seeds x 60 s per pattern, {threads} threads");
+    println!("{:<18} {:>9} {:>11} {:>9} {:>11}", "PATTERN", "SURVIVED", "DEATHS/RUN", "GRAZES", "PEAK SHOTS");
+    for &p in &presets {
+        let next = std::sync::atomic::AtomicU32::new(0);
+        let results = std::sync::Mutex::new(Vec::new());
+        std::thread::scope(|s| {
+            for _ in 0..threads {
+                s.spawn(|| {
+                    loop {
+                        let k = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        if k >= seeds {
+                            break;
+                        }
+                        let r = bot::trial(p, 1000 + k as u64, frames);
+                        results.lock().unwrap().push(r);
+                    }
+                });
+            }
+        });
+        let r = results.into_inner().unwrap();
+        let n = r.len().max(1) as f32;
+        let survived = r.iter().filter(|x| x.0 == 0).count() as f32 / n;
+        let deaths = r.iter().map(|x| x.0).sum::<u32>() as f32 / n;
+        let grazes = r.iter().map(|x| x.1).sum::<u32>() as f32 / n;
+        let peak = r.iter().map(|x| x.2).max().unwrap_or(0);
+        println!("{:<18} {:>8.0}% {:>11.2} {:>9.0} {:>11}", SANDBOX[p].name, survived * 100.0, deaths, grazes, peak);
+    }
+    println!("done in {:.1} s", start.elapsed().as_secs_f32());
+}
+
+/// The debug keys' state (debug builds only). Most of them flip the sandbox
+/// switches that the pause menu also has.
 #[derive(Default)]
 pub struct Keys {
-    pub hitboxes: bool,
-    pub quarter: bool,
     /// Frame-step mode: the game holds still and F4 advances one tick.
     pub stepping: bool,
     pub step: bool,
-    pub perf: bool,
     pub sheet: bool,
     quarter_n: u32,
 }
 
 impl Keys {
-    pub fn new(perf: bool) -> Keys {
-        Keys { perf, ..Default::default() }
-    }
-
-    pub fn read(&mut self, gray: &mut bool) {
+    /// Read the F keys; returns how far to step the sandbox pattern (F7).
+    pub fn read(&mut self, v: &mut View) -> i32 {
         if !cfg!(debug_assertions) {
-            return;
+            return 0;
         }
-        self.hitboxes ^= is_key_pressed(KeyCode::F1);
-        *gray ^= is_key_pressed(KeyCode::F2);
-        self.quarter ^= is_key_pressed(KeyCode::F3);
+        v.hitboxes ^= is_key_pressed(KeyCode::F1);
+        v.gray ^= is_key_pressed(KeyCode::F2);
+        v.slowmo ^= is_key_pressed(KeyCode::F3);
         if is_key_pressed(KeyCode::F4) {
             self.step = self.stepping;
             self.stepping = true;
@@ -158,16 +208,18 @@ impl Keys {
         if self.stepping && is_key_pressed(KeyCode::Enter) {
             self.stepping = false;
         }
-        self.perf ^= is_key_pressed(KeyCode::F8);
+        v.invincible ^= is_key_pressed(KeyCode::F5);
+        v.fps ^= is_key_pressed(KeyCode::F8);
         self.sheet |= is_key_pressed(KeyCode::F9);
+        is_key_pressed(KeyCode::F7) as i32
     }
 
-    /// How many of the clock's ticks actually run.
-    pub fn filter(&mut self, ticks: u32) -> u32 {
+    /// How many of the clock's ticks actually run (slow-mo runs one in four).
+    pub fn filter(&mut self, ticks: u32, slowmo: bool) -> u32 {
         if self.stepping {
             return std::mem::take(&mut self.step) as u32;
         }
-        if self.quarter {
+        if slowmo {
             let mut run = 0;
             for _ in 0..ticks {
                 self.quarter_n += 1;
@@ -179,18 +231,6 @@ impl Keys {
         }
         ticks
     }
-}
-
-/// The autopilot (PG_AUTO): weaves across the playfield firing, beams every
-/// few seconds. Sprint 2 turns this into the dodging bot.
-pub fn autopilot(w: &World) -> Controls {
-    let t = w.frame as f32;
-    let (tx, ty) = (135.0 + 95.0 * (t * 0.021).sin(), 255.0 + 45.0 * (t * 0.013).sin());
-    let (dx, dy) = (tx - w.player.x, ty - w.player.y);
-    let d = dx.hypot(dy);
-    let k = if d > 4.0 { 1.0 / d } else { 0.25 };
-    let beam = (w.frame / 240) % 3 == 2;
-    Controls { mv: (dx * k, dy * k), fire: true, focus: beam, ..Default::default() }
 }
 
 /// Save the screen to `./shots/<frame>_<w>x<h>.png` (native only).
@@ -276,14 +316,14 @@ impl Perf {
         )
     }
 
-    pub fn draw(&self, a: &Atlas, lay: &Layout, sim_frame: u64, seed: u64, shots: usize, particles: usize) {
+    pub fn draw(&self, a: &Atlas, lay: &Layout, sim_frame: u64, seed: u64, shots: usize, bullets: usize, particles: usize) {
         let avg = self.dts.iter().sum::<f32>() / PERF_WINDOW as f32;
         let worst = self.dts.iter().cloned().fold(0.0, f32::max);
         let cpu = self.cpu.iter().sum::<f32>() / PERF_WINDOW as f32;
         let lines = [
             format!("FPS {:.1}  AVG {:.1}MS  MAX {:.1}MS", 1.0 / avg.max(1e-4), avg * 1000.0, worst * 1000.0),
             format!("CPU {:.2}MS  TICKS {}  SIM {}", cpu * 1000.0, self.ticks, sim_frame),
-            format!("SHOTS {}  PARTICLES {}", shots, particles),
+            format!("BULLETS {}  SHOTS {}  FX {}", bullets, shots, particles),
             format!("SEED {}  CANVAS {}X{} X{}", seed, lay.cw, lay.ch, lay.scale),
         ];
         let (x, y) = (lay.field.x + 2, lay.field.y + 2);
@@ -311,6 +351,11 @@ mod tests {
         assert!(parse_scene("stage:-3").is_err());
         assert!(parse_scene("stage:soon").is_err());
         assert!(parse_scene("boss:2").unwrap_err().contains("later sprint"));
+        assert_eq!(parse_scene("sandbox:3"), Ok(SceneReq::Sandbox(3)));
+        assert_eq!(parse_scene("sandbox:spiral"), Ok(SceneReq::Sandbox(SANDBOX.iter().position(|p| p.name == "SPIRAL").unwrap())));
+        assert_eq!(parse_scene("sandbox:slow-pause-aim"), Ok(SceneReq::Sandbox(SANDBOX.iter().position(|p| p.name == "SLOW, PAUSE, AIM").unwrap())));
+        assert!(parse_scene("sandbox:99").is_err());
+        assert_eq!(parse_scene("stress"), Ok(SceneReq::Sandbox(SANDBOX.iter().position(|p| p.fill == 4000).unwrap())));
         assert!(parse_scene("pachinko").is_err());
     }
 
@@ -337,27 +382,13 @@ mod tests {
 
     #[test]
     fn quarter_speed_and_frame_step_hold_the_game() {
-        let mut k = Keys { quarter: true, ..Default::default() };
-        let run: u32 = (0..40).map(|_| k.filter(1)).sum();
+        let mut k = Keys::default();
+        let run: u32 = (0..40).map(|_| k.filter(1, true)).sum();
         assert_eq!(run, 10);
         let mut k = Keys { stepping: true, ..Default::default() };
-        assert_eq!(k.filter(1), 0);
+        assert_eq!(k.filter(1, false), 0);
         k.step = true;
-        assert_eq!(k.filter(3), 1);
-        assert_eq!(k.filter(1), 0);
-    }
-
-    #[test]
-    fn the_autopilot_stays_on_the_playfield_and_shoots() {
-        let mut w = World::new(5, Default::default());
-        let mut beamed = false;
-        for _ in 0..1200 {
-            let c = autopilot(&w);
-            assert!(c.fire);
-            beamed |= c.focus;
-            w.tick(c);
-            w.events.clear();
-        }
-        assert!(beamed);
+        assert_eq!(k.filter(3, false), 1);
+        assert_eq!(k.filter(1, false), 0);
     }
 }

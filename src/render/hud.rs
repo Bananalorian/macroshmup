@@ -9,7 +9,23 @@ use super::palette::{ASH, CREAM, DUSK, SLATE, STRIP, VOID, tone};
 use crate::input::{Button, Mode, touch_buttons};
 use crate::menu::{self, ITEMS};
 use crate::storage::Settings;
-use crate::tune::{BLINK_FRAMES, TITLE_SCALE, TITLE_TRACK, TRACK};
+use crate::storage::View;
+use crate::tune::{BLINK_FRAMES, SANDBOX, TITLE_SCALE, TITLE_TRACK, TRACK};
+
+/// The sandbox switches that change how the game plays, as one line.
+fn sandbox_flags(v: &View) -> String {
+    let mut f = vec![];
+    if v.autopilot {
+        f.push("BOT");
+    }
+    if v.slowmo {
+        f.push("SLOW");
+    }
+    if v.invincible {
+        f.push("INVINCIBLE");
+    }
+    f.join(" ")
+}
 use macroquad::color::Color;
 
 /// `V0.2 // PILGRIM`, from the crate version.
@@ -87,7 +103,7 @@ fn start_hint(mode: Option<Mode>) -> &'static str {
 /// The title: the name, the tagline, PRESS START.
 pub fn title(r: &Renderer, lay: &Layout, t: u64, mode: Option<Mode>) {
     let a = &r.atlas;
-    r.stars.draw(a, IRect::new(0, 0, lay.cw, lay.ch), t);
+    r.stars.draw(a, IRect::new(0, 0, lay.cw, lay.ch), t, 1.0);
     let blink_on = t % (BLINK_FRAMES * 3) < BLINK_FRAMES * 2;
     let cx = lay.cw / 2;
     match lay.orient {
@@ -136,13 +152,28 @@ pub struct HudView<'a> {
     pub menu: Option<usize>,
     pub toast: Option<(&'a str, u32)>,
     pub bomb_flash: u32,
+    /// The sandbox: pattern number, bullets on screen, hits, grazes.
+    pub pattern: usize,
+    pub bullets: usize,
+    pub hits: u32,
+    pub grazes: u32,
 }
 
 fn controls(mode: Mode) -> &'static [(&'static str, &'static str)] {
     match mode {
-        Mode::Keys => &[("ARROWS", "MOVE"), ("Z", "FIRE"), ("SHIFT", "FOCUS"), ("Z+SHIFT", "BEAM"), ("X", "BOMB"), ("ESC", "PAUSE"), ("M", "SOUND"), ("F11", "FULLSCREEN")],
-        Mode::Pad => &[("STICK", "MOVE"), ("A", "FIRE"), ("RB / RT", "FOCUS"), ("A+RB", "BEAM"), ("B", "BOMB"), ("START", "PAUSE")],
-        Mode::Touch => &[("DRAG", "FLY + FIRE"), ("2ND FINGER", "FOCUS"), ("II", "PAUSE")],
+        Mode::Keys => &[
+            ("ARROWS", "MOVE"),
+            ("Z", "FIRE"),
+            ("SHIFT", "FOCUS"),
+            ("Z+SHIFT", "BEAM"),
+            ("X", "BOMB"),
+            ("[ ]", "PATTERN"),
+            ("ESC", "PAUSE"),
+            ("M", "SOUND"),
+            ("F11", "FULLSCREEN"),
+        ],
+        Mode::Pad => &[("STICK", "MOVE"), ("A", "FIRE"), ("RB / RT", "FOCUS"), ("A+RB", "BEAM"), ("B", "BOMB"), ("LB", "PATTERN"), ("START", "PAUSE")],
+        Mode::Touch => &[("DRAG", "FLY + FIRE"), ("2ND FINGER", "FOCUS"), ("NEXT", "PATTERN"), ("II", "PAUSE")],
     }
 }
 
@@ -163,6 +194,7 @@ fn buttons(a: &Atlas, lay: &Layout, v: &HudView) {
         }
         match b {
             Button::Bomb => text_c(a, "BOMB", cx, cy - 3, 1, 1, if lit { CREAM } else { ASH }),
+            Button::Next => text_c(a, "NEXT", cx, cy - 3, 1, 1, ASH),
             Button::Pause => {
                 a.fill(cx - 3, cy - 4, 2, 9, ASH);
                 a.fill(cx + 2, cy - 4, 2, 9, ASH);
@@ -187,9 +219,23 @@ pub fn stage(r: &Renderer, lay: &Layout, v: &HudView) {
             small(a, "TYPE-07", l0, 22, ASH);
             hrule(a, l0, l1, 34);
             small(a, "STAGE 1  //  SANDBOX", l0, 42, SLATE);
-            small(a, "TUNING", l0, 64, ASH);
+            let n = SANDBOX.len();
+            small(a, "PATTERN", l0, 58, ASH);
+            text_r(a, &format!("{}/{}", v.pattern % n + 1, n), l1, 58, SLATE);
+            small(a, SANDBOX[v.pattern % n].name, l0, 70, CREAM);
+            small(a, "BULLETS", l0, 84, SLATE);
+            text_r(a, &v.bullets.to_string(), l1, 84, ASH);
+            small(a, "HITS", l0, 94, SLATE);
+            text_r(a, &v.hits.to_string(), l1, 94, ASH);
+            small(a, "GRAZE", l0, 104, SLATE);
+            text_r(a, &v.grazes.to_string(), l1, 104, ASH);
+            let flags = sandbox_flags(&v.settings.view);
+            if !flags.is_empty() {
+                small(a, &flags, l0, 116, CREAM);
+            }
+            small(a, "TUNING", l0, 132, ASH);
             for (i, (k, val)) in tuning_lines(v.settings).iter().enumerate() {
-                let y = 76 + i as i32 * 10;
+                let y = 144 + i as i32 * 10;
                 small(a, k, l0, y, SLATE);
                 text_r(a, val, l1, y, CREAM);
             }
@@ -197,7 +243,7 @@ pub fn stage(r: &Renderer, lay: &Layout, v: &HudView) {
                 Mode::Keys => "1-6 TO CHANGE",
                 _ => "PAUSE TO CHANGE",
             };
-            small(a, hint, l0, 108, SLATE);
+            small(a, hint, l0, 176, SLATE);
             let rows = controls(v.mode);
             let y0 = lay.ch - 42 - rows.len() as i32 * 10;
             for (i, (k, act)) in rows.iter().enumerate() {
@@ -229,9 +275,14 @@ pub fn stage(r: &Renderer, lay: &Layout, v: &HudView) {
             let t = tuning_lines(v.settings);
             let line = format!("SPD {}  FOC {}  BLD {}", t[0].1.trim_end_matches(" PX"), t[1].1, t[2].1.trim_end_matches(" F"));
             text(a, &line, 8, f.bottom() + 8, 1, 1, SLATE);
+            let n = SANDBOX.len();
+            let pat = format!("{} {}/{}", SANDBOX[v.pattern % n].name, v.pattern % n + 1, n);
+            text(a, &pat, 8, f.bottom() + 20, 1, 1, ASH);
             let hint = if v.mode == Mode::Pad { "START: PAUSE + TUNING" } else { "DRAG ANYWHERE TO FLY" };
-            small(a, hint, 8, f.bottom() + 24, ASH);
-            small(a, "2ND FINGER: FOCUS", 8, f.bottom() + 36, SLATE);
+            small(a, hint, 8, f.bottom() + 36, ASH);
+            small(a, "2ND FINGER: FOCUS", 8, f.bottom() + 48, SLATE);
+            let stats = format!("BULLETS {}  HITS {}  GRAZE {}", v.bullets, v.hits, v.grazes);
+            text(a, &stats, 8, f.bottom() + 74, 1, 1, SLATE);
             buttons(a, lay, v);
         }
     }
@@ -257,10 +308,10 @@ pub struct MenuBox {
 
 pub fn menu_box(lay: &Layout) -> MenuBox {
     let f = lay.field;
-    let row_h = 16;
-    let h = 34 + ITEMS.len() as i32 * row_h + 22;
+    let row_h = 14;
+    let h = 32 + ITEMS.len() as i32 * row_h + 22;
     let panel = IRect::new(f.x + 14, f.y + (f.h - h) / 2, f.w - 28, h);
-    MenuBox { panel, row0: panel.y + 30, row_h, val0: panel.x + panel.w / 2, val1: panel.right() - 8 }
+    MenuBox { panel, row0: panel.y + 28, row_h, val0: panel.x + panel.w / 2 - 10, val1: panel.right() - 8 }
 }
 
 /// What a tap at canvas `(x, y)` means in the menu: (row, step) where step is
@@ -345,13 +396,39 @@ mod tests {
     fn panel_text_fits_the_side_panels() {
         // the landscape side panels are 185 px wide with 12 px margins
         let room = 185 - 25;
-        for s in ["HUMANITY STILL LOOKS UP", "A LONG WAY FROM HOME", "STAGE 1  //  SANDBOX", "PAUSE TO CHANGE"] {
+        for s in ["HUMANITY STILL LOOKS UP", "A LONG WAY FROM HOME", "STAGE 1  //  SANDBOX", "PAUSE TO CHANGE", "BOT SLOW INVINCIBLE"] {
             assert!(text_width(s, 1, TRACK) <= room, "{s}");
+        }
+        for p in SANDBOX {
+            assert!(text_width(p.name, 1, TRACK) <= room, "{}", p.name);
+            // the portrait thumb zone line, beside the buttons
+            assert!(text_width(&format!("{} 13/13", p.name), 1, 1) <= 270 - 8 - 100, "{}", p.name);
+            assert!(text_width("BULLETS 8192  HITS 999  GRAZE 9999", 1, 1) <= 270 - 16);
         }
         for mode in [Mode::Keys, Mode::Pad, Mode::Touch] {
             for (k, act) in controls(mode) {
                 assert!(text_width(k, 1, TRACK) + 8 + text_width(act, 1, TRACK) <= room, "{k} {act}");
             }
+        }
+    }
+
+    /// Every label the HUD draws uses glyphs the font has (a missing one draws as a gap).
+    #[test]
+    fn every_label_has_its_glyphs() {
+        let ok = |s: &str| s.chars().all(|c| c == ' ' || font::CHARS.contains(c.to_ascii_uppercase()));
+        let mut all: Vec<String> = vec![];
+        for mode in [Mode::Keys, Mode::Pad, Mode::Touch] {
+            for (k, act) in controls(mode) {
+                all.push(k.to_string());
+                all.push(act.to_string());
+            }
+        }
+        all.extend(SANDBOX.iter().map(|p| p.name.to_string()));
+        all.extend(ITEMS.iter().map(|i| i.label().to_string()));
+        let s = crate::storage::Settings::default();
+        all.extend(ITEMS.iter().map(|i| menu::value(&s, *i)));
+        for t in all {
+            assert!(ok(&t), "{t:?} has a character the font can't draw");
         }
     }
 

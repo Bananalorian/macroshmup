@@ -29,6 +29,16 @@ pub const SIGNAL: Color = hex(0xF83C30);
 /// Teal: the Pilgrim's engines and trails, shards, graze sparks, the hitbox dot.
 pub const TEAL: Color = hex(0x32DFB3);
 
+/// Enemy bullet cores: CREAM pushed to the brightest pixels on screen.
+pub const CORE: Color = hex(0xF4F1E6);
+/// A lighter red for the bullets' wobble frame.
+pub const EMBER: Color = hex(0xFF6A50);
+/// The bullets' outline: as dark as it gets.
+pub const INK: Color = hex(0x000000);
+
+/// Plain white at full strength (a sprite's own colors, untinted).
+pub const WHITE_A: Color = Color::new(1.0, 1.0, 1.0, 1.0);
+
 /// The strip of swatches on the sheet, left to right.
 pub const STRIP: [Color; 7] = [CREAM, ASH, SLATE, SOOT, SIGNAL, DUSK, TEAL];
 
@@ -69,6 +79,15 @@ mod tests {
         assert_eq!(to_hex(DUSK), 0x363531);
         assert_eq!(to_hex(SIGNAL), 0xF83C30);
         assert_eq!(to_hex(TEAL), 0x32DFB3);
+    }
+
+    /// Non-negotiable 3: bullet cores are the brightest thing on screen.
+    #[test]
+    fn bullet_cores_outshine_everything_else() {
+        for c in [CREAM, ASH, SLATE, SOOT, DUSK, SIGNAL, TEAL, EMBER, VOID] {
+            assert!(luma(CORE) > luma(c) + 0.08, "{c:?}");
+        }
+        assert!(luma(INK) == 0.0, "a 0% outline");
     }
 
     #[test]

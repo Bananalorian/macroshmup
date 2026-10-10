@@ -2,12 +2,12 @@
 //! this one texture so the whole frame batches into a few draw calls.
 
 use super::font;
-use super::palette::{ASH, DUSK, SLATE, SOOT};
+use super::palette::{ASH, CORE, DUSK, EMBER, INK, SIGNAL, SLATE, SOOT};
 use super::ship::{self, ShipArt};
 use macroquad::prelude::*;
 
 const W: u16 = 512;
-const H: u16 = 256;
+const H: u16 = 512;
 
 /// Packs images into the atlas in rows, with a pixel of space around each.
 pub struct Packer {
@@ -165,6 +165,112 @@ fn dummy_images() -> [Image; 3] {
     [still, moving, big]
 }
 
+/// Directions pre-drawn for rice and needles (they look the same turned 180 degrees).
+pub const TURNS: usize = 8;
+
+/// One enemy bullet sprite: an ink outline, a red rim, a white-hot core.
+/// `f(x, y)` is the distance (px) from the bullet's core shape.
+fn bullet_image(size: u16, wobble: bool, f: impl Fn(f32, f32) -> f32, (outline, rim, core): (f32, f32, f32)) -> Image {
+    let mut img = Image::gen_image_color(size, size, Color::new(0.0, 0.0, 0.0, 0.0));
+    let c = size as f32 * 0.5;
+    let grow = if wobble { 0.35 } else { 0.0 };
+    for y in 0..size as u32 {
+        for x in 0..size as u32 {
+            let d = f(x as f32 + 0.5 - c, y as f32 + 0.5 - c);
+            let col = if d <= core + grow {
+                CORE
+            } else if d <= rim {
+                if wobble { EMBER } else { SIGNAL }
+            } else if d <= outline {
+                INK
+            } else {
+                continue;
+            };
+            img.set_pixel(x, y, col);
+        }
+    }
+    img
+}
+
+/// The enemy bullets' sprites, and the guns' turrets.
+pub struct BulletArt {
+    /// [kind][wobble frame][turn] (round bullets repeat their one turn).
+    pub frames: [[[Rect; TURNS]; 2]; 5],
+    /// The spawn bloom, growing over 4 frames.
+    pub bloom: [Rect; 4],
+    pub turret: Rect,
+}
+
+fn bullet_art(p: &mut Packer) -> BulletArt {
+    use crate::sim::bullets::{Kind, seg_dist};
+    let mut frames = [[[Rect::default(); TURNS]; 2]; 5];
+    for kind in Kind::ALL {
+        let r = kind.radius();
+        let h = kind.half_len();
+        let turns = if h > 0.0 { TURNS } else { 1 };
+        for w in 0..2 {
+            for t in 0..turns {
+                let (s, c) = (t as f32 * std::f32::consts::PI / TURNS as f32).sin_cos();
+                let wob = w == 1;
+                let img = match kind {
+                    // an ellipse, long along the direction of flight
+                    Kind::Rice => bullet_image(12, wob, |x, y| ((x * c + y * s) / 1.8).hypot(-x * s + y * c), (r, r - 0.8, r - 1.6)),
+                    Kind::Needle => bullet_image(16, wob, |x, y| seg_dist(x, y, 0.0, 0.0, c, s, h), (r + 1.05, r + 0.05, 0.55)),
+                    _ => {
+                        let size = (2.0 * r).ceil() as u16 + 1;
+                        let (rim, core) = match kind {
+                            Kind::Small => (r - 1.1, 1.4),
+                            Kind::Orb => (r - 1.1, 2.5),
+                            _ => (r - 1.7, 4.6),
+                        };
+                        bullet_image(size, wob, |x, y| x.hypot(y), (r, rim, core))
+                    }
+                };
+                frames[kind as usize][w][t] = p.add(&img);
+            }
+            for t in turns..TURNS {
+                frames[kind as usize][w][t] = frames[kind as usize][w][0];
+            }
+        }
+    }
+    let mut bloom = [Rect::default(); 4];
+    for (i, b) in bloom.iter_mut().enumerate() {
+        let rr = 2.0 + i as f32 * 1.5;
+        let size = (2.0 * rr).ceil() as u16 + 3;
+        let mut img = Image::gen_image_color(size, size, Color::new(0.0, 0.0, 0.0, 0.0));
+        let c = size as f32 * 0.5;
+        for y in 0..size as u32 {
+            for x in 0..size as u32 {
+                if ((x as f32 + 0.5 - c).hypot(y as f32 + 0.5 - c) - rr).abs() < 0.6 {
+                    img.set_pixel(x, y, WHITE);
+                }
+            }
+        }
+        *b = p.add(&img);
+    }
+    // a turret buoy: an octagon with a dark eye, lit from the top left
+    let mut t = Image::gen_image_color(11, 11, Color::new(0.0, 0.0, 0.0, 0.0));
+    for y in 0..11i32 {
+        for x in 0..11i32 {
+            let (dx, dy) = (x - 5, y - 5);
+            let o = dx.abs().max(dy.abs()) * 2 + dx.abs().min(dy.abs());
+            if o > 13 {
+                continue;
+            }
+            let col = if dx.abs() <= 1 && dy.abs() <= 1 {
+                SOOT
+            } else if o >= 11 {
+                if dx + dy < 0 { ASH } else { DUSK }
+            } else {
+                SLATE
+            };
+            t.set_pixel(x as u32, y as u32, col);
+        }
+    }
+    let turret = p.add(&t);
+    BulletArt { frames, bloom, turret }
+}
+
 /// Where each sprite sits in the atlas (CPU side, so it can be tested headlessly).
 pub struct Rects {
     glyphs: [Option<Rect>; 128],
@@ -175,6 +281,7 @@ pub struct Rects {
     /// A 7x7 cross sparkle, like the one in the corner of the sheet.
     pub sparkle: Rect,
     pub ship: ShipArt,
+    pub bullets: BulletArt,
     /// Still, moving, big; and their white silhouettes (the hit flash).
     pub dummy: [Rect; 3],
     pub dummy_sil: [Rect; 3],
@@ -224,6 +331,7 @@ pub fn build() -> (Image, Rects) {
     let sparkle = p.add(&sp);
 
     let ship = ship::build(&mut p);
+    let bullets = bullet_art(&mut p);
     let ims = dummy_images();
     let mut dummy = [Rect::default(); 3];
     let mut dummy_sil = [Rect::default(); 3];
@@ -231,7 +339,7 @@ pub fn build() -> (Image, Rects) {
         (dummy[i], dummy_sil[i]) = p.add_with_silhouette(im);
     }
 
-    (p.img, Rects { glyphs, px, plus, sparkle, ship, dummy, dummy_sil })
+    (p.img, Rects { glyphs, px, plus, sparkle, ship, bullets, dummy, dummy_sil })
 }
 
 pub struct Atlas {
@@ -327,10 +435,41 @@ mod tests {
         all.extend(r.dummy);
         all.extend(r.dummy_sil);
         all.extend(r.ship.rects());
+        let mut b: Vec<Rect> = r.bullets.frames.iter().flatten().flatten().copied().collect();
+        b.sort_by(|a, c| (a.x, a.y).partial_cmp(&(c.x, c.y)).unwrap());
+        b.dedup();
+        all.extend(b);
+        all.extend(r.bullets.bloom);
+        all.push(r.bullets.turret);
         for (i, a) in all.iter().enumerate() {
             assert!(a.x >= 0.0 && a.y >= 0.0 && a.x + a.w <= W as f32 && a.y + a.h <= H as f32);
             for b in &all[i + 1..] {
                 assert!(!a.overlaps(b) || a == b, "{a:?} overlaps {b:?}");
+            }
+        }
+    }
+
+    /// Every bullet has a white-hot core, a red rim and an ink outline, in both wobble frames.
+    #[test]
+    fn bullets_have_core_rim_and_outline() {
+        let (img, r) = build();
+        let same = |p: Color, c: Color| (p.r, p.g, p.b) == (c.r, c.g, c.b);
+        for (k, kind) in r.bullets.frames.iter().enumerate() {
+            for (w, frame) in kind.iter().enumerate() {
+                for rect in frame {
+                    let mut seen = (false, false, false);
+                    for y in 0..rect.h as u32 {
+                        for x in 0..rect.w as u32 {
+                            let p = img.get_pixel(rect.x as u32 + x, rect.y as u32 + y);
+                            if p.a > 0.0 {
+                                seen.0 |= same(p, CORE);
+                                seen.1 |= same(p, SIGNAL) || same(p, EMBER);
+                                seen.2 |= same(p, INK);
+                            }
+                        }
+                    }
+                    assert_eq!(seen, (true, true, true), "kind {k} wobble {w} {rect:?}");
+                }
             }
         }
     }

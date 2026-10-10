@@ -117,6 +117,10 @@ impl Game {
                 g.fill_shots = n;
                 g.start_stage();
             }
+            Some(SceneReq::Sandbox(i)) => {
+                g.settings.view.pattern = i;
+                g.start_stage();
+            }
         }
         g
     }
@@ -124,7 +128,32 @@ impl Game {
     fn start_stage(&mut self) {
         let mut w = World::new(self.seed, self.settings.tuning);
         w.fill_shots = self.fill_shots;
+        w.set_pattern(self.settings.view.pattern);
+        w.invincible = self.settings.view.invincible;
         self.scene = Scene::Stage { world: Box::new(w), menu: None };
+    }
+
+    /// The sandbox switches changed: apply them to the running stage.
+    fn sync_view(&mut self) {
+        let v = self.settings.view;
+        if let Scene::Stage { world, .. } = &mut self.scene {
+            if world.hazards.preset != v.pattern {
+                world.set_pattern(v.pattern);
+            }
+            world.invincible = v.invincible;
+        }
+    }
+
+    /// Step the sandbox pattern from a key, LB or the NEXT button.
+    fn step_pattern(&mut self, dir: i32) {
+        if dir == 0 || !matches!(self.scene, Scene::Stage { menu: None, .. }) {
+            return;
+        }
+        menu::adjust(&mut self.settings, Item::Pattern, dir.signum());
+        self.sync_view();
+        let n = tune::SANDBOX.len();
+        let msg = format!("{}  {}/{}", menu::value(&self.settings, Item::Pattern), self.settings.view.pattern + 1, n);
+        self.say(msg);
     }
 
     fn say(&mut self, msg: impl Into<String>) {
@@ -191,6 +220,7 @@ impl Game {
                     MenuAct::Changed => {
                         audio.play(Id::Select, 0.7);
                         self.settings_changed(input);
+                        self.sync_view();
                     }
                     MenuAct::Resume => {
                         if let Scene::Stage { menu, .. } = &mut self.scene {
@@ -237,6 +267,16 @@ fn effects(w: &World, r: &mut Renderer, input: &mut Input, s: &Settings) {
         match *e {
             Event::Hit { x, y, beam } if !beam || w.frame % 3 == 0 => r.fx.hit(x, y, beam),
             Event::Break { x, y, big } => r.fx.burst(x, y, big),
+            Event::Graze { x, y } => r.fx.graze(x, y, p.x, p.y),
+            Event::Death { x, y } => {
+                r.flash.trigger(w.frame);
+                r.fx.burst(x, y, true);
+                // every cancelled bullet pops (a sample of them on a crowded screen)
+                let step = (w.cancelled.len() / 600).max(1);
+                for &(cx, cy) in w.cancelled.iter().step_by(step) {
+                    r.fx.cancel(cx, cy);
+                }
+            }
             _ => {}
         }
         if let Some(k) = rumble::for_event(e).and_then(|k| rumble::scaled(k, s.rumble)) {
@@ -253,8 +293,16 @@ fn effects(w: &World, r: &mut Renderer, input: &mut Input, s: &Settings) {
     }
 }
 
-#[macroquad::main(window_conf)]
-async fn main() {
+fn main() {
+    #[cfg(not(target_arch = "wasm32"))]
+    if let Ok(n) = std::env::var("PG_SIM") {
+        debug::sim_report(n.trim().parse().unwrap_or(200));
+        return;
+    }
+    macroquad::Window::from_config(window_conf(), amain());
+}
+
+async fn amain() {
     let hooks = debug::hooks();
     #[cfg(not(target_arch = "wasm32"))]
     if hooks.wav {
@@ -281,15 +329,19 @@ async fn main() {
     let scripted = !hooks.shots.is_empty();
     let last_shot = hooks.shots.iter().copied().max().unwrap_or(0);
 
+    let mut settings = settings;
+    settings.view.autopilot = hooks.auto;
     let mut game = Game::new(seed, hooks.scene, settings);
+    let mut bot = sim::bot::Bot::new();
     if let (true, Scene::Stage { menu, .. }) = (hooks.menu, &mut game.scene) {
-        *menu = Some(2);
+        *menu = ITEMS.iter().position(|i| *i == Item::Focus);
     }
     let mut input = Input::new();
     input.analog = game.settings.analog;
     let mut clock = clock::Clock::new();
     let mut perf = debug::Perf::new();
-    let mut keys = debug::Keys::new(hooks.perf);
+    let mut keys = debug::Keys::default();
+    game.settings.view.fps |= hooks.perf;
     let mut fullscreen = false;
     let mut mode_known = false;
     let mut frame: u64 = 0;
@@ -302,7 +354,9 @@ async fn main() {
             fullscreen = !fullscreen;
             set_fullscreen(fullscreen);
         }
-        keys.read(&mut renderer.gray);
+        let f7 = keys.read(&mut game.settings.view);
+        game.sync_view();
+        renderer.gray = game.settings.view.gray;
         if keys.sheet {
             keys.sheet = false;
             debug::export_sheet(&renderer);
@@ -321,18 +375,20 @@ async fn main() {
             }
         }
         game.handle_ui(&ui, &lay, &mut input, &mut audio);
+        game.step_pattern(ui.pattern + f7);
 
         // the fixed-step sim: scripted screenshot runs advance exactly one tick per frame
         let dt = get_frame_time();
-        let ticks = keys.filter(if scripted { 1 } else { clock.advance(dt as f64) });
+        let ticks = keys.filter(if scripted { 1 } else { clock.advance(dt as f64) }, game.settings.view.slowmo);
         for _ in 0..ticks {
             match &mut game.scene {
                 Scene::Title { t } => *t += 1,
                 Scene::Stage { world, menu: None } => {
                     let (drag, bomb) = input.take();
-                    let c = if hooks.auto { debug::autopilot(world) } else { Controls { mv: held.mv, drag, fire: held.fire, focus: held.focus, bomb } };
+                    let c = if game.settings.view.autopilot { bot.decide(world) } else { Controls { mv: held.mv, drag, fire: held.fire, focus: held.focus, bomb } };
                     world.tick(c);
                     renderer.fx.tick();
+                    renderer.flash.tick();
                     effects(world, &mut renderer, &mut input, &game.settings);
                     audio.handle(world);
                     if world.events.contains(&Event::BombStub) {
@@ -352,23 +408,27 @@ async fn main() {
         match &game.scene {
             Scene::Title { t } => hud::title(&renderer, &lay, *t, mode_known.then_some(input.mode)),
             Scene::Stage { world, menu } => {
-                render::scene::draw(&renderer, &lay, world, keys.hitboxes);
+                render::scene::draw(&renderer, &lay, world, game.settings.view.hitboxes);
                 let view = HudView {
                     settings: &game.settings,
                     mode: input.mode,
                     menu: *menu,
                     toast: game.toast.as_ref().map(|(m, l)| (m.as_str(), *l)),
                     bomb_flash: input.bomb_flash,
+                    pattern: world.hazards.preset,
+                    bullets: world.hazards.bullets.len(),
+                    hits: world.deaths,
+                    grazes: world.grazes,
                 };
                 hud::stage(&renderer, &lay, &view);
             }
         }
-        if keys.perf {
-            let (shots, sim_seed) = match &game.scene {
-                Scene::Stage { world, .. } => (world.shots.len(), world.seed),
-                _ => (0, game.seed),
+        if game.settings.view.fps {
+            let (shots, bullets, sim_seed) = match &game.scene {
+                Scene::Stage { world, .. } => (world.shots.len(), world.hazards.bullets.len(), world.seed),
+                _ => (0, 0, game.seed),
             };
-            perf.draw(&renderer.atlas, &lay, game.sim_frame(), sim_seed, shots, renderer.fx.len());
+            perf.draw(&renderer.atlas, &lay, game.sim_frame(), sim_seed, shots, bullets, renderer.fx.len());
         }
         renderer.end(&lay);
         perf.record(dt, (miniquad::date::now() - t0) as f32, ticks);
@@ -379,7 +439,11 @@ async fn main() {
         }
         if scripted && frame >= last_shot {
             if hooks.perf {
-                println!("{}", perf.summary());
+                let bullets = match &game.scene {
+                    Scene::Stage { world, .. } => world.hazards.bullets.len(),
+                    _ => 0,
+                };
+                println!("{}  bullets {}", perf.summary(), bullets);
             }
             break;
         }
@@ -418,6 +482,22 @@ mod tests {
         assert_eq!(menu_input(&mut sel, &Ui { confirm: true, ..ui() }, &lay, &mut s), MenuAct::Resume);
         sel = ITEMS.len() - 1;
         assert_eq!(menu_input(&mut sel, &Ui { confirm: true, ..ui() }, &lay, &mut s), MenuAct::Quit);
+    }
+
+    #[test]
+    fn the_sandbox_switches_reach_the_running_stage() {
+        let mut g = Game::new(1, Some(SceneReq::Sandbox(3)), Settings::default());
+        assert!(matches!(&g.scene, Scene::Stage { world, .. } if world.hazards.preset == 3));
+        g.step_pattern(1);
+        assert!(matches!(&g.scene, Scene::Stage { world, .. } if world.hazards.preset == 4));
+        g.settings.view.invincible = true;
+        g.sync_view();
+        assert!(matches!(&g.scene, Scene::Stage { world, .. } if world.invincible));
+        g.step_pattern(-5);
+        assert_eq!(g.settings.view.pattern, 3, "one step at a time");
+        g.settings.view.pattern = 0;
+        g.step_pattern(-1);
+        assert_eq!(g.settings.view.pattern, tune::SANDBOX.len() - 1, "wraps around");
     }
 
     #[test]

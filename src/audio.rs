@@ -19,6 +19,8 @@ fn mix(id: Id) -> (f32, f64) {
         Id::NotYet => (VOL_UI, 0.15),
         Id::Select => (VOL_UI, 0.04),
         Id::Beam => (VOL_BEAM, 0.0),
+        Id::Graze => (VOL_GRAZE, GRAZE_SOUND_GAP),
+        Id::Death => (VOL_DEATH, 0.3),
     }
 }
 
@@ -94,6 +96,8 @@ impl Audio {
                 Event::Break { big: true, .. } => self.play(Id::BigBreak, 1.0),
                 Event::Bump => self.play(Id::Bump, 1.0),
                 Event::BombStub => self.play(Id::NotYet, 1.0),
+                Event::Graze { .. } => self.play(Id::Graze, 1.0),
+                Event::Death { .. } => self.play(Id::Death, 1.0),
             }
         }
         self.beam_target = if w.player.beaming { 1.0 } else { 0.0 };

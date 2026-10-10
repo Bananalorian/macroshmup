@@ -3,6 +3,54 @@
 Every version is one build sprint. Newest first. Versions are tagged in git, and
 each tag publishes a GitHub Release with downloads.
 
+## [0.3.0] - 2026-10-10 - Danmaku engine
+
+Sprint 2: bullets that are beautiful, readable and fast, and the tools to design with them.
+
+### Added
+- **Enemy bullets:** small orbs, orbs, large orbs, rice and needles. Each has a
+  white-hot core (the brightest pixels on screen), a red rim and a black outline,
+  and wobbles between two frames. Rice and needles point along their flight.
+  New bullets bloom in for 4 frames and can't hurt you while they do. Big, slow
+  bullets draw under small, fast ones, and all of them draw above everything
+  except the HUD.
+- **A bullet engine** built for speed: a fixed-size pool that never allocates
+  during play. Hitboxes are about 55% of each bullet's size, and needles and rice
+  hit along their length.
+- **A pattern library:** aimed fans, rings, spirals (multi-arm, reversing),
+  streams and random cones, from guns that are fixed, sweep side to side, or ride
+  the moving target dummy (break the dummy and its gun falls silent). Bullets
+  can accelerate, slow down, pause and re-aim at you, curve, split into rings, or
+  get pulled toward a point. Curving and pulled bullets leave short trails. Guns
+  flash red just as they fire.
+- **The pattern sandbox:** 13 patterns plus OFF, cycled with `[` `]`, LB on a
+  controller, or the NEXT button on a phone. The pause menu now has the sandbox
+  switches too, in every build: pattern, autopilot, slow-mo, invincible,
+  hitboxes, grayscale and an FPS readout. The side panel shows the pattern,
+  the bullet count, hits and grazes.
+- **Grazing:** a bullet's core passing within 14 px of the hitbox throws teal
+  sparks, ticks, buzzes the controller lightly, and counts once per bullet.
+- **A placeholder death:** a hit flashes the screen (never more than 3 times a
+  second), cancels every bullet, and puts you back at the start while the guns
+  hold off for a second. The real death and respawn arrive in v0.5.
+- **The bot:** a dodger that plays through the same sim, trying 9 directions at
+  two speeds over a 12-frame lookahead. `PG_AUTO=1` or AUTOPILOT in the pause
+  menu lets it fly. `PG_SIM=200` runs 200 seeded games per pattern headless and
+  prints a report.
+- **Stress scenes:** STRESS 2000 and STRESS 4000 in the sandbox (`PG_SCENE=stress`).
+- The starfield dims as the bullet count rises, down to half brightness at 1,500 bullets.
+
+### Checked
+- No bullet can appear within 24 px of the player; every 4 px band of the bottom
+  half keeps a gap of at least 12 px (no walls); the same seed gives the same
+  bullet field; bullets are harmless for exactly their first 4 frames. Tests for all.
+- The bot survived every pattern for 60 seconds on 200 of 200 seeds. Standing
+  still gets you hit on most patterns, so they're real threats.
+- 60 fps at 2,000 bullets (1.75 ms of CPU with the bot flying) and at 4,000
+  (1.39 ms) on desktop; 60 fps at both in a browser at phone resolution.
+- Grayscale: bullet cores are the brightest pixels on screen (value 241, next
+  brightest 214).
+
 ## [0.2.0] - 2026-10-10 - The Pilgrim
 
 Sprint 1: the ship feels instant and fast before anything shoots back.

@@ -9,7 +9,7 @@ use super::ship::{self, Pose};
 use crate::sim::World;
 use crate::sim::geom::Rect as SimRect;
 use crate::sim::shots::ShotKind;
-use crate::tune::{AFTERIMAGE_MIN, AURA_R, BEAM_W, HITBOX_R};
+use crate::tune::{AFTERIMAGE_MIN, AURA_R, BEAM_W, BG_DIM_AT, BG_DIM_MIN, HITBOX_R};
 use macroquad::color::Color;
 
 /// Max opacity of the Pilgrim's shots, so they never read as enemy bullets.
@@ -22,7 +22,9 @@ fn snap(v: f32) -> i32 {
 pub fn draw(r: &Renderer, lay: &Layout, w: &World, hitboxes: bool) {
     let a = &r.atlas;
     let (ox, oy) = (lay.field.x, lay.field.y);
-    r.stars.draw(a, lay.field, w.frame);
+    let n = w.hazards.bullets.len() as f32;
+    let dim = 1.0 - (1.0 - BG_DIM_MIN) * (n / BG_DIM_AT).min(1.0);
+    r.stars.draw(a, lay.field, w.frame, dim);
 
     // enemies
     for (i, d) in w.dummies.iter().enumerate() {
@@ -48,6 +50,8 @@ pub fn draw(r: &Renderer, lay: &Layout, w: &World, hitboxes: bool) {
             super::hud::text(a, &label, x, by + 3, 1, 1, SLATE);
         }
     }
+
+    super::bullets::draw_guns(a, w, ox, oy);
 
     // the Pilgrim's shots: translucent, streaked, no outline
     for s in &w.shots {
@@ -92,7 +96,14 @@ pub fn draw(r: &Renderer, lay: &Layout, w: &World, hitboxes: bool) {
     ship::draw(a, px, py, &pose);
 
     r.fx.draw(a, ox, oy);
+    // enemy bullets above everything but the HUD (and the hitbox dot, which is HUD)
+    super::bullets::draw_bullets(a, w, ox, oy);
     ship::draw_hitbox(a, px, py, p.blend(&w.tuning), w.frame);
+    let flash = r.flash.level();
+    if flash > 0.0 {
+        let f = lay.field;
+        a.fill(f.x, f.y, f.w, f.h, Color { a: 0.35 * flash, ..CREAM });
+    }
 
     if hitboxes {
         let red = Color::new(1.0, 0.2, 0.2, 0.7);
@@ -112,6 +123,13 @@ pub fn draw(r: &Renderer, lay: &Layout, w: &World, hitboxes: bool) {
         }
         if let Some(b) = w.beam {
             box_(b.rect(), Color::new(0.3, 1.0, 0.6, 0.5));
+        }
+        let bl = &w.hazards.bullets;
+        for i in 0..bl.len() {
+            let k = bl.kind[i];
+            let (r, h) = (k.hit_r(), k.half_len());
+            let ext = SimRect { x0: bl.x[i] - r - (bl.dx[i] * h).abs(), y0: bl.y[i] - r - (bl.dy[i] * h).abs(), x1: bl.x[i] + r + (bl.dx[i] * h).abs(), y1: bl.y[i] + r + (bl.dy[i] * h).abs() };
+            box_(ext, Color::new(0.4, 0.8, 1.0, 0.8));
         }
         box_(w.body(), Color::new(1.0, 1.0, 1.0, 0.35));
         let r = HITBOX_R as i32;
