@@ -59,7 +59,7 @@ Its RGB streaks are mostly red, with thin hints of green and blue.
 - **Teal means you.** Engines, trails, collected shards, graze sparks, the hitbox.
 - The Pilgrim's red bolts stay (they're on your sheet), but they're drawn translucent (60% or less), streaked and without an outline, so they never read as enemy bullets.
 - **The boss** gets red highlights: seams and a core that glow brighter as it charges an attack, so the color doubles as a telegraph.
-- **Enemies, background, HUD:** monochrome. Exceptions are red muzzle flashes (telegraphs) and red/teal fringes in explosions.
+- **Enemies, background, HUD:** monochrome. Exceptions are red muzzle flashes (telegraphs), enemies' red running lights and hit flashes, and red/teal fringes in explosions.
 - Because readability comes from value first, color-blind players can still read every bullet.
 
 ### Value budget (verified with the grayscale debug view, F2)
@@ -67,7 +67,7 @@ Its RGB streaks are mostly red, with thin hints of green and blue.
 | Layer | Max brightness |
 |---|---|
 | Background (black hole, stars) | about 30%, auto-dimming toward 15% as the bullet count rises |
-| Enemies | 35–75% |
+| Enemies | bone white, up to cream (about 84%); never as bright as a bullet core (Jason, v0.6.3) |
 | The Pilgrim | up to 85% |
 | Player shots | 60% opacity or less |
 | Enemy bullet cores | 100%, with a 0% outline |
@@ -469,7 +469,7 @@ Build
 - Music: a stage theme, a boss theme and a title ambience, synthesized or your own tracks (Decision 1), crossfaded between scenes. The bomb ducks the music.
 - The remaining sounds: warning siren, phase break, extend, cancel shimmer, graze tick, death crunch, menus.
 - A mix pass: shot sounds throttled so they never fatigue, enemy bullets silent, a whoosh telegraph before big patterns.
-- A rumble map: bomb, death, phase break, boss death.
+- Rumble, back with care (removed in v0.6.3: over time it lagged a Bluetooth controller): only on big moments, only when the strength changes, and tested on Bluetooth.
 
 Done when
 - Every sound dumped with `PG_WAV=1` has been reviewed, and a 10-minute bot run never clips.

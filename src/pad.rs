@@ -1,9 +1,9 @@
 //! Gamepads, ported from Last Train to Shinjuku. Desktop builds read controllers
 //! through gilrs; the web build reads the browser Gamepad API through a tiny JS
 //! plugin in web/template.html. Both are normalized to the W3C "standard" layout
-//! (Xbox naming below). Rumble works on both where the controller supports it.
+//! (Xbox naming below). The game never sends a controller anything: no rumble (it
+//! lagged a Bluetooth controller's input; it may come back later as its own feature).
 
-use crate::tune::{RUMBLE_REFRESH, RUMBLE_TAIL};
 use macroquad::prelude::*;
 
 pub const A: usize = 0;
@@ -30,62 +30,8 @@ pub struct PadState {
 pub struct Pads {
     pub cur: PadState,
     prev: PadState,
-    gate: Gate,
-    /// Rumble commands sent to the controller this run (PG_PERF reports it).
-    pub commands: u32,
     #[cfg(not(target_arch = "wasm32"))]
     native: native::Native,
-}
-
-/// What the motors should be told, if anything: (strong, weak, seconds).
-pub type Command = (f32, f32, f64);
-
-/// Decides when the controller actually hears about a rumble. Requests come every
-/// few frames (the fire hum), but the motors only get a command when the strength
-/// changes, when the last command is about to run out, or when it's time to stop.
-#[derive(Default, Debug)]
-pub struct Gate {
-    /// The rumble the game wants: its strength (the stronger motor) and when it ends.
-    until: f64,
-    level: f32,
-    /// What the motors were last told, and when that command runs out on its own.
-    told: (f32, f32),
-    told_until: f64,
-}
-
-impl Gate {
-    /// A rumble request at time `now` (s). A weaker request never cuts off a stronger
-    /// one that's still playing.
-    pub fn request(&mut self, now: f64, strong: f32, weak: f32, ms: u32) -> Option<Command> {
-        let level = strong.max(weak);
-        if now < self.until && level < self.level {
-            return None;
-        }
-        self.until = now + ms as f64 / 1000.0;
-        self.level = level;
-        if (strong, weak) == self.told && self.told_until - now > RUMBLE_REFRESH {
-            return None; // already playing: just runs on
-        }
-        let secs = ms as f64 / 1000.0 + RUMBLE_TAIL;
-        self.told = (strong, weak);
-        self.told_until = now + secs;
-        Some((strong, weak, secs))
-    }
-
-    /// Once a frame: the motors go off when the rumble's time is up.
-    pub fn update(&mut self, now: f64) -> Option<Command> {
-        if self.told != (0.0, 0.0) && now >= self.until {
-            self.stop()
-        } else {
-            None
-        }
-    }
-
-    /// Off now.
-    pub fn stop(&mut self) -> Option<Command> {
-        *self = Gate::default();
-        Some((0.0, 0.0, 0.0))
-    }
 }
 
 fn deadzone(v: Vec2, dz: f32) -> Vec2 {
@@ -98,17 +44,12 @@ impl Pads {
         Pads {
             cur: PadState::default(),
             prev: PadState::default(),
-            gate: Gate::default(),
-            commands: 0,
             #[cfg(not(target_arch = "wasm32"))]
             native: native::Native::new(),
         }
     }
 
     pub fn poll(&mut self) {
-        if let Some(c) = self.gate.update(get_time()) {
-            self.send(c);
-        }
         self.prev = self.cur;
         #[cfg(not(target_arch = "wasm32"))]
         {
@@ -162,43 +103,6 @@ impl Pads {
         self.cur.connected && (self.left().length() > 0.3 || self.cur.buttons.iter().any(|b| *b > 0.5))
     }
 
-    /// Rumble, if the controller and platform support it (see `Gate` for when the
-    /// controller actually gets told).
-    pub fn rumble(&mut self, strong: f32, weak: f32, ms: u32) {
-        if let Some(c) = self.gate.request(get_time(), strong, weak, ms) {
-            self.send(c);
-        }
-    }
-
-    fn send(&mut self, (strong, weak, secs): Command) {
-        self.commands += 1;
-        let ms = (secs * 1000.0).round() as u32;
-        #[cfg(not(target_arch = "wasm32"))]
-        self.native.rumble(strong, weak, ms);
-        #[cfg(target_arch = "wasm32")]
-        web::rumble(strong, weak, ms.max(1));
-    }
-
-    /// Stop the motors, and wait (briefly) until the controller has been told. Call
-    /// this before the game exits: a controller holds the last strength it was given,
-    /// so quitting mid-rumble would leave it buzzing.
-    pub fn stop(&mut self) {
-        self.gate.stop();
-        #[cfg(not(target_arch = "wasm32"))]
-        self.native.stop();
-        #[cfg(target_arch = "wasm32")]
-        web::rumble(0.0, 0.0, 1);
-    }
-}
-
-impl Pads {
-    /// A buzz for phones (touch play): the browser's vibrate API, where it exists.
-    pub fn vibrate(&self, ms: u32) {
-        #[cfg(target_arch = "wasm32")]
-        web::vibrate(ms);
-        #[cfg(not(target_arch = "wasm32"))]
-        let _ = ms;
-    }
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -207,12 +111,6 @@ mod web {
 
     unsafe extern "C" {
         fn pg_pad_poll(ptr: *mut f32, len: u32) -> u32;
-        fn pg_pad_rumble(strong: f32, weak: f32, ms: f32);
-        fn pg_vibrate(ms: f32);
-    }
-
-    pub fn vibrate(ms: u32) {
-        unsafe { pg_vibrate(ms as f32) };
     }
 
     /// Lets the JS loader confirm the plugin matches this build.
@@ -231,10 +129,6 @@ mod web {
             s.buttons.copy_from_slice(&buf[6..6 + NB]);
         }
         s
-    }
-
-    pub fn rumble(strong: f32, weak: f32, ms: u32) {
-        unsafe { pg_pad_rumble(strong, weak, ms as f32) };
     }
 }
 
@@ -266,27 +160,14 @@ mod native {
     pub struct Native {
         gilrs: Option<Gilrs>,
         active: Option<GamepadId>,
-        #[cfg(not(windows))]
-        effect: Option<gilrs::ff::Effect>,
-        #[cfg(windows)]
-        motor: motor::Motor,
     }
 
     impl Native {
         pub fn new() -> Self {
-            // On Windows gilrs's force feedback re-sends the motor level to every
-            // controller 20 times a second, even at rest, and over Bluetooth that radio
-            // traffic delays the controller's input. The game drives the motors itself
-            // there (`motor`), only when the strength changes.
-            let gilrs = gilrs::GilrsBuilder::new().with_force_feedback(!cfg!(windows)).build().ok();
-            Native {
-                gilrs,
-                active: None,
-                #[cfg(not(windows))]
-                effect: None,
-                #[cfg(windows)]
-                motor: motor::Motor::new(),
-            }
+            // no force feedback: gilrs's would re-send the motor level to every
+            // controller 20 times a second, and over Bluetooth that traffic lags input
+            let gilrs = gilrs::GilrsBuilder::new().with_force_feedback(false).build().ok();
+            Native { gilrs, active: None }
         }
 
         pub fn read(&mut self) -> PadState {
@@ -309,156 +190,37 @@ mod native {
             s
         }
 
-        #[cfg(windows)]
-        pub fn rumble(&mut self, strong: f32, weak: f32, _ms: u32) {
-            // the motors hold the level until the next command (the Gate sends the stop)
-            self.motor.set(strong, weak);
-        }
-
-        #[cfg(windows)]
-        pub fn stop(&mut self) {
-            self.motor.stop_and_wait(std::time::Duration::from_millis(300));
-        }
-
-        #[cfg(not(windows))]
-        pub fn rumble(&mut self, strong: f32, weak: f32, ms: u32) {
-            use gilrs::ff::{BaseEffect, BaseEffectType, EffectBuilder, Replay, Ticks};
-            if strong <= 0.0 && weak <= 0.0 {
-                self.stop_effect();
-                return;
-            }
-            let (Some(g), Some(id)) = (&mut self.gilrs, self.active) else { return };
-            if !g.gamepad(id).is_ff_supported() {
-                return;
-            }
-            let rep = Replay { play_for: Ticks::from_ms(ms), ..Default::default() };
-            let mag = |k: f32| (k.clamp(0.0, 1.0) * 65535.0) as u16;
-            let eff = EffectBuilder::new()
-                .add_effect(BaseEffect { kind: BaseEffectType::Strong { magnitude: mag(strong) }, scheduling: rep, ..Default::default() })
-                .add_effect(BaseEffect { kind: BaseEffectType::Weak { magnitude: mag(weak) }, scheduling: rep, ..Default::default() })
-                .gamepads(&[id])
-                .finish(g);
-            if let Ok(e) = eff {
-                let _ = e.play();
-                self.effect = Some(e); // keep it alive until the next one replaces it
-            }
-        }
-
-        #[cfg(not(windows))]
-        fn stop_effect(&mut self) {
-            if let Some(e) = self.effect.take() {
-                let _ = e.stop();
-            }
-        }
-
-        /// Stop the effect, and give gilrs a couple of its 50 ms ticks to zero the motors.
-        #[cfg(not(windows))]
-        pub fn stop(&mut self) {
-            self.stop_effect();
-            std::thread::sleep(std::time::Duration::from_millis(150));
-        }
-    }
-
-    /// The controller's motors on Windows, through XInput, from a thread of their own:
-    /// a write to a Bluetooth controller can take tens of ms and must never hold up a
-    /// frame. Only the latest level matters, so a backlog collapses into one write.
-    #[cfg(windows)]
-    mod motor {
-        use std::sync::Arc;
-        use std::sync::atomic::{AtomicU32, Ordering};
-        use std::sync::mpsc::{Sender, channel};
-        use std::time::{Duration, Instant};
-
-        #[repr(C)]
-        struct Vibration {
-            left: u16,
-            right: u16,
-        }
-
-        #[link(name = "xinput1_4", kind = "raw-dylib")]
-        unsafe extern "system" {
-            fn XInputSetState(user: u32, vibration: *mut Vibration) -> u32;
-        }
-
-        pub struct Motor {
-            tx: Sender<(u16, u16, u32)>,
-            /// The newest command sent, and the newest one written.
-            sent: u32,
-            done: Arc<AtomicU32>,
-        }
-
-        impl Motor {
-            pub fn new() -> Motor {
-                let (tx, rx) = channel::<(u16, u16, u32)>();
-                let done = Arc::new(AtomicU32::new(0));
-                let written = done.clone();
-                std::thread::spawn(move || {
-                    while let Ok(mut c) = rx.recv() {
-                        while let Ok(newer) = rx.try_recv() {
-                            c = newer;
-                        }
-                        for slot in 0..4 {
-                            let mut v = Vibration { left: c.0, right: c.1 };
-                            // SAFETY: a plain call into xinput1_4.dll with a valid struct
-                            unsafe { XInputSetState(slot, &mut v) };
-                        }
-                        written.store(c.2, Ordering::Release);
-                    }
-                });
-                Motor { tx, sent: 0, done }
-            }
-
-            pub fn set(&mut self, strong: f32, weak: f32) {
-                let m = |k: f32| (k.clamp(0.0, 1.0) * 65535.0) as u16;
-                self.sent += 1;
-                let _ = self.tx.send((m(strong), m(weak), self.sent));
-            }
-
-            /// Motors off, waiting up to `limit` for the write to happen.
-            pub fn stop_and_wait(&mut self, limit: Duration) {
-                self.set(0.0, 0.0);
-                let t0 = Instant::now();
-                while self.done.load(Ordering::Acquire) < self.sent && t0.elapsed() < limit {
-                    std::thread::sleep(Duration::from_millis(5));
-                }
-            }
-        }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
+    /// Rumble is out for now: nothing may send a controller a motor command, and
+    /// gilrs runs without its force-feedback thread.
     #[test]
-    fn the_fire_hum_tells_the_controller_once_not_every_few_frames() {
-        let mut g = Gate::default();
-        let mut sent = 0;
-        // the held hum: requested every 4 frames for 3 seconds
-        for f in (0..180).step_by(4) {
-            if g.request(f as f64 / 60.0, 0.0, 0.07, 90).is_some() {
-                sent += 1;
+    fn the_game_never_talks_to_a_controllers_motors() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let mut files = vec![root.join("web/template.html")];
+        let mut stack = vec![root.join("src")];
+        while let Some(dir) = stack.pop() {
+            for e in std::fs::read_dir(dir).unwrap() {
+                let p = e.unwrap().path();
+                if p.is_dir() {
+                    stack.push(p);
+                } else if p.extension().is_some_and(|x| x == "rs") {
+                    files.push(p);
+                }
             }
-            assert_eq!(g.update(f as f64 / 60.0), None, "never cut off while it's held");
         }
-        assert!(sent <= 3 + 180 / 60 * 3, "{sent} commands in 3 s");
-        // let go: the motors are switched off once its time is up
-        assert_eq!(g.update(3.0), None);
-        assert_eq!(g.update(3.2), Some((0.0, 0.0, 0.0)));
-        assert_eq!(g.update(3.3), None, "only once");
-    }
-
-    #[test]
-    fn changes_go_through_and_weaker_never_cuts_off_stronger() {
-        let mut g = Gate::default();
-        assert!(g.request(0.0, 0.0, 0.07, 90).is_some());
-        let kick = g.request(0.01, 1.0, 0.8, 450).expect("a stronger kick goes straight through");
-        assert!(kick.2 >= 0.45);
-        assert_eq!(g.request(0.05, 0.0, 0.07, 90), None, "the hum waits for the kick");
-        assert_eq!(g.update(0.3), None);
-        assert_eq!(g.update(0.47), Some((0.0, 0.0, 0.0)), "off when the kick is over");
-        assert!(g.request(0.5, 0.0, 0.07, 90).is_some(), "then the hum again");
-        assert_eq!(g.stop(), Some((0.0, 0.0, 0.0)));
-        assert_eq!(g.update(10.0), None, "nothing left to stop");
+        for f in &files {
+            let src = std::fs::read_to_string(f).unwrap();
+            // the game code only (this test names what it bans)
+            let code = src.split("#[cfg(test)]").next().unwrap();
+            for banned in ["vibrationActuator", "XInputSetState", "SetVibration", "gilrs::ff", "navigator.vibrate"] {
+                assert!(!code.contains(banned), "{} uses {banned}", f.display());
+            }
+        }
+        let pad = std::fs::read_to_string(root.join("src/pad.rs")).unwrap();
+        assert!(pad.contains("with_force_feedback(false)"));
     }
 }

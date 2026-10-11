@@ -1,6 +1,6 @@
 # PILGRIM
 
-![The derelict, cracked open, its seams burning, in Stage 1](docs/screenshots/stage.png)
+![The derelict, cracked open, its seams burning and its iris open, in Stage 1](docs/screenshots/stage.png)
 
 > SOMEWHERE BEYOND THE EVENT HORIZON. A SMALL SHIP, A LONG WAY FROM HOME.
 
@@ -35,14 +35,15 @@ the font and every sound are built when the game starts. Written in Rust on
 
 ![The Pilgrim's animation sheet](docs/screenshots/pilgrim-sheet.png)
 
-![Stage 1's enemies, all built in code](docs/screenshots/enemy-sheet.png)
+![Stage 1's enemies in bone white, all built in code](docs/screenshots/enemy-sheet.png)
 
 ## Status
 
-**v0.6, Stage 1:** OUTER DISK, two and a half minutes of popcorn drones, gunships,
-turret buoys and heavies, a breather where the disk flares and a tiny figure falls
-into the hole, and the mid-boss: a derelict capital ship that rises out of the disk
-with breakable red-cored turrets. It ends on WARNING; the boss arrives in v0.7.
+**v0.6, Stage 1:** OUTER DISK, two and a half minutes of bone-white lunar gothic
+enemies (popcorn drones, couriers and ushers, gunships, turret buoys and heavies), a
+breather where the disk flares and a tiny figure falls into the hole, and the
+mid-boss: a derelict with an iris eye that rises out of the disk, its gun pods and
+nose gun breakable weak points. It ends on WARNING; the boss arrives in v0.7.
 Over the bomb, deathbomb and lives from v0.5, the black hole and post effects from
 v0.4, and the bullet engine and pattern sandbox from v0.3 (still on the title:
 13 patterns plus stress scenes, target dummies, a dodging bot).
@@ -64,7 +65,7 @@ See [SPRINTS.md](SPRINTS.md) for the plan.
 The pause menu holds the sandbox switches (pattern, autopilot, slow-mo,
 invincible, hitboxes, grayscale, FPS, BOOM TEST), the options (reduce flashing,
 screen shake) and the tuning panel: speed, focus ratio, blend frames, touch
-sensitivity, 8-way or analog stick, and rumble (off, low, full). On a keyboard,
+sensitivity, and 8-way or analog stick. On a keyboard,
 1 to 6 change speed, focus and blend while you fly. Tuning and options are saved;
 the sandbox switches last for the session.
 

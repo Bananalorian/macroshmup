@@ -3,7 +3,7 @@
 //! you resume (and are saved). The sandbox switches last for the session.
 
 use crate::render::post::ShakeSetting;
-use crate::storage::{Rumble, Settings};
+use crate::storage::Settings;
 use crate::tune::*;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -24,12 +24,11 @@ pub enum Item {
     Blend,
     Touch,
     Stick,
-    Rumble,
     Reset,
     Quit,
 }
 
-pub const ITEMS: [Item; 19] = [
+pub const ITEMS: [Item; 18] = [
     Item::Resume,
     Item::Pattern,
     Item::Autopilot,
@@ -46,7 +45,6 @@ pub const ITEMS: [Item; 19] = [
     Item::Blend,
     Item::Touch,
     Item::Stick,
-    Item::Rumble,
     Item::Reset,
     Item::Quit,
 ];
@@ -70,7 +68,6 @@ impl Item {
             Item::Blend => "BLEND",
             Item::Touch => "TOUCH",
             Item::Stick => "STICK",
-            Item::Rumble => "RUMBLE",
             Item::Reset => "RESET TUNING",
             Item::Quit => "QUIT TO TITLE",
         }
@@ -110,12 +107,6 @@ pub fn value(s: &Settings, item: Item) -> String {
         Item::Blend => format!("{} F", s.tuning.focus_blend),
         Item::Touch => format!("{:.1}X", s.touch_sens),
         Item::Stick => (if s.analog { "ANALOG" } else { "8-WAY" }).to_string(),
-        Item::Rumble => match s.rumble {
-            Rumble::Off => "OFF",
-            Rumble::Low => "LOW",
-            Rumble::Full => "FULL",
-        }
-        .to_string(),
         _ => String::new(),
     }
 }
@@ -166,11 +157,6 @@ pub fn adjust(s: &mut Settings, item: Item, dir: i32) {
         Item::Blend => t.focus_blend = (t.focus_blend as i32 + dir).clamp(0, BLEND_MAX as i32) as u32,
         Item::Touch => s.touch_sens = step(s.touch_sens, TOUCH_SENS_RANGE, dir),
         Item::Stick => s.analog = !s.analog,
-        Item::Rumble => {
-            const ORDER: [Rumble; 3] = [Rumble::Off, Rumble::Low, Rumble::Full];
-            let i = ORDER.iter().position(|r| *r == s.rumble).unwrap_or(2) as i32;
-            s.rumble = ORDER[(i + dir).clamp(0, 2) as usize];
-        }
         Item::Reset => s.tuning = Default::default(),
         _ => {}
     }
@@ -210,18 +196,17 @@ mod tests {
             adjust(&mut s, Item::Speed, 1);
             adjust(&mut s, Item::Blend, 1);
             adjust(&mut s, Item::Touch, 1);
-            adjust(&mut s, Item::Rumble, 1);
         }
-        assert_eq!((s.tuning.speed, s.tuning.focus_blend, s.touch_sens, s.rumble), (SPEED_RANGE.1, BLEND_MAX, TOUCH_SENS_RANGE.1, Rumble::Full));
+        assert_eq!((s.tuning.speed, s.tuning.focus_blend, s.touch_sens), (SPEED_RANGE.1, BLEND_MAX, TOUCH_SENS_RANGE.1));
         for _ in 0..50 {
             adjust(&mut s, Item::Speed, -1);
             adjust(&mut s, Item::Blend, -1);
-            adjust(&mut s, Item::Rumble, -1);
+            adjust(&mut s, Item::Touch, -1);
         }
-        assert_eq!((s.tuning.speed, s.tuning.focus_blend, s.rumble), (SPEED_RANGE.0, 0, Rumble::Off));
+        assert_eq!((s.tuning.speed, s.tuning.focus_blend), (SPEED_RANGE.0, 0));
         adjust(&mut s, Item::Reset, 0);
         assert_eq!(s.tuning, Default::default());
-        assert_eq!(s.rumble, Rumble::Off, "reset only touches the tuning");
+        assert_eq!(s.touch_sens, TOUCH_SENS_RANGE.0, "reset only touches the tuning");
     }
 
     #[test]

@@ -3,6 +3,36 @@
 Session notes for Claude Code: what shipped, tuning that changed, known issues, what's next.
 Newest first.
 
+## v0.6.3 Bone white (after v0.6 feedback) - 2026-10-11
+
+**Jason's calls:** remove rumble altogether for now (he had to restart the PC; he thinks
+rumble causes lag over time; revisit later). Not enough contrast: make enemies bone white.
+New references in docs/reference/: "Six lunar gothic fodder ships.png" (CLERK, COURIER,
+INSPECTOR, USHER, NOTARY, BAILIFF; ignore the names) and "minisboss_stage1.png" (the
+mid-boss look). Wants a couple more fodder enemies.
+
+**Shipped**
+- Rumble removed: pad.rs has no Gate/motor/effects, gilrs `with_force_feedback(false)`,
+  storage/menu rows gone (old saves' `rumble=` is ignored), web template has no
+  vibrationActuator/vibrate. Guard test `the_game_never_talks_to_a_controllers_motors`.
+- `render/foes.rs` rewritten: sprites from shapes (`P::Poly/Rect/Disc/Ring`, mirrored) with
+  materials (PLATE, SIDE, RECESSED, SLOT, CORE, GRILLE, CRATER, LIGHT, IRIS) painted by
+  `bone()` (outline, top/left lip, bottom/right shade, regolith speckle via hash, craters,
+  iris blades). Palette BONE = 3E3B33/6E6858/9D9682/C4BDA8/DDD6C2 (hi luma 0.84).
+  Drone=CLERK 17x17, Courier 17x25, Usher 25x21, Buoy=INSPECTOR 25x25 (4 frames, eye notch
+  turns), Gunship=BAILIFF 31x27, Heavy=NOTARY 49x35, Hull 121x105 (+ pod 19x37, nose 13x17).
+  Hit flash = red silhouette, alpha by area (0.55 / 0.35 / 0.18). Cyan/green lights from
+  the refs drawn red (teal = Pilgrim) - told Jason.
+- New kinds Courier (6 HP, spline dive at 3.4, one aimed needle, fire share like drones)
+  and Usher (16 HP, Hover enter 35 / stay 70, aimed pair from each prong every 34 frames).
+  `EnemyKind::fodder()`. Script cues `Couriers{lane,n,fire}`, `Usher{lane,y}`.
+- Derelict: HULL (2400, 112x70); HULL_TURRETS now (dx, dy, w, h): pods (+-44, 22, 16x34),
+  nose (0, 38, 12x16), HULL_TURRET_HP 300; guns from pods (+-44, 41), nose (0, 46), iris
+  (0, -2), stream (0, 26).
+
+**Verified**: 182 tests; PG_SIM=200 100% clear, derelict median 21.0 s; grayscale: cores
+still brightest.
+
 ## v0.6.2 Quiet radio (hotfix) - 2026-10-11
 
 Jason: lag in all three builds (exe, cargo run, browser). His controller: Xbox Wireless

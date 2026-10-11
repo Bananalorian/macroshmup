@@ -29,7 +29,7 @@ use player::{Controls, Player, Tuning};
 use rng::Rng;
 use shots::{Shot, ShotKind};
 
-/// What happened this frame, for sound, rumble and effects to pick up.
+/// What happened this frame, for sound and effects to pick up.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Event {
     /// The wide shot fired a volley from the ship at `(x, y)`.

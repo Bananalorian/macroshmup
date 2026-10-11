@@ -40,6 +40,11 @@ pub enum Cue {
     /// `n` drones down `lane`, `gap` frames apart, flying `path` bending toward `side`;
     /// with `fire`, each fires one aimed shot.
     Drones { lane: u8, path: Flight, side: Side, n: u8, gap: u8, fire: bool },
+    /// `n` couriers dart straight down `lane`, one after another; with `fire`, each
+    /// fires one aimed needle.
+    Couriers { lane: u8, n: u8, fire: bool },
+    /// An usher flies in to wait at height `y`, firing pairs.
+    Usher { lane: u8, y: f32 },
     /// A gunship flies in to hover at height `y`.
     Gunship { lane: u8, y: f32 },
     /// A turret buoy drifts down: rings, or a spiral.
@@ -58,11 +63,15 @@ const fn pop(lane: u8, path: Flight, side: Side, n: u8, fire: bool) -> Cue {
     Drones { lane, path, side, n, gap: 9, fire }
 }
 
+/// Frames between couriers in a line.
+const COURIER_GAP: u32 = 12;
+
 /// The whole stage. Sections start at `tune::SECTIONS`.
 pub const SCRIPT: &[(f32, Cue)] = &[
     // FLY-IN: drones only; the first shots come after 6 s
     (1.5, pop(2, Swoop, Right, 5, false)),
     (3.5, pop(4, Swoop, Left, 5, false)),
+    (4.5, Couriers { lane: 3, n: 3, fire: false }),
     (5.5, pop(1, Arc, Right, 4, false)),
     (5.5, pop(5, Arc, Left, 4, false)),
     (7.0, pop(3, Dive, Right, 4, true)),
@@ -71,12 +80,15 @@ pub const SCRIPT: &[(f32, Cue)] = &[
     (10.0, Gunship { lane: 1, y: 70.0 }),
     (11.0, pop(4, Swoop, Left, 5, true)),
     (12.5, Gunship { lane: 5, y: 64.0 }),
+    (13.0, Usher { lane: 2, y: 112.0 }),
+    (13.0, Usher { lane: 4, y: 112.0 }),
     (14.0, pop(2, Swoop, Right, 5, true)),
     (15.0, Gunship { lane: 2, y: 76.0 }),
     (16.5, pop(3, Dive, Left, 4, true)),
     (17.5, Gunship { lane: 4, y: 70.0 }),
     (19.0, pop(5, Arc, Left, 4, true)),
     (20.0, Gunship { lane: 1, y: 62.0 }),
+    (20.5, Couriers { lane: 4, n: 4, fire: true }),
     (21.0, pop(3, Swoop, Right, 6, false)),
     (22.0, Gunship { lane: 5, y: 72.0 }),
     (23.5, pop(1, Arc, Right, 4, true)),
@@ -84,12 +96,14 @@ pub const SCRIPT: &[(f32, Cue)] = &[
     (25.5, pop(4, Cross, Left, 5, true)),
     (26.5, Gunship { lane: 1, y: 66.0 }),
     (27.5, Gunship { lane: 5, y: 72.0 }),
+    (28.0, Usher { lane: 3, y: 120.0 }),
     (29.0, pop(3, Dive, Right, 4, true)),
     (30.0, Gunship { lane: 2, y: 74.0 }),
     (31.0, pop(2, Cross, Right, 5, true)),
     (31.5, Gunship { lane: 4, y: 64.0 }),
     (33.0, pop(5, Swoop, Left, 5, true)),
     (33.5, Gunship { lane: 1, y: 70.0 }),
+    (34.5, Couriers { lane: 2, n: 4, fire: true }),
     (35.0, Gunship { lane: 5, y: 60.0 }),
     (35.5, pop(1, Swoop, Right, 5, true)),
     (36.5, Gunship { lane: 3, y: 68.0 }),
@@ -101,25 +115,32 @@ pub const SCRIPT: &[(f32, Cue)] = &[
     (41.5, Gunship { lane: 5, y: 70.0 }),
     (42.0, pop(1, Swoop, Right, 5, true)),
     (43.0, Buoy { lane: 1, spiral: true }),
+    (44.0, Couriers { lane: 4, n: 4, fire: true }),
     (44.5, Gunship { lane: 1, y: 64.0 }),
     (45.0, pop(4, Arc, Left, 4, true)),
     (46.0, Buoy { lane: 5, spiral: false }),
+    (47.0, Usher { lane: 1, y: 118.0 }),
+    (47.0, Usher { lane: 5, y: 118.0 }),
     (47.5, Gunship { lane: 4, y: 72.0 }),
     (48.0, pop(2, Dive, Right, 4, true)),
     (49.0, Buoy { lane: 2, spiral: true }),
     (50.5, Gunship { lane: 2, y: 66.0 }),
     (51.0, pop(5, Swoop, Left, 5, true)),
     (52.0, Buoy { lane: 4, spiral: false }),
+    (53.0, Couriers { lane: 2, n: 4, fire: true }),
     (53.5, Gunship { lane: 5, y: 62.0 }),
     (54.0, pop(3, Cross, Left, 5, true)),
     (55.0, Buoy { lane: 3, spiral: true }),
     (56.5, Gunship { lane: 1, y: 70.0 }),
     (57.0, pop(2, Swoop, Right, 5, true)),
     (58.0, Buoy { lane: 1, spiral: false }),
+    (58.5, Usher { lane: 2, y: 110.0 }),
+    (58.5, Usher { lane: 4, y: 110.0 }),
     (59.5, Gunship { lane: 3, y: 60.0 }),
     (60.0, pop(4, Dive, Left, 4, true)),
     (61.0, Buoy { lane: 5, spiral: true }),
     (62.5, Gunship { lane: 4, y: 68.0 }),
+    (63.0, Couriers { lane: 3, n: 4, fire: true }),
     (63.5, pop(1, Arc, Right, 4, true)),
     (64.5, Gunship { lane: 2, y: 72.0 }),
     (65.5, pop(5, Arc, Left, 4, true)),
@@ -135,11 +156,13 @@ pub const SCRIPT: &[(f32, Cue)] = &[
     (116.0, pop(4, Swoop, Left, 6, true)),
     (117.5, Gunship { lane: 5, y: 60.0 }),
     (118.5, pop(5, Dive, Left, 4, true)),
+    (119.5, Couriers { lane: 4, n: 4, fire: true }),
     (120.0, pop(1, Arc, Right, 5, true)),
     (121.5, Gunship { lane: 4, y: 56.0 }),
     (123.5, Heavy { lane: 4, y: 74.0 }),
     (124.5, pop(2, Cross, Right, 5, true)),
     (126.0, Gunship { lane: 1, y: 60.0 }),
+    (127.0, Usher { lane: 3, y: 124.0 }),
     (127.0, pop(5, Swoop, Left, 6, true)),
     (128.5, Buoy { lane: 2, spiral: true }),
     (129.5, pop(3, Swoop, Left, 6, true)),
@@ -148,11 +171,14 @@ pub const SCRIPT: &[(f32, Cue)] = &[
     (133.0, pop(5, Swoop, Left, 5, true)),
     (135.0, Gunship { lane: 1, y: 58.0 }),
     (136.0, Buoy { lane: 5, spiral: false }),
+    (137.0, Couriers { lane: 2, n: 4, fire: true }),
     (137.5, pop(4, Dive, Right, 4, true)),
     (138.5, Gunship { lane: 4, y: 56.0 }),
     (140.5, Heavy { lane: 2, y: 78.0 }),
     (141.5, Gunship { lane: 5, y: 64.0 }),
     (142.5, pop(3, Arc, Left, 5, true)),
+    (143.0, Usher { lane: 1, y: 116.0 }),
+    (143.0, Usher { lane: 5, y: 116.0 }),
     (144.0, pop(4, Swoop, Left, 6, true)),
     (145.5, pop(2, Swoop, Right, 6, false)),
     // WARNING: calm
@@ -205,6 +231,19 @@ pub fn arrivals() -> Vec<Arrival> {
                     let path = Path::Spline(flight(path, lane_x(lane), s));
                     out.push(Arrival { frame: f + i as u32 * gap as u32, kind: EnemyKind::Drone, variant: fire as u8, path });
                 }
+            }
+            Couriers { lane, n, fire } => {
+                let lx = lane_x(lane);
+                let s = if lane < 3 { 1.0 } else { -1.0 };
+                for i in 0..n {
+                    let path = Path::Spline(Spline::new(&[(lx, -14.0), (lx + 10.0 * s, 140.0), (lx - 6.0 * s, 260.0), (lx, 390.0)], COURIER_SPEED));
+                    out.push(Arrival { frame: f + i as u32 * COURIER_GAP, kind: EnemyKind::Courier, variant: fire as u8, path });
+                }
+            }
+            Usher { lane, y } => {
+                let x = lane_x(lane);
+                let path = Path::Hover { from: (x, -20.0), at: (x, y), enter: USHER_ENTER, stay: USHER_STAY, sway: 0.0 };
+                out.push(Arrival { frame: f, kind: EnemyKind::Usher, variant: 0, path });
             }
             Gunship { lane, y } => {
                 let x = lane_x(lane);
@@ -302,7 +341,7 @@ impl Stage {
         self.t += 1;
         while let Some(a) = self.queue.get(self.next).filter(|a| a.frame <= self.t) {
             // in a firing flight, only some of the popcorn fire (which ones changes every run)
-            let quiet = a.kind == EnemyKind::Drone && a.variant == 1 && !foes.rng.chance(DRONE_FIRE_SHARE);
+            let quiet = matches!(a.kind, EnemyKind::Drone | EnemyKind::Courier) && a.variant == 1 && !foes.rng.chance(DRONE_FIRE_SHARE);
             foes.add(a.kind, if quiet { 0 } else { a.variant }, a.path);
             self.spawned += 1;
             self.next += 1;
@@ -339,7 +378,7 @@ mod tests {
         assert!(unfair(&edge).is_some(), "the check catches a spawn on the edge");
         for (_, cue) in SCRIPT {
             let lane = match *cue {
-                Drones { lane, .. } | Gunship { lane, .. } | Buoy { lane, .. } | Heavy { lane, .. } => lane,
+                Drones { lane, .. } | Couriers { lane, .. } | Usher { lane, .. } | Gunship { lane, .. } | Buoy { lane, .. } | Heavy { lane, .. } => lane,
                 Derelict => 3,
             };
             assert!((1..LANES as u8 - 1).contains(&lane), "{cue:?}");
@@ -368,13 +407,13 @@ mod tests {
         // nothing that shoots before the first-fire time, nothing at all in the last calm
         for &(at, cue) in SCRIPT {
             if at < FIRST_FIRE {
-                assert!(matches!(cue, Drones { fire: false, .. }), "{at}: {cue:?}");
+                assert!(matches!(cue, Drones { fire: false, .. } | Couriers { fire: false, .. }), "{at}: {cue:?}");
             }
             assert!(at < SECTIONS[6].0, "{at}: the WARNING section is calm");
         }
         // the breather fires nothing; the derelict has its section to itself
         for &(at, cue) in SCRIPT.iter().filter(|(at, _)| (SECTIONS[3].0..SECTIONS[5].0).contains(at)) {
-            assert!(matches!(cue, Drones { fire: false, .. } | Derelict), "{at}: {cue:?}");
+            assert!(matches!(cue, Drones { fire: false, .. } | Couriers { fire: false, .. } | Derelict), "{at}: {cue:?}");
         }
         assert_eq!(SCRIPT.iter().filter(|(_, c)| *c == Derelict).count(), 1);
         assert_eq!(SCRIPT.iter().find(|(_, c)| *c == Derelict).unwrap().0, SECTIONS[4].0);

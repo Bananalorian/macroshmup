@@ -6,23 +6,6 @@ use crate::render::post::ShakeSetting;
 use crate::sim::player::Tuning;
 use crate::tune::*;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Rumble {
-    Off,
-    Low,
-    Full,
-}
-
-impl Rumble {
-    pub fn scale(self) -> f32 {
-        match self {
-            Rumble::Off => 0.0,
-            Rumble::Low => RUMBLE_LOW,
-            Rumble::Full => 1.0,
-        }
-    }
-}
-
 /// The pattern sandbox's switches. They last for the session and aren't saved.
 #[derive(Clone, Copy, Debug, PartialEq, Default)]
 pub struct View {
@@ -41,7 +24,6 @@ pub struct View {
 pub struct Settings {
     pub tuning: Tuning,
     pub touch_sens: f32,
-    pub rumble: Rumble,
     /// The left stick: false snaps to 8 directions (the default), true is analog.
     pub analog: bool,
     pub muted: bool,
@@ -53,7 +35,7 @@ pub struct Settings {
 
 impl Default for Settings {
     fn default() -> Self {
-        Settings { tuning: Tuning::default(), touch_sens: TOUCH_SENS, rumble: Rumble::Full, analog: false, muted: false, reduce_flash: false, shake: ShakeSetting::Full, view: View::default() }
+        Settings { tuning: Tuning::default(), touch_sens: TOUCH_SENS, analog: false, muted: false, reduce_flash: false, shake: ShakeSetting::Full, view: View::default() }
     }
 }
 
@@ -86,13 +68,6 @@ impl Settings {
                         s.touch_sens = f.clamp(TOUCH_SENS_RANGE.0, TOUCH_SENS_RANGE.1);
                     }
                 }
-                "rumble" => {
-                    s.rumble = match v {
-                        "off" => Rumble::Off,
-                        "low" => Rumble::Low,
-                        _ => Rumble::Full,
-                    }
-                }
                 "stick" => s.analog = v == "analog",
                 "reduce_flash" => s.reduce_flash = v == "1",
                 "shake" => {
@@ -110,23 +85,17 @@ impl Settings {
     }
 
     pub fn format(&self) -> String {
-        let rumble = match self.rumble {
-            Rumble::Off => "off",
-            Rumble::Low => "low",
-            Rumble::Full => "full",
-        };
         let shake = match self.shake {
             ShakeSetting::Off => "off",
             ShakeSetting::Low => "low",
             ShakeSetting::Full => "full",
         };
         format!(
-            "speed={}\nfocus_ratio={}\nfocus_blend={}\ntouch_sens={}\nrumble={}\nstick={}\nmuted={}\nreduce_flash={}\nshake={}\n",
+            "speed={}\nfocus_ratio={}\nfocus_blend={}\ntouch_sens={}\nstick={}\nmuted={}\nreduce_flash={}\nshake={}\n",
             self.tuning.speed,
             self.tuning.focus_ratio,
             self.tuning.focus_blend,
             self.touch_sens,
-            rumble,
             if self.analog { "analog" } else { "8way" },
             self.muted as u8,
             self.reduce_flash as u8,
@@ -198,7 +167,6 @@ mod tests {
         let s = Settings {
             tuning: Tuning { speed: 4.5, focus_ratio: 0.67, focus_blend: 8 },
             touch_sens: 1.3,
-            rumble: Rumble::Low,
             analog: true,
             muted: true,
             reduce_flash: true,
@@ -211,11 +179,10 @@ mod tests {
 
     #[test]
     fn junk_and_extremes_fall_back_safely() {
-        let s = Settings::parse("speed=99\nfocus_ratio=nan\nfocus_blend=-3\nrumble=loud\nwho=me\nnot a line");
+        let s = Settings::parse("speed=99\nfocus_ratio=nan\nfocus_blend=-3\nrumble=full\nwho=me\nnot a line");
         assert_eq!(s.tuning.speed, SPEED_RANGE.1);
         assert_eq!(s.tuning.focus_ratio, FOCUS_RATIO);
         assert_eq!(s.tuning.focus_blend, FOCUS_BLEND);
-        assert_eq!(s.rumble, Rumble::Full);
         assert_eq!(Settings::parse(""), Settings::default());
     }
 }

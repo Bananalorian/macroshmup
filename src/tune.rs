@@ -389,22 +389,31 @@ pub const CHARGE_FRAMES: u32 = 14;
 
 /// Each enemy: (hit points, hurtbox w, h). Big hurtboxes, just enough HP for the job
 /// (the wide shot does about 120 a second to one target, the beam about 190).
-pub const DRONE: (f32, f32, f32) = (4.0, 16.0, 14.0);
-pub const GUNSHIP: (f32, f32, f32) = (140.0, 30.0, 22.0);
-pub const BUOY: (f32, f32, f32) = (220.0, 22.0, 22.0);
+pub const DRONE: (f32, f32, f32) = (4.0, 16.0, 15.0);
+/// The two lighter fodder: the courier (a fast three-spired dart) and the usher (a
+/// horseshoe that stops, fires a pair, and leaves).
+pub const COURIER: (f32, f32, f32) = (6.0, 16.0, 22.0);
+pub const USHER: (f32, f32, f32) = (16.0, 22.0, 18.0);
+pub const GUNSHIP: (f32, f32, f32) = (140.0, 30.0, 24.0);
+pub const BUOY: (f32, f32, f32) = (220.0, 24.0, 24.0);
 pub const HEAVY: (f32, f32, f32) = (1100.0, 48.0, 34.0);
-/// The derelict: the hull, and its three weak-point turrets.
-pub const HULL: (f32, f32, f32) = (2400.0, 116.0, 50.0);
-pub const HULL_TURRET: (f32, f32, f32) = (300.0, 18.0, 18.0);
-/// Where the derelict's turrets hang under the hull (offsets from its center): left,
-/// keel, right. They hang lower than the hull, so shots reach them first.
-pub const HULL_TURRETS: [(f32, f32); 3] = [(-40.0, 20.0), (0.0, 26.0), (40.0, 20.0)];
+/// The derelict: the hull (the spire, the shoulders and the iris eye at its heart),
+/// and its three weak points.
+pub const HULL: (f32, f32, f32) = (2400.0, 112.0, 70.0);
+pub const HULL_TURRET_HP: f32 = 300.0;
+/// The weak points (offset from the hull's center, and hurtbox w, h): the left gun pod,
+/// the nose gun, the right gun pod. They hang lower than the hull, so shots reach them first.
+pub const HULL_TURRETS: [(f32, f32, f32, f32); 3] = [(-44.0, 22.0, 16.0, 34.0), (0.0, 38.0, 12.0, 16.0), (44.0, 22.0, 16.0, 34.0)];
 /// The derelict rises out of the disk (it can't be hurt meanwhile) to hover here.
 pub const HULL_EMERGE: u32 = 150;
 pub const HULL_Y: f32 = 78.0;
 
 /// How long things stay if you don't kill them (frames), and how fast they move.
 pub const DRONE_SPEED: f32 = 2.2;
+pub const COURIER_SPEED: f32 = 3.4;
+/// Ushers fly in this fast, wait this long (firing), then leave.
+pub const USHER_ENTER: u32 = 35;
+pub const USHER_STAY: u32 = 70;
 pub const GUNSHIP_STAY: u32 = 240;
 pub const BUOY_DRIFT: f32 = 0.38;
 /// Buoys stop firing below this share of the playfield.
@@ -431,11 +440,18 @@ pub const HULL_SWAY: f32 = 12.0;
 /// In a firing flight of popcorn, this share fire (the rest are just obstacles).
 pub const DRONE_FIRE_SHARE: f32 = 0.8;
 /// Popcorn: one aimed shot, about half a second in.
-pub const DRONE_GUNS: &[Arm] = &[arm(0, 0, gun(Mount::Owner { dx: 0.0, dy: 5.0 }, Shape::Fan { n: 1, spread: 0.0, aimed: true }, Kind::Small, 2.6, 10_000, 34, STRAIGHT))];
+pub const DRONE_GUNS: &[Arm] = &[arm(0, 0, gun(Mount::Owner { dx: 0.0, dy: 6.0 }, Shape::Fan { n: 1, spread: 0.0, aimed: true }, Kind::Small, 2.6, 10_000, 34, STRAIGHT))];
+/// Couriers: one fast aimed needle, early.
+pub const COURIER_GUNS: &[Arm] = &[arm(0, 0, gun(Mount::Owner { dx: 0.0, dy: 10.0 }, Shape::Fan { n: 1, spread: 0.0, aimed: true }, Kind::Needle, 3.2, 10_000, 24, STRAIGHT))];
+/// Ushers: an aimed shot from each prong, twice, while they wait.
+pub const USHER_GUNS: &[Arm] = &[
+    arm(0, 0, gun(Mount::Owner { dx: -10.0, dy: 10.0 }, Shape::Fan { n: 1, spread: 0.0, aimed: true }, Kind::Small, 2.4, 34, 40, STRAIGHT)),
+    arm(0, 0, gun(Mount::Owner { dx: 10.0, dy: 10.0 }, Shape::Fan { n: 1, spread: 0.0, aimed: true }, Kind::Small, 2.4, 34, 40, STRAIGHT)),
+];
 /// Gunships: aimed 3-way fans, then 5-way, while they hover.
 pub const GUNSHIP_GUNS: &[Arm] = &[
-    arm(0, 0, gun(Mount::Owner { dx: 0.0, dy: 9.0 }, Shape::Fan { n: 3, spread: 24.0, aimed: true }, Kind::Rice, 2.6, 90, 56, STRAIGHT)),
-    arm(0, 0, gun(Mount::Owner { dx: 0.0, dy: 9.0 }, Shape::Fan { n: 5, spread: 48.0, aimed: true }, Kind::Small, 2.2, 90, 101, STRAIGHT)),
+    arm(0, 0, gun(Mount::Owner { dx: 0.0, dy: 11.0 }, Shape::Fan { n: 3, spread: 24.0, aimed: true }, Kind::Rice, 2.6, 90, 56, STRAIGHT)),
+    arm(0, 0, gun(Mount::Owner { dx: 0.0, dy: 11.0 }, Shape::Fan { n: 5, spread: 48.0, aimed: true }, Kind::Small, 2.2, 90, 101, STRAIGHT)),
 ];
 /// Buoys: a static ring, or a three-armed spiral.
 pub const BUOY_RING: &[Arm] = &[arm(0, 0, gun(Mount::Owner { dx: 0.0, dy: 0.0 }, Shape::Ring { n: 16, turn: 5.6 }, Kind::Orb, 1.35, 50, 30, STRAIGHT))];
@@ -444,18 +460,18 @@ pub const BUOY_SPIRAL: &[Arm] = &[arm(0, 0, gun(Mount::Owner { dx: 0.0, dy: 0.0 
 /// (aimed) and a sprinkle of small ones (random).
 pub const HEAVY_GUNS: &[Arm] = &[
     arm(0, 0, gun(Mount::Owner { dx: 0.0, dy: 6.0 }, Shape::Ring { n: 18, turn: 10.0 }, Kind::Large, 1.15, 64, 56, STRAIGHT)),
-    arm(0, 0, gun(Mount::Owner { dx: -16.0, dy: 12.0 }, Shape::Stream { burst: 4, gap: 5 }, Kind::Needle, 3.0, 70, 90, STRAIGHT)),
-    arm(0, 0, gun(Mount::Owner { dx: 16.0, dy: 12.0 }, Shape::Stream { burst: 4, gap: 5 }, Kind::Needle, 3.0, 70, 90, STRAIGHT)),
+    arm(0, 0, gun(Mount::Owner { dx: -16.0, dy: 15.0 }, Shape::Stream { burst: 4, gap: 5 }, Kind::Needle, 3.0, 70, 90, STRAIGHT)),
+    arm(0, 0, gun(Mount::Owner { dx: 16.0, dy: 15.0 }, Shape::Stream { burst: 4, gap: 5 }, Kind::Needle, 3.0, 70, 90, STRAIGHT)),
     arm(0, 0, gun(Mount::Owner { dx: 0.0, dy: 10.0 }, Shape::Cone { n: 3, spread: 90.0, jitter: 0.25 }, Kind::Small, 1.9, 18, 70, STRAIGHT)),
 ];
-/// The derelict. First: aimed fans from the wing turrets and slow rings from the keel
-/// turret. Cracked: a reversing spiral from the hull and aimed needle bursts.
+/// The derelict. First: aimed fans from the hanging gun pods and slow rings from the
+/// nose gun. Cracked: a reversing spiral from the iris and aimed needle bursts.
 pub const HULL_GUNS: &[Arm] = &[
-    arm(1, 0, gun(Mount::Owner { dx: -40.0, dy: 26.0 }, Shape::Fan { n: 5, spread: 36.0, aimed: true }, Kind::Rice, 2.4, 60, 20, STRAIGHT)),
-    arm(3, 0, gun(Mount::Owner { dx: 40.0, dy: 26.0 }, Shape::Fan { n: 5, spread: 36.0, aimed: true }, Kind::Rice, 2.4, 60, 50, STRAIGHT)),
-    arm(2, 0, gun(Mount::Owner { dx: 0.0, dy: 32.0 }, Shape::Ring { n: 20, turn: 4.5 }, Kind::Orb, 1.35, 64, 40, STRAIGHT)),
-    arm(0, 2, gun(Mount::Owner { dx: 0.0, dy: 2.0 }, Shape::Spiral { arms: 5, spin: 8.5, flip: 30 }, Kind::Rice, 1.7, 7, 0, STRAIGHT)),
-    arm(0, 2, gun(Mount::Owner { dx: 0.0, dy: 18.0 }, Shape::Stream { burst: 5, gap: 4 }, Kind::Needle, 3.1, 90, 50, STRAIGHT)),
+    arm(1, 0, gun(Mount::Owner { dx: -44.0, dy: 41.0 }, Shape::Fan { n: 5, spread: 36.0, aimed: true }, Kind::Rice, 2.4, 60, 20, STRAIGHT)),
+    arm(3, 0, gun(Mount::Owner { dx: 44.0, dy: 41.0 }, Shape::Fan { n: 5, spread: 36.0, aimed: true }, Kind::Rice, 2.4, 60, 50, STRAIGHT)),
+    arm(2, 0, gun(Mount::Owner { dx: 0.0, dy: 46.0 }, Shape::Ring { n: 20, turn: 4.5 }, Kind::Orb, 1.35, 64, 40, STRAIGHT)),
+    arm(0, 2, gun(Mount::Owner { dx: 0.0, dy: -2.0 }, Shape::Spiral { arms: 5, spin: 8.5, flip: 30 }, Kind::Rice, 1.7, 7, 0, STRAIGHT)),
+    arm(0, 2, gun(Mount::Owner { dx: 0.0, dy: 26.0 }, Shape::Stream { burst: 5, gap: 4 }, Kind::Needle, 3.1, 90, 50, STRAIGHT)),
 ];
 
 // ------------------------------------------------------------------ the bot
@@ -483,32 +499,6 @@ pub const TOUCH_SENS_RANGE: (f32, f32, f32) = (0.5, 2.5, 0.1);
 pub const STICK_DEADZONE: f32 = 0.25;
 /// Afterimages show when moving at least this share of full speed, unfocused.
 pub const AFTERIMAGE_MIN: f32 = 0.9;
-
-/// Rumble: (strong motor, weak motor, ms). Continuous ones repeat while held.
-pub const RUMBLE_FIRE: (f32, f32, u32) = (0.0, 0.07, 90);
-pub const RUMBLE_BEAM: (f32, f32, u32) = (0.10, 0.18, 90);
-pub const RUMBLE_BREAK: (f32, f32, u32) = (0.35, 0.45, 140);
-pub const RUMBLE_BIG_BREAK: (f32, f32, u32) = (0.8, 0.7, 380);
-pub const RUMBLE_BUMP: (f32, f32, u32) = (0.25, 0.4, 90);
-pub const RUMBLE_BOMB: (f32, f32, u32) = (1.0, 0.8, 450);
-pub const RUMBLE_CONNECT: (f32, f32, u32) = (0.3, 0.3, 160);
-pub const RUMBLE_DEATH: (f32, f32, u32) = (0.9, 0.8, 350);
-pub const RUMBLE_STRUCK: (f32, f32, u32) = (0.6, 0.6, 140);
-pub const RUMBLE_RESPAWN: (f32, f32, u32) = (0.15, 0.25, 160);
-pub const RUMBLE_GAME_OVER: (f32, f32, u32) = (0.5, 0.3, 900);
-pub const RUMBLE_GRAZE: (f32, f32, u32) = (0.0, 0.12, 35);
-pub const RUMBLE_WARNING: (f32, f32, u32) = (0.35, 0.1, 700);
-/// Continuous rumble is re-sent every this many frames.
-pub const RUMBLE_REPEAT: u64 = 4;
-/// Every rumble command is a radio packet to the controller, and over Bluetooth each
-/// one can take tens of ms, so the motors are only told when the strength changes.
-/// A command lasts this much longer than asked (s), and is topped up when less than
-/// RUMBLE_REFRESH (s) of it is left; when the rumble's time is up the motors are
-/// switched off.
-pub const RUMBLE_TAIL: f64 = 0.6;
-pub const RUMBLE_REFRESH: f64 = 0.1;
-/// "Low" rumble scales everything by this.
-pub const RUMBLE_LOW: f32 = 0.5;
 
 // ------------------------------------------------------------------ sound
 

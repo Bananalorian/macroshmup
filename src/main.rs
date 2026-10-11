@@ -17,7 +17,6 @@ mod input;
 mod menu;
 mod pad;
 mod render;
-mod rumble;
 #[cfg(not(target_arch = "wasm32"))]
 mod sheet;
 mod sim;
@@ -354,7 +353,7 @@ fn foe_effects(w: &World, r: &mut Renderer) {
         }
         let q = &e.parts[0];
         let (_, bw, bh) = e.kind.stats();
-        if e.kind != EnemyKind::Drone && q.hp < q.max_hp * 0.5 && w.frame % 5 == 0 {
+        if !e.kind.fodder() && q.hp < q.max_hp * 0.5 && w.frame % 5 == 0 {
             let (x, y) = r.parts.somewhere(e.x, e.y, bw * 0.6, bh * 0.6);
             r.parts.wound(x, y);
         }
@@ -392,8 +391,8 @@ fn chain_effects(chains: &mut Vec<Chain>, w: &World, r: &mut Renderer, s: &Setti
     chains.retain(|c| c.t < Chain::end());
 }
 
-/// Feed one tick's events to the effects, the blasts' sounds, the rumble and the phone buzz.
-fn effects(w: &World, r: &mut Renderer, input: &mut Input, s: &Settings, audio: &mut Audio, chains: &mut Vec<Chain>) {
+/// Feed one tick's events to the effects and the blasts' sounds.
+fn effects(w: &World, r: &mut Renderer, s: &Settings, audio: &mut Audio, chains: &mut Vec<Chain>) {
     let p = &w.player;
     let me = (p.x, p.y);
     foe_effects(w, r);
@@ -467,15 +466,17 @@ fn effects(w: &World, r: &mut Renderer, input: &mut Input, s: &Settings, audio: 
                 let art = &r.atlas.r.foes;
                 let (size, pixels) = match kind {
                     EnemyKind::Drone => (Size::Small, &art.drone.pixels),
+                    EnemyKind::Courier => (Size::Small, &art.courier.pixels),
+                    EnemyKind::Usher => (Size::Small, &art.usher.pixels),
                     EnemyKind::Gunship => (Size::Medium, &art.gunship.pixels),
                     EnemyKind::Buoy => (Size::Medium, &art.buoy[0].pixels),
                     EnemyKind::Heavy => (Size::Large, &art.heavy.pixels),
-                    EnemyKind::Hull => (Size::Large, &art.turret.pixels),
+                    EnemyKind::Hull => (Size::Large, &art.pod.pixels),
                 };
                 r.parts.shatter(x, y, pixels);
                 explode(&mut r.fx, &mut r.parts, x, y, size, me, s.reduce_flash, w.frame);
                 audio.blast(size);
-                if kind != EnemyKind::Drone {
+                if !kind.fodder() {
                     r.parts.smoke(x, y, if kind.heavy() { 14 } else { 5 }, if kind.heavy() { 34.0 } else { 16.0 });
                 }
                 match kind {
@@ -488,7 +489,7 @@ fn effects(w: &World, r: &mut Renderer, input: &mut Input, s: &Settings, audio: 
                 }
             }
             Event::PartBreak { x, y } => {
-                r.parts.shatter(x, y, &r.atlas.r.foes.turret.pixels);
+                r.parts.shatter(x, y, &r.atlas.r.foes.pod.pixels);
                 explode(&mut r.fx, &mut r.parts, x, y, Size::Medium, me, s.reduce_flash, w.frame);
                 r.parts.smoke(x, y, 6, 16.0);
                 audio.blast(Size::Medium);
@@ -502,17 +503,6 @@ fn effects(w: &World, r: &mut Renderer, input: &mut Input, s: &Settings, audio: 
             }
             _ => {}
         }
-        if let Some(k) = rumble::for_event(e).and_then(|k| rumble::scaled(k, s.rumble)) {
-            input.pads.rumble(k.0, k.1, k.2);
-        }
-        if input.mode == Mode::Touch && s.rumble != storage::Rumble::Off {
-            if let Some(ms) = rumble::buzz(e) {
-                input.pads.vibrate(ms);
-            }
-        }
-    }
-    if let Some(k) = rumble::held(w).and_then(|k| rumble::scaled(k, s.rumble)) {
-        input.pads.rumble(k.0, k.1, k.2);
     }
     // never shake while enemy bullets are live
     if w.hazards.bullets.len() > 0 {
@@ -604,10 +594,6 @@ async fn amain() {
     let last_shot = hooks.shots.iter().copied().max().unwrap_or(0);
 
     let mut settings = settings;
-    // automated runs (screenshots, perf) never touch a real controller's motors
-    if scripted {
-        settings.rumble = storage::Rumble::Off;
-    }
     settings.view.autopilot = hooks.auto;
     settings.view.invincible = hooks.invincible;
     let mut game = Game::new(seed, hooks.scene, settings);
@@ -625,7 +611,7 @@ async fn amain() {
     let mut mode_known = false;
     let mut dip_skip = false;
     let mut frame: u64 = 0;
-    // closing the window comes through the loop, so the rumble can be stopped first
+    // closing the window comes through the loop (so PG_PERF can report)
     prevent_quit();
 
     loop {
@@ -661,9 +647,6 @@ async fn amain() {
         mode_known |= ui.confirm || ui.tap.is_some() || held.fire || held.mv != (0.0, 0.0) || input.mode != Mode::Keys;
         if input.connected {
             game.say("CONTROLLER CONNECTED");
-            if let Some(k) = rumble::scaled(tune::RUMBLE_CONNECT, game.settings.rumble) {
-                input.pads.rumble(k.0, k.1, k.2);
-            }
         }
         game.handle_ui(&ui, &lay, &mut input, &mut audio);
         game.step_pattern(ui.pattern + f7);
@@ -700,7 +683,7 @@ async fn amain() {
                     }
                     renderer.parts.tick((world.player.x, world.player.y));
                     renderer.fx.tick();
-                    effects(world, &mut renderer, &mut input, &game.settings, &mut audio, &mut game.chains);
+                    effects(world, &mut renderer, &game.settings, &mut audio, &mut game.chains);
                     chain_effects(&mut game.chains, world, &mut renderer, &game.settings, &mut audio);
                     let cleared = world.stage.as_ref().is_some_and(|s| s.over);
                     if (world.life == Life::GameOver || cleared) && over.is_none() {
@@ -783,10 +766,8 @@ async fn amain() {
         next_frame().await;
     }
     if hooks.perf && !scripted {
-        println!("{}  rumble commands {}", perf.summary(), input.pads.commands);
+        println!("{}", perf.summary());
     }
-    // a controller keeps the last strength it was given: zero it before we go
-    input.pads.stop();
 }
 
 #[cfg(test)]

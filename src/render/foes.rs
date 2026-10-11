@@ -1,18 +1,22 @@
-//! The enemies, drawn: engraved monochrome craft built pixel by pixel in code, lit
-//! from the top left like the Pilgrim. Red only where it means danger: a gun about
-//! to fire, the derelict's weak points and, once it cracks, its burning seams.
+//! The enemies, drawn: lunar gothic craft in bone white, after Jason's reference
+//! sheets. Each sprite is built from simple shapes tagged with materials (plate,
+//! side face, recess, slot, crater, red light, the iris), then one shader paints
+//! them all alike: chunky bevels lit from the top left, regolith speckle and pits.
+//! Red only where it means danger: lights, a gun about to fire, the derelict's
+//! weak points and, once it cracks, its burning seams.
 //! Also the breather's background: drifting debris and the tiny tumbling figure.
 
 use super::art::{Atlas, Packer, grid_image};
-use super::palette::{ASH, CREAM, DUSK, SIGNAL, SLATE, SOOT, WHITE_A, tone};
+use super::palette::{SIGNAL, WHITE_A, tone};
 use crate::sim::World;
 use crate::sim::enemy::{Enemy, EnemyKind};
 use crate::sim::pattern::Mount;
 use crate::sim::rng::Rng;
 use crate::tune::{CHARGE_FRAMES, HULL_EMERGE, MUZZLE_FRAMES};
 use macroquad::prelude::*;
+use std::f32::consts::TAU;
 
-/// An enemy sprite, its white silhouette (the hit flash) and a sample of its pixels
+/// An enemy sprite, its white silhouette (for flashes) and a sample of its pixels
 /// relative to its center (what it shatters into).
 pub struct FoeSprite {
     pub r: Rect,
@@ -22,13 +26,17 @@ pub struct FoeSprite {
 
 pub struct FoeArt {
     pub drone: FoeSprite,
+    pub courier: FoeSprite,
+    pub usher: FoeSprite,
     pub gunship: FoeSprite,
-    /// The buoy's spikes turning, 4 frames.
+    /// The buoy's eye turning, 4 frames.
     pub buoy: [FoeSprite; 4],
     pub heavy: FoeSprite,
     pub hull: FoeSprite,
-    pub turret: FoeSprite,
-    /// Where a turret broke off: a scorched socket.
+    /// The derelict's weak points: the hanging gun pods and the nose gun.
+    pub pod: FoeSprite,
+    pub nose: FoeSprite,
+    /// Where a weak point broke off: a scorched socket.
     pub socket: Rect,
     /// The derelict's crack seams, pixels relative to its center (they burn red once it cracks).
     pub cracks: Vec<(i8, i8)>,
@@ -40,7 +48,10 @@ pub struct FoeArt {
 impl FoeArt {
     #[cfg(test)]
     pub fn rects(&self) -> Vec<Rect> {
-        let mut v = vec![self.drone.r, self.drone.sil, self.gunship.r, self.gunship.sil, self.heavy.r, self.heavy.sil, self.hull.r, self.hull.sil, self.turret.r, self.turret.sil, self.socket, self.figure];
+        let mut v = vec![self.socket, self.figure];
+        for s in [&self.drone, &self.courier, &self.usher, &self.gunship, &self.heavy, &self.hull, &self.pod, &self.nose] {
+            v.extend([s.r, s.sil]);
+        }
         for b in &self.buoy {
             v.extend([b.r, b.sil]);
         }
@@ -51,157 +62,201 @@ impl FoeArt {
     pub fn sprite(&self, kind: EnemyKind, frame: u64) -> &FoeSprite {
         match kind {
             EnemyKind::Drone => &self.drone,
+            EnemyKind::Courier => &self.courier,
+            EnemyKind::Usher => &self.usher,
             EnemyKind::Gunship => &self.gunship,
-            EnemyKind::Buoy => &self.buoy[(frame / 6 % 4) as usize],
+            EnemyKind::Buoy => &self.buoy[(frame / 8 % 4) as usize],
             EnemyKind::Heavy => &self.heavy,
             EnemyKind::Hull => &self.hull,
         }
     }
 }
 
-const OUTLINE: Color = Color::new(0.07, 0.07, 0.063, 1.0);
-/// The brightest an enemy gets: inside the 35-75% band.
-fn hi() -> Color {
-    tone(0.62)
-}
-const EMBER_DIM: Color = Color::new(0x6A as f32 / 255.0, 0x1C as f32 / 255.0, 0x17 as f32 / 255.0, 1.0);
+// ---------------------------------------------------------------- the bone palette
 
-fn pal(c: char) -> Option<Color> {
-    match c {
-        'o' => Some(OUTLINE),
-        'K' => Some(SOOT),
-        'D' => Some(DUSK),
-        'S' => Some(SLATE),
-        'A' => Some(ASH),
-        'H' => Some(hi()),
-        'r' => Some(EMBER_DIM),
-        _ => None,
+/// Bone white, dark to light: grit, dark, shade, mid, highlight. The highlight is as
+/// bright as cream, so enemy bullet cores stay the brightest pixels on screen.
+const BONE: [Color; 5] = [rgb(0x3E3B33), rgb(0x6E6858), rgb(0x9D9682), rgb(0xC4BDA8), rgb(0xDDD6C2)];
+const OUTLINE: Color = rgb(0x121210);
+const VOIDISH: Color = rgb(0x0B0B0A);
+const RECESS: Color = rgb(0x1E1D19);
+const EMBER_DIM: Color = rgb(0x6A1C17);
+
+const fn rgb(c: u32) -> Color {
+    Color::new(((c >> 16) & 0xFF) as f32 / 255.0, ((c >> 8) & 0xFF) as f32 / 255.0, (c & 0xFF) as f32 / 255.0, 1.0)
+}
+
+// ---------------------------------------------------------------- shapes and materials
+
+const EMPTY: u8 = 0;
+/// Bone plating, facing the light.
+const PLATE: u8 = 1;
+/// A dark recess.
+const RECESSED: u8 = 2;
+/// A black slot or lens.
+const SLOT: u8 = 3;
+/// A weak point's red core (it glows when drawn).
+const CORE: u8 = 4;
+/// Plating turned away from the light.
+const SIDE: u8 = 5;
+/// Vent lines.
+const GRILLE: u8 = 6;
+/// A pit in the plating.
+const CRATER: u8 = 7;
+/// A red running light.
+const LIGHT: u8 = 8;
+/// The derelict's iris: aperture blades round its core.
+const IRIS: u8 = 9;
+
+/// One shape, in pixels from the sprite's center pixel (y down); later shapes paint
+/// over earlier ones. `true` mirrors it left-right as well.
+#[derive(Clone)]
+enum P {
+    Poly(Vec<(f32, f32)>, u8, bool),
+    /// x0, y0, x1, y1, inclusive.
+    Rect(f32, f32, f32, f32, u8, bool),
+    Disc(f32, f32, f32, u8, bool),
+    /// Center, inner and outer radius.
+    Ring(f32, f32, f32, f32, u8, bool),
+}
+
+fn poly(pts: &[(f32, f32)], m: u8, mirror: bool) -> P {
+    P::Poly(pts.to_vec(), m, mirror)
+}
+
+fn inside(pts: &[(f32, f32)], x: f32, y: f32) -> bool {
+    let mut c = false;
+    let n = pts.len();
+    for i in 0..n {
+        let (a, b) = (pts[i], pts[(i + n - 1) % n]);
+        if (a.1 > y) != (b.1 > y) && x < (b.0 - a.0) * (y - a.1) / (b.1 - a.1) + a.0 {
+            c = !c;
+        }
+    }
+    c
+}
+
+impl P {
+    fn hits(&self, x: f32, y: f32) -> Option<u8> {
+        let test = |x: f32| match self {
+            P::Poly(pts, ..) => inside(pts, x, y),
+            P::Rect(x0, y0, x1, y1, ..) => x >= *x0 && x <= *x1 && y >= *y0 && y <= *y1,
+            P::Disc(cx, cy, r, ..) => (x - cx).powi(2) + (y - cy).powi(2) <= r * r + 0.25,
+            P::Ring(cx, cy, r0, r1, ..) => {
+                let d = (x - cx).powi(2) + (y - cy).powi(2);
+                d > r0 * r0 + 0.25 && d <= r1 * r1 + 0.25
+            }
+        };
+        let (m, mirror) = match self {
+            P::Poly(_, m, mi) | P::Rect(.., m, mi) | P::Disc(.., m, mi) | P::Ring(.., m, mi) => (*m, *mi),
+        };
+        (test(x) || (mirror && test(-x))).then_some(m)
     }
 }
 
-/// The right half turned away from the light.
-fn darker(c: char) -> char {
-    match c {
-        'H' => 'A',
-        'A' => 'S',
-        'S' => 'D',
-        'D' => 'K',
-        c => c,
+/// The material of every pixel of a `w` x `h` sprite (odd sizes, so it has a center pixel).
+fn raster(w: i32, h: i32, shapes: &[P]) -> Vec<u8> {
+    let (cx, cy) = (w / 2, h / 2);
+    let mut m = vec![EMPTY; (w * h) as usize];
+    for y in 0..h {
+        for x in 0..w {
+            let (lx, ly) = ((x - cx) as f32, (y - cy) as f32);
+            for s in shapes {
+                if let Some(k) = s.hits(lx, ly) {
+                    m[(y * w + x) as usize] = k;
+                }
+            }
+        }
     }
+    m
 }
 
-/// A full grid from its left half plus the center column, the right side in shade.
-fn mirror(half: &[&str]) -> Vec<Vec<char>> {
-    half.iter()
-        .map(|r| {
-            let l: Vec<char> = r.chars().collect();
-            let mut full = l.clone();
-            full.extend(l.iter().rev().skip(1).map(|&c| darker(c)));
-            full
-        })
-        .collect()
+/// A fixed per-pixel noise in 0..1 (the regolith's speckle).
+fn hash(x: i32, y: i32, seed: u32) -> f32 {
+    let mut h = (x as u32).wrapping_mul(0x9E37_79B1) ^ (y as u32).wrapping_mul(0x85EB_CA77) ^ seed.wrapping_mul(0xC2B2_AE3D);
+    h ^= h >> 15;
+    h = h.wrapping_mul(0x2C1B_3C6D);
+    h ^= h >> 12;
+    (h & 0xFFFF) as f32 / 65536.0
 }
 
-/// A popcorn drone, nose down: swept spire wings and a dark visor.
-const DRONE_ART: [&str; 14] = [
-    "o.......",
-    "oo......",
-    "oHo....o",
-    "oAHo..oA",
-    ".oAHooAH",
-    ".oAAHHAH",
-    "..oSAAAS",
-    "..oKKKKK",
-    "...oSKKo",
-    "...oSSSS",
-    "....oSAS",
-    ".....oSA",
-    "......oS",
-    ".......o",
-];
-
-/// A gunship: two spired pods slung either side of an armored, arched hull, the
-/// gun at its nose.
-const GUNSHIP_ART: [&str; 23] = [
-    "...o...........o",
-    "..oHo.........oA",
-    "..oAo.........oH",
-    ".oHAAo.......oAH",
-    ".oAASo.......oAH",
-    ".oAASo......oHAH",
-    ".oASSo.....oHAAH",
-    ".oASSoooooooAAAH",
-    "oHASSoHHHHHHAASA",
-    "oAASSoAAAAAAASSA",
-    "oAASKoSSSSSSSSKA",
-    "oASSKoDDDDDoooKS",
-    "oASKKooooooKKKKS",
-    ".oSKo....oSKSKKS",
-    ".oSKo....oSSKKoS",
-    ".oSo.....oSSSKoA",
-    "..oo.....oDSSSoS",
-    "..........oDSSSS",
-    "..........oKDSSK",
-    "...........oKDSK",
-    "............oKKK",
-    ".............oKK",
-    "..............oo",
-];
-
-/// A 4x4 ordered-dither threshold in 0..1 (the black hole's stipple, in metal).
-fn bayer(x: i32, y: i32) -> f32 {
-    const M: [[u8; 4]; 4] = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]];
-    (M[(y & 3) as usize][(x & 3) as usize] as f32 + 0.5) / 16.0
-}
-
-/// The engraving's five tones, dark to light.
-fn tone_at(i: usize) -> Color {
-    [SOOT, DUSK, SLATE, ASH, hi()][i.min(4)]
-}
-
-/// Paint a shape (`mask` gives a material per pixel: 0 empty, 1 plate, 2 recess,
-/// 3 dark port, 4 red core) as engraved metal lit from above and to the left: an
-/// outline, a bright lip along the top, a dark underside, a rounded fall-off down
-/// each column stippled between the tones, and seams every `panel` px with rivets.
-fn engrave(w: u16, h: u16, panel: i32, mask: impl Fn(i32, i32) -> u8) -> Image {
-    let mut img = Image::gen_image_color(w, h, Color::new(0.0, 0.0, 0.0, 0.0));
-    let m = |x: i32, y: i32| if x < 0 || y < 0 || x >= w as i32 || y >= h as i32 { 0 } else { mask(x, y) };
-    // how much solid hull lies from (x, y) in a direction
-    let run = |x: i32, y: i32, dx: i32, dy: i32| (1..64).take_while(|&k| m(x + dx * k, y + dy * k) != 0).count() as f32;
-    for y in 0..h as i32 {
-        for x in 0..w as i32 {
-            let k = m(x, y);
-            if k == 0 {
+/// Paint a material map in bone: an ink outline round the silhouette, a bright lip
+/// along each plate's top and left, shade along its bottom and right, faces lighter
+/// near the top, speckled and pitted like moon rock. `iris` is the iris's center.
+fn bone(w: i32, h: i32, m: &[u8], seed: u32, iris: (f32, f32)) -> Image {
+    let mut img = Image::gen_image_color(w as u16, h as u16, Color::new(0.0, 0.0, 0.0, 0.0));
+    let at = |x: i32, y: i32| if x < 0 || y < 0 || x >= w || y >= h { EMPTY } else { m[(y * w + x) as usize] };
+    let plated = |k: u8| matches!(k, PLATE | SIDE | CRATER);
+    let run = |x: i32, y: i32, dx: i32, dy: i32| (1..48).take_while(|&k| plated(at(x + dx * k, y + dy * k))).count() as f32;
+    let (cx, cy) = (w / 2, h / 2);
+    for y in 0..h {
+        for x in 0..w {
+            let k = at(x, y);
+            if k == EMPTY {
                 continue;
             }
-            let edge = m(x - 1, y) == 0 || m(x + 1, y) == 0 || m(x, y - 1) == 0 || m(x, y + 1) == 0;
-            let c = if edge {
+            let edge = at(x - 1, y) == EMPTY || at(x + 1, y) == EMPTY || at(x, y - 1) == EMPTY || at(x, y + 1) == EMPTY;
+            let speck = hash(x, y, seed);
+            let shade = |t: i32, dense: f32| {
+                let t = t - (speck < dense) as i32 - (speck < dense * 0.25) as i32;
+                BONE[t.clamp(0, 4) as usize]
+            };
+            let c = if edge && k != LIGHT && k != CORE {
                 OUTLINE
             } else {
                 match k {
-                    // a recess: dark, its upper lip in shadow
-                    2 => if m(x, y - 1) != 2 { OUTLINE } else if bayer(x, y) < 0.3 { DUSK } else { SOOT },
-                    3 => OUTLINE,
-                    4 => EMBER_DIM,
-                    _ => {
+                    PLATE => {
                         let (up, down, left, right) = (run(x, y, 0, -1), run(x, y, 0, 1), run(x, y, -1, 0), run(x, y, 1, 0));
-                        let v = up / (up + down).max(1.0);
-                        let hz = left / (left + right).max(1.0);
-                        let mut s = 1.04 - 0.62 * v - 0.2 * hz;
-                        if up < 1.5 {
-                            s = 1.0; // the lit lip along the top
+                        let t = if up < 1.5 || left < 1.5 {
+                            4
                         } else if down < 1.5 {
-                            s = 0.1; // the underside
-                        }
-                        if panel > 0 && up > 1.5 && down > 1.5 {
-                            if x % panel == 0 {
-                                s -= 0.3; // a seam
-                            } else if x % panel == 1 && y % 4 == 1 {
-                                s += 0.3; // a rivet beside it
-                            }
-                        }
-                        tone_at((s * 4.0 + bayer(x, y) - 0.5).floor().max(0.0) as usize)
+                            1
+                        } else if down < 3.5 || right < 1.5 {
+                            2
+                        } else if up / (up + down) < 0.4 {
+                            4
+                        } else {
+                            3
+                        };
+                        shade(t, 0.11)
                     }
+                    SIDE => {
+                        let down = run(x, y, 0, 1);
+                        shade(if down < 1.5 { 1 } else { 2 }, 0.2)
+                    }
+                    CRATER => {
+                        // a pit: its upper-left wall in shadow, its lower-right wall catching the light
+                        if at(x - 1, y - 1) != CRATER {
+                            BONE[1]
+                        } else if at(x + 1, y + 1) != CRATER {
+                            BONE[4]
+                        } else {
+                            BONE[2]
+                        }
+                    }
+                    RECESSED => {
+                        if at(x, y - 1) != RECESSED { OUTLINE } else if speck < 0.3 { RECESS } else { VOIDISH }
+                    }
+                    SLOT => VOIDISH,
+                    GRILLE => if y % 2 == 0 { BONE[1] } else { OUTLINE },
+                    LIGHT => SIGNAL,
+                    CORE => EMBER_DIM,
+                    IRIS => {
+                        // aperture blades, curving round the core
+                        let (dx, dy) = ((x - cx) as f32 - iris.0, (y - cy) as f32 - iris.1);
+                        let r = dx.hypot(dy);
+                        let a = (dy.atan2(dx) + r * 0.09).rem_euclid(TAU) / (TAU / 8.0);
+                        if r < 3.6 {
+                            VOIDISH
+                        } else if a.fract() < 0.14 {
+                            OUTLINE
+                        } else if (a as i32) % 2 == 0 {
+                            shade(3, 0.08)
+                        } else {
+                            shade(2, 0.08)
+                        }
+                    }
+                    _ => OUTLINE,
                 }
             };
             img.set_pixel(x as u32, y as u32, c);
@@ -210,155 +265,197 @@ fn engrave(w: u16, h: u16, panel: i32, mask: impl Fn(i32, i32) -> u8) -> Image {
     img
 }
 
-/// A turret buoy: an armored ring around a dark eye, four spikes turning.
-fn buoy(frame: u32) -> Image {
-    let s = 23u16;
-    let mut img = Image::gen_image_color(s, s, Color::new(0.0, 0.0, 0.0, 0.0));
-    let c = 11.0;
-    let spin = frame as f32 * std::f32::consts::FRAC_PI_8 * 0.5;
-    for y in 0..s as i32 {
-        for x in 0..s as i32 {
-            let (dx, dy) = (x as f32 - c, y as f32 - c);
-            let d = dx.hypot(dy);
-            let a = dy.atan2(dx) - spin;
-            let lit = dx + dy < -2.0;
-            // spikes every quarter turn
-            let q = (a / std::f32::consts::FRAC_PI_2).round() * std::f32::consts::FRAC_PI_2;
-            let off = (a - q).abs() * d;
-            let col = if d > 10.0 && d <= 11.6 && off < 1.0 {
-                if off < 0.5 { if lit { hi() } else { ASH } } else { OUTLINE }
-            } else if d > 10.0 {
-                continue;
-            } else if d > 9.2 {
-                OUTLINE
-            } else if d > 7.2 {
-                // the ring, with rivets that turn with the spikes
-                let r = (a / std::f32::consts::FRAC_PI_4).round() * std::f32::consts::FRAC_PI_4;
-                if (a - r).abs() * d < 0.6 && d > 7.8 && d < 8.8 {
-                    if lit { hi() } else { ASH }
-                } else if lit {
-                    ASH
-                } else {
-                    SLATE
-                }
-            } else if d > 6.4 {
-                SOOT
-            } else if d > 3.2 {
-                if lit { SLATE } else if (x + y) % 3 == 0 { SOOT } else { DUSK }
-            } else if d > 1.6 {
-                SOOT
-            } else {
-                OUTLINE
-            };
-            img.set_pixel(x as u32, y as u32, col);
-        }
-    }
-    img
+fn paint(w: i32, h: i32, shapes: &[P], seed: u32) -> Image {
+    bone(w, h, &raster(w, h, shapes), seed, (0.0, 0.0))
 }
 
-/// The heavy: a broad armored gunboat with spired flank towers, a ring launcher in
-/// the middle and a needle gun on each tower.
-fn heavy_mask(x: i32, y: i32) -> u8 {
-    let (x, y) = (x - 24, y - 17);
-    let ax = x.abs();
-    // flank towers, spired at the top, gun barrels below
-    let tower = (13..=19).contains(&ax) && y >= -17 + (ax - 16).abs() * 3 && y <= 9;
-    let barrel = (15..=17).contains(&ax) && (9..=14).contains(&y);
-    // the hull: tapering to a nose
-    let half = if y > 4 { 22 - (y - 4) * 2 } else { 22 };
-    let hull = y >= -9 && y <= 16 && ax <= half && !(y < -6 && ax > 19);
-    if !(tower || barrel || hull) {
-        return 0;
-    }
-    if barrel && y >= 12 && ax == 16 {
-        return 3; // muzzles
-    }
-    let d = ((x * x + (y - 3) * (y - 3)) as f32).sqrt();
-    if d <= 2.0 {
-        return 3; // the ring launcher's port
-    }
-    if d <= 6.5 {
-        return 2;
-    }
-    // slots down the towers
-    if tower && ax == 16 && (-8..=4).contains(&y) && y % 4 == 0 {
-        return 2;
-    }
-    1
+// ---------------------------------------------------------------- the roster
+
+/// The popcorn drone (after CLERK): a swept arrowhead, a black slot, a red eye.
+fn clerk() -> Image {
+    paint(17, 17, &[
+        poly(&[(0.0, -8.4), (1.8, -8.4), (3.0, -5.4), (6.0, -3.6), (8.4, -4.6), (8.4, 1.0), (6.4, 2.4), (3.2, 4.6), (1.0, 8.4), (0.0, 8.4)], PLATE, true),
+        poly(&[(3.0, 1.6), (8.4, 0.0), (8.4, 1.0), (6.4, 2.4), (3.2, 4.6)], SIDE, true),
+        P::Rect(-1.0, -5.0, 1.0, 4.0, SLOT, false),
+        P::Rect(0.0, -3.0, 0.0, -2.0, LIGHT, false),
+    ], 11)
 }
 
-/// The derelict: a long gothic capital ship lying broadside, a castle of arched
-/// windows amidships, spires along its back, plating torn open, its stern broken
-/// off into bare ribs.
-fn hull_mask(x: i32, y: i32, holes: &[(i32, i32, i32, i32)]) -> u8 {
-    let (x, y) = (x - 58, y - 25);
-    let ax = x.abs();
-    // the hull's half-height: full amidships, tapering to a pointed bow (left)
-    let half = if x < -36 { 13 - (-36 - x) * 3 / 5 } else { 13 };
-    let body = ax <= 57 && y >= -half && y <= half + 2;
-    // the castle amidships, crenellated
-    let castle = (-24..=20).contains(&x) && y < -half && y >= -20 && !(y == -20 && x.rem_euclid(4) == 0);
-    // spires: from the castle roof, and two from the deck
-    let spire = |sx: i32, base: i32| {
-        let dx = (x - sx).abs();
-        dx <= 2 && y < base && y >= -25 + dx * 3
-    };
-    let spires = spire(-16, -20) || spire(-2, -20) || spire(12, -20) || spire(-34, -half) || spire(30, -half);
-    // a keel ridge under the middle
-    let keel = ax <= 30 && y > half + 2 && y <= half + 5 - ax / 15;
-    if !(body || castle || spires || keel) {
-        return 0;
-    }
-    // the castle's arched windows
-    if castle && (-18..=-15).contains(&y) && x.rem_euclid(6) <= 1 && x > -22 && x < 18 {
-        return if y == -18 && x.rem_euclid(6) == 1 { 2 } else { 3 };
-    }
-    // the broken stern: plating gone, ribs left standing
-    if x > 42 {
-        let rib = (x - 42) % 4 == 0;
-        let jag = y > -half + 2 + ((x * 7) % 5) && y < half - ((x * 3) % 4);
-        if !rib && jag {
-            return 0;
-        }
-        if !rib {
-            return 2;
-        }
-    }
-    // holes torn in the plating
-    for &(hx, hy, rx, ry) in holes {
-        let (dx, dy) = ((x - hx) as f32 / rx as f32, (y - hy) as f32 / ry as f32);
-        if dx * dx + dy * dy <= 1.0 {
-            return 2;
-        }
-    }
-    // portholes down the length
-    if y == -4 && x % 6 == 0 && ax < 40 {
-        return 3;
-    }
-    1
+/// The courier: two tall blades either side of a needle body.
+fn courier() -> Image {
+    paint(17, 25, &[
+        poly(&[(5.4, -12.4), (8.4, -5.0), (8.4, 3.0), (6.6, 7.4), (4.0, 4.0), (4.0, -5.0)], PLATE, true),
+        poly(&[(4.0, -5.0), (5.0, -3.0), (5.0, 4.6), (4.0, 4.0)], SIDE, true),
+        P::Rect(2.0, 2.0, 4.0, 3.0, SIDE, true),
+        poly(&[(0.0, -9.0), (1.0, -8.0), (2.4, -4.0), (2.4, 6.0), (1.2, 10.0), (0.0, 12.4)], PLATE, true),
+        P::Rect(0.0, -12.0, 0.0, -9.0, PLATE, false),
+        P::Rect(-1.0, -4.0, 1.0, 5.0, SLOT, false),
+        P::Rect(0.0, -2.0, 0.0, -1.0, LIGHT, false),
+    ], 12)
 }
 
-/// A weak-point turret: an armored dome around a red core, barrel down.
-fn turret_mask(x: i32, y: i32) -> u8 {
-    let (dx, dy) = (x - 8, y - 8);
-    let d = ((dx * dx + dy * dy) as f32).sqrt();
-    let barrel = dx.abs() <= 1 && (4..=8).contains(&dy);
-    if d > 7.6 && !barrel {
-        return 0;
-    }
-    if barrel && dy >= 7 {
-        return 3;
-    }
-    if d <= 2.4 {
-        return 4;
-    }
-    if d <= 3.6 {
-        return 2;
-    }
-    1
+/// The usher: a thick horseshoe arch, open below, a light in each prong.
+fn usher() -> Image {
+    paint(25, 21, &[
+        poly(&[(0.0, -10.4), (6.0, -10.4), (10.0, -8.0), (12.4, -4.0), (12.4, 5.0), (11.0, 9.0), (10.4, 10.4), (8.6, 10.4), (8.6, -2.0), (6.0, -5.4), (0.0, -5.4)], PLATE, true),
+        poly(&[(0.0, -5.4), (6.0, -5.4), (8.6, -2.0), (8.6, 0.6), (6.0, -3.6), (0.0, -3.6)], SIDE, true),
+        P::Rect(-4.0, -9.0, 4.0, -7.0, GRILLE, false),
+        P::Rect(10.0, -1.0, 10.0, 6.0, SLOT, true),
+        P::Rect(10.0, 1.0, 10.0, 2.0, LIGHT, true),
+    ], 13)
 }
 
-/// A sample of an image's lit pixels relative to its center, `every` n-th one.
+/// The turret buoy (after INSPECTOR): a diamond with a knob at each corner and a
+/// great black eye; a notch in the eye turns, frame by frame.
+fn inspector(frame: u32) -> Image {
+    let a = frame as f32 * TAU / 4.0 + TAU / 8.0;
+    paint(25, 25, &[
+        poly(&[(0.0, -10.6), (10.6, 0.0), (0.0, 10.6), (-10.6, 0.0)], PLATE, false),
+        poly(&[(0.0, 5.0), (5.6, 5.0), (0.0, 10.6)], SIDE, true),
+        P::Rect(0.0, -12.0, 0.0, -11.0, PLATE, false),
+        P::Rect(11.0, 0.0, 12.0, 0.0, PLATE, true),
+        P::Rect(0.0, 11.0, 0.0, 12.0, PLATE, false),
+        P::Rect(-1.0, -12.0, 1.0, -12.0, PLATE, false),
+        P::Rect(12.0, -1.0, 12.0, 1.0, PLATE, true),
+        P::Rect(-1.0, 12.0, 1.0, 12.0, PLATE, false),
+        P::Rect(-1.0, -7.0, 1.0, -6.0, SLOT, false),
+        P::Rect(-1.0, 6.0, 1.0, 7.0, SLOT, false),
+        P::Rect(6.0, -1.0, 7.0, 1.0, SLOT, true),
+        P::Ring(0.0, 0.0, 2.8, 3.9, SIDE, false),
+        P::Disc(0.0, 0.0, 2.8, SLOT, false),
+        P::Disc(a.cos() * 3.4, a.sin() * 3.4, 0.5, SLOT, false),
+        P::Disc(0.0, 0.0, 1.0, LIGHT, false),
+    ], 14 + frame)
+}
+
+/// The gunship (after BAILIFF): a bulky pointed hull with a dark lens, a pod on each
+/// side with a red light.
+fn bailiff() -> Image {
+    paint(31, 27, &[
+        poly(&[(0.0, -13.4), (1.6, -13.4), (2.6, -9.0), (6.0, -8.0), (9.4, -4.0), (10.4, 1.0), (9.6, 6.0), (6.0, 10.6), (2.6, 12.0), (0.0, 12.4)], PLATE, true),
+        poly(&[(6.0, 4.0), (9.6, 6.0), (6.0, 10.6), (2.6, 12.0), (3.0, 9.0)], SIDE, true),
+        P::Rect(10.0, 0.0, 11.0, 2.0, SIDE, true),
+        poly(&[(11.6, -4.0), (14.4, -3.0), (14.4, 7.0), (12.6, 8.4), (11.6, 7.0)], PLATE, true),
+        P::Rect(12.0, 5.0, 14.0, 7.0, SIDE, true),
+        P::Rect(12.0, 0.0, 13.0, 1.0, LIGHT, true),
+        poly(&[(0.0, -7.0), (1.8, -5.0), (2.4, 1.0), (1.6, 6.0), (0.0, 8.0)], SLOT, true),
+        P::Rect(0.0, -4.0, 0.0, -3.0, LIGHT, false),
+        P::Disc(0.0, 12.0, 1.6, PLATE, false),
+        P::Disc(-6.0, -3.0, 1.0, CRATER, false),
+    ], 15)
+}
+
+/// The heavy (after NOTARY): two tall towers, windows dark, guns beneath, bridged by
+/// a block with a red light over its ring launcher.
+fn notary() -> Image {
+    paint(49, 35, &[
+        poly(&[(10.4, -13.0), (12.6, -15.4), (21.4, -15.4), (23.6, -13.0), (23.6, 9.0), (21.0, 12.6), (13.0, 12.6), (10.4, 9.0)], PLATE, true),
+        poly(&[(10.4, 6.0), (23.6, 6.0), (23.6, 9.0), (21.0, 12.6), (13.0, 12.6), (10.4, 9.0)], SIDE, true),
+        P::Rect(15.0, -10.0, 17.0, 3.0, SLOT, true),
+        P::Rect(13.0, 8.0, 20.0, 9.0, GRILLE, true),
+        P::Rect(15.0, 13.0, 17.0, 16.0, PLATE, true),
+        P::Rect(16.0, 16.0, 16.0, 16.0, SLOT, true),
+        P::Rect(9.0, -3.0, 10.0, 3.0, SIDE, true),
+        P::Rect(-9.0, -6.0, 9.0, 5.0, PLATE, false),
+        P::Rect(-6.0, -5.0, 6.0, -3.0, GRILLE, false),
+        P::Rect(-5.0, -1.0, 5.0, 3.0, RECESSED, false),
+        P::Disc(0.0, 1.0, 1.0, LIGHT, false),
+        P::Disc(0.0, 7.0, 2.2, PLATE, false),
+        P::Rect(-1.0, 8.0, 1.0, 8.0, SLOT, false),
+        P::Disc(19.0, -8.0, 1.6, CRATER, false),
+        P::Disc(13.0, 1.0, 1.2, CRATER, false),
+        P::Disc(-14.0, -11.0, 1.3, CRATER, false),
+        P::Disc(-20.0, 2.0, 1.0, CRATER, false),
+    ], 16)
+}
+
+/// The derelict's sprite size and the center of its iris (from the sprite's center).
+const HULL_SIZE: (i32, i32) = (121, 105);
+const IRIS_AT: (f32, f32) = (0.0, -2.0);
+
+/// The derelict (after Jason's mid-boss sheet): a gothic spire with an arched window
+/// and a cross, a great iris eye with a red core, cratered shoulders, recesses
+/// beneath them, and the mounts its gun pods hang from.
+fn derelict_shapes() -> Vec<P> {
+    let (ix, iy) = IRIS_AT;
+    vec![
+        poly(&[(12.0, -22.0), (20.0, -36.0), (30.0, -44.0), (46.0, -47.0), (56.0, -40.0), (60.0, -26.0), (57.0, -6.0), (50.0, 3.0), (40.0, -1.0), (30.0, -10.0), (20.0, -6.0), (13.0, -2.0)], PLATE, true),
+        poly(&[(30.0, -10.0), (40.0, -1.0), (50.0, 3.0), (57.0, -6.0), (58.0, -12.0), (50.0, -4.0), (40.0, -8.0), (32.0, -16.0)], SIDE, true),
+        poly(&[(20.0, -36.0), (30.0, -44.0), (33.0, -40.0), (23.0, -32.0)], SIDE, true),
+        P::Disc(46.0, -36.0, 3.3, CRATER, false),
+        P::Disc(53.0, -24.0, 2.2, CRATER, false),
+        P::Disc(38.0, -38.0, 1.6, CRATER, false),
+        P::Disc(49.0, -12.0, 2.4, CRATER, false),
+        P::Disc(-44.0, -34.0, 2.6, CRATER, false),
+        P::Disc(-52.0, -18.0, 3.0, CRATER, false),
+        P::Disc(-36.0, -40.0, 1.4, CRATER, false),
+        P::Disc(-47.0, -8.0, 1.8, CRATER, false),
+        // the gothic recesses under the shoulders, with a rib in each
+        poly(&[(14.0, -2.0), (20.0, -6.0), (28.0, -10.0), (32.0, -4.0), (32.0, 12.0), (14.0, 12.0)], RECESSED, true),
+        P::Rect(22.0, -4.0, 23.0, 11.0, SIDE, true),
+        // the gun pods' mounts
+        P::Disc(44.0, 4.0, 4.6, PLATE, true),
+        P::Ring(44.0, 4.0, 2.4, 3.4, SIDE, true),
+        P::Disc(44.0, 4.0, 2.4, SLOT, true),
+        // the spire
+        poly(&[(0.0, -51.0), (3.0, -47.0), (6.0, -41.0), (9.0, -33.0), (9.0, -25.0), (15.0, -21.0), (15.0, 16.0), (10.0, 22.0), (8.0, 30.0), (4.0, 34.0), (0.0, 35.0)], PLATE, true),
+        poly(&[(12.0, -18.0), (15.0, -21.0), (15.0, 16.0), (12.0, 19.0)], SIDE, true),
+        // the arched window and its cross
+        poly(&[(0.0, -44.0), (2.5, -40.0), (4.0, -35.0), (4.0, -25.0), (0.0, -25.0)], SLOT, true),
+        P::Rect(0.0, -41.0, 0.0, -27.0, PLATE, false),
+        P::Rect(-2.0, -36.0, 2.0, -36.0, PLATE, false),
+        P::Rect(-7.0, -24.0, 7.0, -22.0, SIDE, false),
+        P::Rect(11.0, -16.0, 12.0, -6.0, SLOT, true),
+        P::Rect(11.0, 4.0, 12.0, 12.0, SLOT, true),
+        // the iris
+        P::Disc(ix, iy, 12.4, SIDE, false),
+        P::Ring(ix, iy, 10.4, 12.4, PLATE, false),
+        P::Disc(ix, iy, 10.4, IRIS, false),
+        P::Disc(ix, iy, 2.2, CORE, false),
+        // under it, vents and a light
+        P::Rect(-3.0, 14.0, 3.0, 25.0, GRILLE, false),
+        P::Rect(0.0, 27.0, 0.0, 28.0, LIGHT, false),
+        // an antenna on one shoulder
+        P::Rect(52.0, -51.0, 52.0, -47.0, PLATE, false),
+        P::Rect(54.0, -49.0, 54.0, -47.0, PLATE, false),
+        P::Rect(52.0, -52.0, 52.0, -52.0, LIGHT, false),
+    ]
+}
+
+fn derelict() -> Image {
+    let (w, h) = HULL_SIZE;
+    bone(w, h, &raster(w, h, &derelict_shapes()), 17, IRIS_AT)
+}
+
+/// A gun pod hanging from the derelict's shoulder: a long housing, a slot of red
+/// lights, twin barrels below.
+fn pod() -> Image {
+    paint(19, 37, &[
+        poly(&[(0.0, -17.4), (5.0, -16.0), (7.4, -12.0), (8.4, -6.0), (8.4, 10.0), (6.4, 14.4), (0.0, 14.4)], PLATE, true),
+        poly(&[(0.0, 11.0), (8.4, 10.0), (6.4, 14.4), (0.0, 14.4)], SIDE, true),
+        P::Disc(0.0, -13.0, 3.2, SIDE, false),
+        P::Disc(0.0, -13.0, 1.6, SLOT, false),
+        P::Rect(-1.0, -7.0, 1.0, 9.0, SLOT, false),
+        P::Rect(0.0, -3.0, 0.0, -2.0, LIGHT, false),
+        P::Rect(0.0, 1.0, 0.0, 2.0, CORE, false),
+        P::Rect(2.0, 14.0, 4.0, 18.0, PLATE, true),
+        P::Rect(3.0, 18.0, 3.0, 18.0, SLOT, true),
+        P::Disc(4.0, 3.0, 1.0, CRATER, false),
+    ], 18)
+}
+
+/// The derelict's nose gun, at the tip of its spire.
+fn nose() -> Image {
+    paint(13, 17, &[
+        poly(&[(0.0, -8.4), (4.0, -7.0), (6.4, -2.0), (5.0, 4.0), (2.4, 7.0), (1.4, 8.4), (0.0, 8.4)], PLATE, true),
+        poly(&[(3.0, 2.0), (5.0, 4.0), (2.4, 7.0), (1.4, 8.4), (0.0, 8.4), (0.0, 5.0)], SIDE, true),
+        P::Rect(-1.0, -5.0, 1.0, 2.0, SLOT, false),
+        P::Rect(0.0, -2.0, 0.0, -1.0, LIGHT, false),
+        P::Rect(0.0, 7.0, 0.0, 8.0, SLOT, false),
+    ], 19)
+}
+
+/// A sample of an image's lit pixels relative to its center, every `every`-th one.
 fn pixels(img: &Image, every: usize) -> Vec<(i8, i8, Color)> {
     let (w, h) = (img.width as i32, img.height as i32);
     let mut v = vec![];
@@ -382,22 +479,23 @@ fn foe(p: &mut Packer, img: &Image, every: usize) -> FoeSprite {
     FoeSprite { r, sil, pixels: pixels(img, every) }
 }
 
-/// The derelict's crack seams: a few jagged lines wandering along the hull.
-fn cracks(holes: &[(i32, i32, i32, i32)]) -> Vec<(i8, i8)> {
+/// The derelict's crack seams: jagged lines from the iris out through the plating.
+fn cracks() -> Vec<(i8, i8)> {
+    let (w, h) = HULL_SIZE;
+    let m = raster(w, h, &derelict_shapes());
+    let (cx, cy) = (w / 2, h / 2);
+    let plate = |x: i32, y: i32| x + cx >= 0 && y + cy >= 0 && x + cx < w && y + cy < h && matches!(m[((y + cy) * w + x + cx) as usize], PLATE | SIDE | CRATER);
     let mut rng = Rng::new(0xC4AC);
     let mut v = vec![];
-    for &(hx, hy, _, _) in holes {
-        for dir in [-1, 1] {
-            let (mut x, mut y) = (hx, hy);
-            for _ in 0..rng.range(10.0, 20.0) as i32 {
-                x += dir;
-                if rng.chance(0.4) {
-                    y += if rng.chance(0.5) { 1 } else { -1 };
-                }
-                y = y.clamp(-12, 14);
-                if hull_mask(x + 58, y + 25, &[]) == 1 {
-                    v.push((x as i8, y as i8));
-                }
+    let starts = [(14.0f32, -10.0f32, 1.0f32, -0.3f32), (-14.0, -6.0, -1.0, -0.2), (16.0, 6.0, 1.0, 0.3), (-15.0, 10.0, -1.0, 0.2), (0.0, -24.0, 0.2, -1.0), (30.0, -30.0, 1.0, 0.4), (-30.0, -28.0, -1.0, 0.5)];
+    for (sx, sy, dx, dy) in starts {
+        let (mut x, mut y) = (sx, sy);
+        for _ in 0..rng.range(10.0, 22.0) as i32 {
+            x += dx + rng.range(-0.5, 0.5);
+            y += dy + rng.range(-0.6, 0.6);
+            let (px, py) = (x.round() as i32, y.round() as i32);
+            if plate(px, py) {
+                v.push((px as i8, py as i8));
             }
         }
     }
@@ -414,8 +512,8 @@ fn debris(i: usize) -> Image {
     for y in 0..s as i32 {
         for x in 0..s as i32 {
             let (dx, dy) = (x as f32 + 0.5 - c, y as f32 + 0.5 - c);
-            let a = dy.atan2(dx).rem_euclid(std::f32::consts::TAU);
-            let r = bumps[((a / std::f32::consts::TAU * 6.0) as usize).min(5)] * c;
+            let a = dy.atan2(dx).rem_euclid(TAU);
+            let r = bumps[((a / TAU * 6.0) as usize).min(5)] * c;
             let d = dx.hypot(dy);
             if d > r {
                 continue;
@@ -443,22 +541,14 @@ const FIGURE: [&str; 11] = [
 ];
 
 pub fn build(p: &mut Packer) -> FoeArt {
-    let rows = |g: Vec<Vec<char>>| grid_image(&g, pal);
-    let drone = rows(mirror(&DRONE_ART));
-    let gunship = rows(mirror(&GUNSHIP_ART));
-    let buoys = [0, 1, 2, 3].map(buoy);
-    let heavy = engrave(49, 35, 6, heavy_mask);
-    let holes = [(-22, 4, 4, 3), (8, -8, 3, 2), (24, 6, 5, 3)];
-    let hull = engrave(117, 51, 12, |x, y| hull_mask(x, y, &holes));
-    let turret = engrave(17, 17, 0, turret_mask);
-    // a broken turret's socket: a scorched ring
+    // a broken weak point's socket: a scorched ring
     let mut socket = Image::gen_image_color(13, 9, Color::new(0.0, 0.0, 0.0, 0.0));
     for y in 0..9i32 {
         for x in 0..13i32 {
             let (dx, dy) = ((x - 6) as f32 / 6.4, (y - 4) as f32 / 4.4);
             let d = dx * dx + dy * dy;
             if d <= 1.0 {
-                socket.set_pixel(x as u32, y as u32, if d > 0.55 { OUTLINE } else if (x + y) % 2 == 0 { SOOT } else { DUSK });
+                socket.set_pixel(x as u32, y as u32, if d > 0.55 { OUTLINE } else if (x + y) % 2 == 0 { RECESS } else { BONE[0] });
             }
         }
     }
@@ -471,14 +561,17 @@ pub fn build(p: &mut Packer) -> FoeArt {
     };
     let figure = grid_image(&FIGURE.iter().map(|r| r.chars().collect()).collect::<Vec<_>>(), figure_pal);
     FoeArt {
-        drone: foe(p, &drone, 1),
-        gunship: foe(p, &gunship, 2),
-        buoy: [foe(p, &buoys[0], 2), foe(p, &buoys[1], 2), foe(p, &buoys[2], 2), foe(p, &buoys[3], 2)],
-        heavy: foe(p, &heavy, 3),
-        hull: foe(p, &hull, 5),
-        turret: foe(p, &turret, 2),
+        drone: foe(p, &clerk(), 1),
+        courier: foe(p, &courier(), 1),
+        usher: foe(p, &usher(), 1),
+        gunship: foe(p, &bailiff(), 2),
+        buoy: [0, 1, 2, 3].map(|f| foe(p, &inspector(f), 2)),
+        heavy: foe(p, &notary(), 3),
+        hull: foe(p, &derelict(), 6),
+        pod: foe(p, &pod(), 2),
+        nose: foe(p, &nose(), 2),
         socket: p.add(&socket),
-        cracks: cracks(&holes),
+        cracks: cracks(),
         debris: [0, 1, 2, 3, 4, 5].map(|i| p.add(&debris(i))),
         figure: p.add(&figure),
     }
@@ -493,27 +586,41 @@ pub fn emerged(e: &Enemy) -> f32 {
     if e.kind == EnemyKind::Hull { (e.t as f32 / HULL_EMERGE as f32).min(1.0) } else { 1.0 }
 }
 
+/// The hit flash: on bone white a white flash wouldn't show, so they flush red (the
+/// big ones only faintly, or the screen's middle would keep turning red).
+fn flash(a: &Atlas, sil: Rect, x: i32, y: i32) {
+    let area = sil.w * sil.h;
+    let k = if area > 2000.0 { 0.18 } else if area > 600.0 { 0.35 } else { 0.55 };
+    a.blit(sil, x, y, 1, Color { a: k, ..SIGNAL });
+}
+
 /// Every enemy, the big ones underneath, with hit flashes, broken sockets, burning
 /// seams and the red charge-up on every gun about to fire.
 pub fn draw(a: &Atlas, w: &World, ox: i32, oy: i32) {
     let art = &a.r.foes;
     let f = w.frame;
-    for kind in [EnemyKind::Hull, EnemyKind::Heavy, EnemyKind::Buoy, EnemyKind::Gunship, EnemyKind::Drone] {
+    for kind in [EnemyKind::Hull, EnemyKind::Heavy, EnemyKind::Buoy, EnemyKind::Gunship, EnemyKind::Usher, EnemyKind::Drone, EnemyKind::Courier] {
         for e in w.foes.list.iter().filter(|e| e.kind == kind && e.alive()) {
             let s = art.sprite(kind, f);
             let (x, y) = (ox + snap(e.x - s.r.w * 0.5), oy + snap(e.y - s.r.h * 0.5));
             let k = emerged(e);
             let tint = Color::new(k, k, k, 1.0);
             a.blit(s.r, x, y, 1, tint);
-            // popcorn that's going to shoot has a dim red eye until it does
-            if kind == EnemyKind::Drone && e.variant == 1 && e.guns.first().is_some_and(|g| g.e.since == u32::MAX) {
-                a.fill(ox + snap(e.x), oy + snap(e.y) + 1, 1, 1, Color { a: 0.8, ..SIGNAL });
+            // popcorn that's going to shoot: its eye pulses until it does
+            let eye = match kind {
+                EnemyKind::Drone => Some(-3),
+                EnemyKind::Courier => Some(-2),
+                _ => None,
+            };
+            if let Some(dy) = eye.filter(|_| e.variant == 1 && e.guns.first().is_some_and(|g| g.e.since == u32::MAX)) {
+                let k = 0.5 + 0.5 * ((f as f32) * 0.35).sin();
+                a.fill(ox + snap(e.x) - 1, oy + snap(e.y) + dy, 3, 2, Color { a: 0.35 + 0.5 * k, ..SIGNAL });
             }
             if kind == EnemyKind::Hull {
                 draw_hull_parts(a, e, ox, oy, tint, f);
             }
             if e.parts[0].flash > 0 {
-                a.blit(s.sil, x, y, 1, Color { a: 0.7, ..CREAM });
+                flash(a, s.sil, x, y);
             }
             draw_telegraphs(a, e, ox, oy, f);
         }
@@ -522,27 +629,32 @@ pub fn draw(a: &Atlas, w: &World, ox: i32, oy: i32) {
 
 fn draw_hull_parts(a: &Atlas, e: &Enemy, ox: i32, oy: i32, tint: Color, f: u64) {
     let art = &a.r.foes;
-    // the seams burn once it's cracked
+    let (hx, hy) = (ox + snap(e.x), oy + snap(e.y));
+    // once it's cracked the seams burn and the iris opens on a swelling red core
     if e.phase == 2 {
         let pulse = 0.55 + 0.35 * ((f as f32) * 0.15).sin();
         for &(dx, dy) in &art.cracks {
-            a.fill(ox + snap(e.x) + dx as i32, oy + snap(e.y) + dy as i32, 1, 1, Color { a: pulse, ..SIGNAL });
+            a.fill(hx + dx as i32, hy + dy as i32, 1, 1, Color { a: pulse, ..SIGNAL });
         }
+        let r = (4.0 + 1.5 * ((f as f32) * 0.2).sin()).round() as usize;
+        let disc = a.r.discs[r - 1];
+        let (cx, cy) = (hx + IRIS_AT.0 as i32, hy + IRIS_AT.1 as i32);
+        a.blit(disc, cx - r as i32 - 1, cy - r as i32 - 1, 1, Color { a: 0.85, ..SIGNAL });
     }
-    for q in &e.parts[1..] {
+    for (i, q) in e.parts[1..].iter().enumerate() {
         let (cx, cy) = (ox + snap(e.x + q.dx), oy + snap(e.y + q.dy));
         if !q.alive() {
-            a.blit(art.socket, cx - 6, cy - 9, 1, tint);
+            a.blit(art.socket, cx - 6, cy - (q.h * 0.5) as i32 - 2, 1, tint);
             continue;
         }
-        let t = &art.turret;
-        let (x, y) = (cx - (t.r.w * 0.5) as i32, cy - (t.r.h * 0.5) as i32);
-        a.blit(t.r, x, y, 1, tint);
-        // the weak point's red core, brighter as the turret wears down
+        let s = if i == 1 { &art.nose } else { &art.pod };
+        let (x, y) = (cx - (s.r.w * 0.5) as i32, cy - (s.r.h * 0.5) as i32);
+        a.blit(s.r, x, y, 1, tint);
+        // the weak point's red core, brighter as it wears down
         let hurt = 1.0 - q.hp / q.max_hp;
-        a.fill(cx - 1, cy - 1, 3, 3, Color { a: (0.35 + 0.5 * hurt) * tint.r, ..SIGNAL });
+        a.fill(cx - 1, cy, 3, 3, Color { a: (0.3 + 0.6 * hurt) * tint.r, ..SIGNAL });
         if q.flash > 0 {
-            a.blit(t.sil, x, y, 1, Color { a: 0.7, ..CREAM });
+            flash(a, s.sil, x, y);
         }
     }
 }
@@ -588,19 +700,21 @@ pub fn draw_wreck(a: &Atlas, ox: i32, oy: i32, x: f32, y: f32, k: f32, f: u64) {
     for &(dx, dy) in &art.cracks {
         a.fill(cx + dx as i32, cy + dy as i32, 1, 1, Color { a: burn, ..SIGNAL });
     }
-    // the blasts flash it white now and then
+    // the blasts light it red now and then
     if f % 6 < 2 {
-        a.blit(s.sil, cx - (s.r.w * 0.5) as i32, cy - (s.r.h * 0.5) as i32, 1, Color { a: 0.35 * (1.0 - k), ..CREAM });
+        a.blit(s.sil, cx - (s.r.w * 0.5) as i32, cy - (s.r.h * 0.5) as i32, 1, Color { a: 0.35 * (1.0 - k), ..SIGNAL });
     }
 }
 
 /// Engine exhausts (offsets from the center): enemies fly nose down, so their engines face up.
 pub fn engines(kind: EnemyKind) -> &'static [(f32, f32)] {
     match kind {
-        EnemyKind::Drone => &[(0.0, -6.0)],
-        EnemyKind::Gunship => &[(-13.0, -11.0), (13.0, -11.0)],
+        EnemyKind::Drone => &[(0.0, -8.0)],
+        EnemyKind::Courier => &[(0.0, -11.0)],
+        EnemyKind::Usher => &[(-6.0, -10.0), (6.0, -10.0)],
+        EnemyKind::Gunship => &[(0.0, -13.0), (-13.0, -4.0), (13.0, -4.0)],
         EnemyKind::Buoy => &[],
-        EnemyKind::Heavy => &[(-16.0, -17.0), (16.0, -17.0), (0.0, -10.0)],
+        EnemyKind::Heavy => &[(-16.0, -15.0), (16.0, -15.0)],
         EnemyKind::Hull => &[],
     }
 }
@@ -655,29 +769,29 @@ pub fn draw_figure(a: &Atlas, ox: i32, oy: i32, k: f32, hole: (f32, f32)) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::render::palette::luma;
+    use crate::render::palette::{CORE as BULLET_CORE, luma};
 
     fn brightest(img: &Image) -> f32 {
         img.get_image_data().iter().filter(|p| p[3] > 0).map(|p| luma(Color::from_rgba(p[0], p[1], p[2], 255))).fold(0.0, f32::max)
     }
 
+    fn roster() -> Vec<(&'static str, Image)> {
+        vec![("clerk", clerk()), ("courier", courier()), ("usher", usher()), ("inspector", inspector(0)), ("bailiff", bailiff()), ("notary", notary()), ("derelict", derelict()), ("pod", pod()), ("nose", nose())]
+    }
+
+    /// Bone white (Jason's call): bright enough to stand off the black, never as bright
+    /// as an enemy bullet's core.
     #[test]
-    fn enemies_sit_in_the_enemy_value_band() {
-        let holes = [(-22, 4, 4, 3), (8, -8, 3, 2), (24, 6, 5, 3)];
-        let ims = [
-            grid_image(&mirror(&DRONE_ART), pal),
-            grid_image(&mirror(&GUNSHIP_ART), pal),
-            buoy(0),
-            engrave(49, 35, 6, heavy_mask),
-            engrave(117, 51, 12, |x, y| hull_mask(x, y, &holes)),
-            engrave(17, 17, 0, turret_mask),
-        ];
-        for (i, im) in ims.iter().enumerate() {
-            let b = brightest(im);
-            assert!((0.35..=0.75).contains(&b), "sprite {i}: {b}");
+    fn enemies_are_bone_white_but_never_outshine_a_bullet_core() {
+        for (name, im) in roster() {
+            let b = brightest(&im);
+            assert!((0.8..=0.86).contains(&b), "{name}: {b}");
+            assert!(b < luma(BULLET_CORE) - 0.08, "{name}");
+            // and most of it is bone, not shadow
+            let lit = im.get_image_data().iter().filter(|p| p[3] > 0).map(|p| luma(Color::from_rgba(p[0], p[1], p[2], 255))).collect::<Vec<_>>();
+            let bright = lit.iter().filter(|&&l| l > 0.55).count() as f32 / lit.len() as f32;
+            assert!(bright > 0.3, "{name}: only {:.0}% of it is bright", bright * 100.0);
         }
-        assert_eq!(ims[0].width, 15);
-        assert_eq!(ims[1].width, 31);
     }
 
     #[test]
@@ -694,17 +808,26 @@ mod tests {
 
     #[test]
     fn sprites_are_as_big_as_their_hurtboxes() {
-        use crate::tune::{BUOY, DRONE, GUNSHIP, HEAVY, HULL};
-        let holes = [(0, 0, 1, 1)];
-        let sizes = [
-            (grid_image(&mirror(&DRONE_ART), pal), DRONE),
-            (grid_image(&mirror(&GUNSHIP_ART), pal), GUNSHIP),
-            (buoy(0), BUOY),
-            (engrave(49, 35, 6, heavy_mask), HEAVY),
-            (engrave(117, 51, 7, |x, y| hull_mask(x, y, &holes)), HULL),
-        ];
+        use crate::tune::{BUOY, COURIER, DRONE, GUNSHIP, HEAVY, HULL, HULL_TURRETS, USHER};
+        let sizes = [(clerk(), DRONE), (courier(), COURIER), (usher(), USHER), (inspector(0), BUOY), (bailiff(), GUNSHIP), (notary(), HEAVY)];
         for (im, (_, w, h)) in sizes {
             assert!((im.width as f32 - w).abs() <= 3.0 && (im.height as f32 - h).abs() <= 3.0, "{}x{} vs {w}x{h}", im.width, im.height);
         }
+        // the derelict is a composite: its hurtbox sits inside the sprite, and each weak
+        // point's sprite covers its hurtbox
+        let (w, h) = HULL_SIZE;
+        assert!(HULL.1 <= w as f32 && HULL.2 <= h as f32);
+        let (p, n) = (pod(), nose());
+        for (i, &(_, _, tw, th)) in HULL_TURRETS.iter().enumerate() {
+            let s = if i == 1 { &n } else { &p };
+            assert!(s.width as f32 >= tw && s.height as f32 >= th && s.height as f32 - th <= 4.0);
+        }
+    }
+
+    #[test]
+    fn the_cracks_run_through_the_plating_from_the_iris() {
+        let c = cracks();
+        assert!(c.len() > 40, "{}", c.len());
+        assert!(c.iter().any(|&(x, y)| (x as f32 - IRIS_AT.0).hypot(y as f32 - IRIS_AT.1) < 20.0));
     }
 }

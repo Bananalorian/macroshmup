@@ -3,6 +3,50 @@
 Every version is one build sprint. Newest first. Versions are tagged in git, and
 each tag publishes a GitHub Release with downloads.
 
+## [0.6.3] - 2026-10-11 - Bone white
+
+### Changed
+- **Every Stage 1 enemy, redrawn in bone white** after your lunar gothic reference
+  sheets, for far more contrast against the black. Each sprite is built from simple
+  shapes and painted by one shader, so they all match: chunky bevels lit from the
+  top left, a pitted moon-rock speckle, craters, black slots and red lights.
+  - The popcorn drone is the CLERK, the gunship the BAILIFF, the turret buoy the
+    INSPECTOR (its eye turns), and the heavy the NOTARY.
+  - **The derelict** is your mid-boss sheet: a gothic spire with an arched window
+    and a cross, a great iris eye with a red core, cratered shoulders, and two gun
+    pods hanging beneath them. The weak points are now the two pods and a nose gun
+    at the tip of the spire. When it cracks, its seams burn and the iris opens on
+    a swelling red core.
+  - Hits flush enemies red (a white flash wouldn't show on bone): strongly on
+    small ones, softly on the derelict.
+  - The lights in your sheets that were cyan and green are red here: teal still
+    means you. Say if you want them back.
+- The art bible's value budget for enemies is now bone white, up to cream; bullet
+  cores are still the brightest pixels on screen.
+
+### Added
+- **Two new fodder enemies:**
+  - **the courier**, a fast three-spired dart that streaks down in a line, some
+    firing one aimed needle;
+  - **the usher**, a horseshoe that flies in, stops, fires an aimed shot from each
+    prong twice, and leaves.
+  They come through the gunship, buoy and heavy sections, often in pairs.
+
+### Removed
+- **Rumble, entirely.** Over time it was lagging your Bluetooth controller. The
+  game no longer sends a controller anything: no rumble, no phone buzz, and the
+  controller library runs without its force-feedback thread. The RUMBLE row is
+  gone from the pause menu. It can come back later as its own feature.
+
+### Checked
+- Tests prove: every enemy is bone white yet dimmer than a bullet core; each
+  sprite matches its hurtbox; the derelict's weak points all hang below it; and
+  nothing in the code can send a controller a motor command.
+- `PG_SIM=200`: the bot still clears the stage on every seed, with every section
+  on the timeline; the derelict goes down in a median 21 s.
+- [The enemy sheet](docs/screenshots/enemy-sheet.png), [the derelict's death](docs/screenshots/derelict-death.png),
+  and [the grayscale check](docs/screenshots/derelict-gray.png).
+
 ## [0.6.2] - 2026-10-11 - Quiet radio
 
 ### Fixed

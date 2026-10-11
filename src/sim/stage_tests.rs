@@ -109,7 +109,7 @@ fn killing_a_heavy_cancels_its_bullets_into_shards() {
 fn shots_break_the_weak_points_before_the_hull() {
     let mut w = empty();
     w.invincible = true;
-    let (tx, ty) = HULL_TURRETS[0];
+    let (tx, ty, _, th) = HULL_TURRETS[0];
     w.foes.add(EnemyKind::Hull, 0, parked(START_X - tx, 100.0));
     w.foes.list[0].t = 10; // risen out of the disk
     for _ in 0..30 {
@@ -118,7 +118,8 @@ fn shots_break_the_weak_points_before_the_hull() {
     let e = &w.foes.list[0];
     let (turret, hull) = (e.parts[1].max_hp - e.parts[1].hp, e.parts[0].max_hp - e.parts[0].hp);
     assert!(turret > 5.0 * hull, "the turret over the ship took the hits ({turret}; the hull {hull}, from the angled pod shots)");
-    assert!(ty + HULL_TURRET.2 * 0.5 > HULL.2 * 0.5, "it hangs below the hull");
+    assert!(HULL_TURRETS.iter().all(|t| t.1 + t.3 * 0.5 > HULL.2 * 0.5), "every weak point hangs below the hull");
+    assert!(ty + th * 0.5 > HULL.2 * 0.5);
 }
 
 #[test]
@@ -199,4 +200,5 @@ fn the_bot_clears_the_stage_and_every_section_lands_on_time() {
         assert!(r.killed > r.spawned / 2, "it shoots things: {} of {}", r.killed, r.spawned);
     }
 }
+
 

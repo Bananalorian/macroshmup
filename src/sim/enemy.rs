@@ -6,6 +6,8 @@
 //! | Enemy    | Optimal kill                         | Average kill        | Slow kill (ignored)                     |
 //! |----------|--------------------------------------|---------------------|-----------------------------------------|
 //! | Drone    | as it enters, before its one shot    | mid-path            | it fires once and flies off             |
+//! | Courier  | in the gap before it reaches you     | as it passes        | its needle, then it's gone              |
+//! | Usher    | as it slows to stop                  | after one pair      | two pairs of aimed shots, then it leaves|
 //! | Gunship  | during its first fan                 | after a few fans    | it leaves after about 4 s               |
 //! | Buoy     | before its rings fill the lane       | halfway down        | it drifts out, silent low on the screen |
 //! | Heavy    | fast: its bullets cancel into shards | a few volleys in    | it leaves after about 8 s               |
@@ -20,6 +22,10 @@ use crate::tune::*;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum EnemyKind {
     Drone,
+    /// A fast three-spired dart.
+    Courier,
+    /// A horseshoe that stops, fires a pair from its prongs, and leaves.
+    Usher,
     Gunship,
     Buoy,
     Heavy,
@@ -32,11 +38,18 @@ impl EnemyKind {
     pub fn stats(self) -> (f32, f32, f32) {
         match self {
             EnemyKind::Drone => DRONE,
+            EnemyKind::Courier => COURIER,
+            EnemyKind::Usher => USHER,
             EnemyKind::Gunship => GUNSHIP,
             EnemyKind::Buoy => BUOY,
             EnemyKind::Heavy => HEAVY,
             EnemyKind::Hull => HULL,
         }
+    }
+
+    /// Popcorn: low HP, small, many.
+    pub fn fodder(self) -> bool {
+        matches!(self, EnemyKind::Drone | EnemyKind::Courier | EnemyKind::Usher)
     }
 
     /// High-HP enemies arrive one at a time, and their bullets cancel when they die.
@@ -49,6 +62,9 @@ impl EnemyKind {
         match (self, variant) {
             (EnemyKind::Drone, 0) => &[],
             (EnemyKind::Drone, _) => DRONE_GUNS,
+            (EnemyKind::Courier, 0) => &[],
+            (EnemyKind::Courier, _) => COURIER_GUNS,
+            (EnemyKind::Usher, _) => USHER_GUNS,
             (EnemyKind::Gunship, _) => GUNSHIP_GUNS,
             (EnemyKind::Buoy, 0) => BUOY_RING,
             (EnemyKind::Buoy, _) => BUOY_SPIRAL,
@@ -262,7 +278,7 @@ impl Enemy {
     pub fn new(id: u32, kind: EnemyKind, variant: u8, path: Path, turn: f32) -> Enemy {
         let mut parts = vec![Part::new(0.0, 0.0, kind.stats())];
         if kind == EnemyKind::Hull {
-            parts.extend(HULL_TURRETS.iter().map(|&(dx, dy)| Part::new(dx, dy, HULL_TURRET)));
+            parts.extend(HULL_TURRETS.iter().map(|&(dx, dy, w, h)| Part::new(dx, dy, (HULL_TURRET_HP, w, h))));
         }
         let guns = kind.arms(variant).iter().map(|a| Gunner { part: a.part, phase: a.phase, e: Emitter::new(a.gun, id, turn) }).collect();
         let (x, y) = path.pos(0);
@@ -445,7 +461,7 @@ mod tests {
             }
         }
         assert_eq!(flashes, 60 / ENEMY_FLASH.1 as usize);
-        assert_eq!(e.hurt(1, HULL_TURRET.0), Hurt::Broke);
+        assert_eq!(e.hurt(1, HULL_TURRET_HP), Hurt::Broke);
         assert_eq!(e.hurt(1, 5.0), Hurt::Nothing, "a broken turret takes no more");
         assert_eq!(e.turrets_left(), HULL_TURRETS.len() - 1);
         assert_eq!(e.hurt(0, HULL.0), Hurt::Died);

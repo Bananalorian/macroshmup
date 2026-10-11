@@ -90,50 +90,54 @@ fn draw_enemy_sheet(a: &Atlas) {
     use crate::render::palette::WHITE_A;
     let f = &a.r.foes;
     let label = |s: &str, x: i32, y: i32| text(a, s, x, y, 1, 2, CREAM);
-    text(a, "STAGE 1 ENEMIES", 10, 8, 1, 2, CREAM);
-    text(a, "OUTER DISK  //  BUILT IN CODE", 10, 18, 1, 2, ASH);
+    text(a, "STAGE 1 ENEMIES  //  LUNAR GOTHIC", 10, 8, 1, 2, CREAM);
+    text(a, "OUTER DISK  //  BONE WHITE, BUILT IN CODE", 10, 18, 1, 2, ASH);
     let at = |r: Rect, cx: i32, cy: i32| a.blit(r, cx - (r.w * 0.5) as i32, cy - (r.h * 0.5) as i32, 1, WHITE_A);
-    label("DRONE", 10, 38);
-    at(f.drone.r, 30, 66);
-    a.fill(30, 67, 1, 1, SIGNAL);
-    at(f.drone.sil, 56, 66);
-    label("GUNSHIP", 84, 38);
-    at(f.gunship.r, 106, 66);
-    label("BUOY (4 FRAMES)", 150, 38);
+    label("FODDER", 10, 34);
+    at(f.drone.r, 20, 62);
+    at(f.courier.r, 44, 62);
+    at(f.usher.r, 76, 62);
+    label("GUNSHIP", 104, 34);
+    at(f.gunship.r, 126, 62);
+    label("BUOY (4 FRAMES)", 164, 34);
     for i in 0..4 {
-        at(f.buoy[i].r, 166 + i as i32 * 30, 66);
+        at(f.buoy[i].r, 176 + i as i32 * 26, 62);
     }
-    label("HEAVY", 292, 38);
-    at(f.heavy.r, 320, 68);
-    at(f.heavy.sil, 376, 68);
-    label("DERELICT  //  WHOLE, CRACKED, STRIPPED", 10, 100);
-    for (i, phase) in [0, 1, 2].iter().enumerate() {
-        let (cx, cy) = (72 + i as i32 * 136, 150);
+    label("HEAVY", 300, 34);
+    at(f.heavy.r, 330, 64);
+    label("DERELICT  //  WHOLE, CRACKED, STRIPPED", 10, 90);
+    for phase in 0..3 {
+        let (cx, cy) = (72 + phase * 138, 156);
         at(f.hull.r, cx, cy);
-        if *phase >= 1 {
+        if phase >= 1 {
             for &(dx, dy) in &f.cracks {
                 a.fill(cx + dx as i32, cy + dy as i32, 1, 1, SIGNAL);
             }
+            a.blit(a.r.discs[4], cx - 6, cy - 2 - 6, 1, Color { a: 0.85, ..SIGNAL });
         }
-        for &(dx, dy) in &crate::tune::HULL_TURRETS {
+        for (i, &(dx, dy, _, th)) in crate::tune::HULL_TURRETS.iter().enumerate() {
             let (tx, ty) = (cx + dx as i32, cy + dy as i32);
-            if *phase == 2 {
-                a.blit(f.socket, tx - 6, ty - 9, 1, WHITE_A);
+            if phase == 2 {
+                a.blit(f.socket, tx - 6, ty - (th * 0.5) as i32 - 2, 1, WHITE_A);
             } else {
-                at(f.turret.r, tx, ty);
-                a.fill(tx - 1, ty - 1, 3, 3, Color { a: 0.6, ..SIGNAL });
+                at(if i == 1 { f.nose.r } else { f.pod.r }, tx, ty);
+                a.fill(tx - 1, ty, 3, 3, Color { a: 0.6, ..SIGNAL });
             }
         }
     }
-    label("TURRET", 10, 200);
-    at(f.turret.r, 30, 228);
-    at(f.turret.sil, 54, 228);
-    label("BREATHER  //  DEBRIS, THE FIGURE", 100, 200);
+    label("WEAK POINTS, HIT FLASH", 10, 232);
+    at(f.pod.r, 22, 270);
+    at(f.nose.r, 44, 270);
+    at(f.drone.r, 70, 270);
+    a.blit(f.drone.sil, 70 - (f.drone.sil.w * 0.5) as i32, 270 - (f.drone.sil.h * 0.5) as i32, 1, Color { a: 0.55, ..SIGNAL });
+    at(f.gunship.r, 100, 270);
+    a.blit(f.gunship.sil, 100 - (f.gunship.sil.w * 0.5) as i32, 270 - (f.gunship.sil.h * 0.5) as i32, 1, Color { a: 0.55, ..SIGNAL });
+    label("BREATHER EXTRAS", 196, 232);
     for i in 0..6 {
-        at(f.debris[i], 112 + i as i32 * 16, 228);
+        at(f.debris[i], 192 + i as i32 * 16, 270);
     }
-    at(f.figure, 230, 228);
-    a.blit(f.figure, 250, 222, 2, WHITE_A);
+    at(f.figure, 300, 270);
+    a.blit(f.figure, 318, 259, 2, WHITE_A);
     a.fill(10, SHEET.1 as i32 - 13, SHEET.0 as i32 - 20, 1, DUSK);
     text(a, &crate::render::hud::version_stamp(), 10, SHEET.1 as i32 - 9, 1, 2, SLATE);
 }
