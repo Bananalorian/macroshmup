@@ -139,6 +139,19 @@ fn env(name: &str) -> Option<String> {
     }
 }
 
+/// A debug hook is driving this run (screenshots, bot runs, sheets): it keeps to a
+/// window of a known size instead of going full screen.
+pub fn scripted() -> bool {
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        std::env::vars().any(|(k, _)| k.starts_with("PG_"))
+    }
+    #[cfg(target_arch = "wasm32")]
+    {
+        false
+    }
+}
+
 pub fn window_size() -> Option<(i32, i32)> {
     env("PG_SIZE").and_then(|s| parse_size(&s))
 }

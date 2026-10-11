@@ -77,14 +77,15 @@ Background → enemies → player shots → the Pilgrim → explosions and parti
 enemy bullets (big, slow ones below small, fast ones) → HUD.
 
 ### Pixel rules
-- Logical canvas **640×360**, playfield **270×360** (3:4) in the middle. Integer scaling only (2× at 720p, 3× at 1080p, 4× at 1440p, 6× at 4K), nearest filtering.
+- Logical canvas **640×360**, playfield **360×360** (square, full height) in the middle, with 140 px HUD panels either side. Integer scaling only (2× at 720p, 3× at 1080p, 4× at 1440p, 6× at 4K), nearest filtering. At 1080p the play area is 1080×1080. (It was 270×360, 3:4, until v0.7.2: your call, for a bigger play area and smaller panels.)
+- The desktop game opens full screen; F11 switches to a window and the choice is remembered.
 - Everything snaps to the low-res grid, shader distortion included, as Shinjuku's post shader does.
 - All art is generated in code at startup, like Shinjuku. A debug key exports every sprite sheet as PNG so you can paint over it in Aseprite; a PNG placed back in `art/` replaces the coded version at build time.
 
 ### The Pilgrim
 **The split sword** (v0.7.1, from [your sheet](docs/reference/Split-sword%20starship_%20flight%20to%20laser.png)), about 31 × 44 px, bone white like Stage 1's enemies:
 - **Flight form:** two blades, each with a teal channel and a red heart, an antenna on each bevelled top, a crossbar with an engine nacelle at each end, and a capsule below on struts.
-- **Laser form:** focus closes the blades into one sword over the focus blend. The antennas fold, the nacelles tuck in, the channels merge into one core, and the beam fires from the tip.
+- **Laser form:** focus closes the blades into one broad sword over the focus blend, nearly as wide as the flight form, so the ship doesn't shrink (v0.7.2). The antennas fold, the nacelles tuck in, the channels merge into one core, and the beam fires from the tip.
 - **Hitbox:** in the gap between the blades' red hearts (on the single heart in the laser form).
 - **Animations:**
   - from your first sheet: idle (4 frames), thrust (4), fire (4), hit flash (4), destroy (6), the twin red bolt (4);
@@ -185,7 +186,7 @@ no per-frame allocation in hot loops.
 
 **Layouts**
 - **Landscape:** the 640×360 canvas, playfield centered, side panels for the HUD (styled after your sheet), the black hole behind everything.
-- **Portrait (phones):** the same 270×360 playfield, so the game is identical on every device, with a HUD strip above and an empty thumb zone below. Touch steering is relative, so your thumb drags in that zone and never covers the ship.
+- **Portrait (phones):** the same playfield (360×360 since v0.7.2), so the game is identical on every device, with a HUD strip above and an empty thumb zone below. Touch steering is relative, so your thumb drags in that zone and never covers the ship.
 
 **Modules**
 ```

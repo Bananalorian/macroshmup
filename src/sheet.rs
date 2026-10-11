@@ -15,7 +15,7 @@ use crate::render::scene;
 use crate::render::ship::{self, Pose};
 use crate::render::{PostParams, Renderer};
 use crate::sim::World;
-use crate::tune::{BUMP_FLASH, HOLE_X, HOLE_Y, STAGE_FRAMES};
+use crate::tune::{BUMP_FLASH, FIELD_H, FIELD_W, HOLE_X, HOLE_Y, STAGE_FRAMES};
 use macroquad::prelude::*;
 
 const SHEET: (f32, f32) = (440.0, 344.0);
@@ -196,11 +196,12 @@ fn boss_world(phase: u8, frames: u32, tweak: impl Fn(&mut World)) -> World {
 /// `./shots/jawsthic_sheet.png`, 2x.
 pub fn export_mockup(r: &mut Renderer) {
     use crate::sim::boss::Act;
-    let (w, h) = (16 + 270 + 24 + 2 * 250 + 16, 40 + 3 * 172 + 8);
+    let fw = FIELD_W as i32;
+    let (w, h) = (16 + fw + 24 + 2 * 250 + 16, 40 + 3 * 172 + 8);
     let mut sheet = Image::gen_image_color(w as u16, h as u16, VOID);
     label(&mut sheet, "JAWSTHIC  //  STAGE 1 BOSS  //  BUILT IN CODE", 16, 12, CREAM);
     // in play: phase 1, the bot dodging
-    let lay = cell(270, 360);
+    let lay = cell(fw, FIELD_H as i32);
     let play = |world: &World, r: &mut Renderer| {
         r.parts = Particles::new();
         r.fx = Fx::new();
@@ -246,7 +247,7 @@ pub fn export_mockup(r: &mut Renderer) {
     for (i, (name, world)) in states.iter().enumerate() {
         let img = play(world, r);
         let (col, row) = (i % 2, i / 2);
-        let (x, y) = (16 + 270 + 24 + col * 250, 32 + row * 172);
+        let (x, y) = (16 + fw as usize + 24 + col * 250, 32 + row * 172);
         label(&mut sheet, name, x as u32, y as u32, CREAM);
         let mut crop = Image::gen_image_color(240, 150, VOID);
         for cy in 0..150u32 {
@@ -305,7 +306,8 @@ fn cell(w: i32, h: i32) -> Layout {
 pub fn export_fx(r: &mut Renderer) {
     const C: i32 = 180;
     const MOMENTS: [u32; 4] = [2, 8, 18, 34];
-    let (w, h) = (16 + 4 * C + 24 + 2 * 270 + 16, 40 + 4 * C + 30);
+    let fw = FIELD_W as i32;
+    let (w, h) = (16 + 4 * C + 24 + 2 * fw + 16, 40 + 4 * C + 30);
     let mut sheet = Image::gen_image_color(w as u16, h as u16, VOID);
     label(&mut sheet, "EXPLOSIONS  //  SMALL MEDIUM LARGE BOSS  //  FRAMES 2 8 18 34", 16, 12, CREAM);
     for (row, size) in Size::ALL.iter().enumerate() {
@@ -338,7 +340,7 @@ pub fn export_fx(r: &mut Renderer) {
     let hx = (16 + 4 * C + 24) as u32;
     label(&mut sheet, "THE BLACK HOLE  //  START AND END OF THE STAGE", hx, 12, CREAM);
     for (i, frame) in [0, STAGE_FRAMES].iter().enumerate() {
-        let lay = cell(270, 360);
+        let lay = cell(fw, FIELD_H as i32);
         r.parts = Particles::new();
         r.fx = Fx::new();
         r.begin(&lay);
@@ -346,7 +348,7 @@ pub fn export_fx(r: &mut Renderer) {
         r.hole(lay.field, HOLE_X, HOLE_Y, scene::hole_radius(*frame), scene::hole_bright(1.0), *frame as f32 / 60.0, 0.0);
         r.post(&lay, &PostParams { field: lay.field, time: 0.0 });
         let img = r.read_post(&lay);
-        paste(&mut sheet, &img, hx + i as u32 * 270, 32);
+        paste(&mut sheet, &img, hx + i as u32 * fw as u32, 32);
     }
     // scale up 2x, bottom row first (export_png flips it back)
     let s = 2;

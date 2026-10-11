@@ -31,11 +31,13 @@ pub struct Settings {
     pub reduce_flash: bool,
     pub shake: ShakeSetting,
     pub view: View,
+    /// Full screen (the default) or a window, as F11 last left it (desktop only).
+    pub fullscreen: bool,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Settings { tuning: Tuning::default(), touch_sens: TOUCH_SENS, analog: false, muted: false, reduce_flash: false, shake: ShakeSetting::Full, view: View::default() }
+        Settings { tuning: Tuning::default(), touch_sens: TOUCH_SENS, analog: false, muted: false, reduce_flash: false, shake: ShakeSetting::Full, view: View::default(), fullscreen: true }
     }
 }
 
@@ -78,6 +80,7 @@ impl Settings {
                     }
                 }
                 "muted" => s.muted = v == "1",
+                "fullscreen" => s.fullscreen = v != "0",
                 _ => {}
             }
         }
@@ -91,7 +94,7 @@ impl Settings {
             ShakeSetting::Full => "full",
         };
         format!(
-            "speed={}\nfocus_ratio={}\nfocus_blend={}\ntouch_sens={}\nstick={}\nmuted={}\nreduce_flash={}\nshake={}\n",
+            "speed={}\nfocus_ratio={}\nfocus_blend={}\ntouch_sens={}\nstick={}\nmuted={}\nreduce_flash={}\nshake={}\nfullscreen={}\n",
             self.tuning.speed,
             self.tuning.focus_ratio,
             self.tuning.focus_blend,
@@ -99,7 +102,8 @@ impl Settings {
             if self.analog { "analog" } else { "8way" },
             self.muted as u8,
             self.reduce_flash as u8,
-            shake
+            shake,
+            self.fullscreen as u8
         )
     }
 
@@ -162,6 +166,16 @@ fn write(data: &str) {
 mod tests {
     use super::*;
 
+    /// The game opens full screen, an old save without the line too, until F11
+    /// chooses a window, which is remembered.
+    #[test]
+    fn it_opens_full_screen_until_you_choose_a_window() {
+        assert!(Settings::default().fullscreen);
+        assert!(Settings::parse("speed=4\nmuted=1\n").fullscreen);
+        let windowed = Settings { fullscreen: false, ..Settings::default() };
+        assert!(!Settings::parse(&windowed.format()).fullscreen);
+    }
+
     #[test]
     fn settings_round_trip() {
         let s = Settings {
@@ -172,6 +186,7 @@ mod tests {
             reduce_flash: true,
             shake: ShakeSetting::Low,
             view: View::default(),
+            fullscreen: false,
         };
         assert_eq!(Settings::parse(&s.format()), s);
         assert_eq!(Settings::parse(&Settings::default().format()), Settings::default());

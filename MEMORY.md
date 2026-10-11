@@ -3,6 +3,36 @@
 Session notes for Claude Code: what shipped, tuning that changed, known issues, what's next.
 Newest first.
 
+## v0.7.2 Full screen (square playfield, broad laser form) - 2026-10-12
+
+**Jason's feedback on v0.7.1:** "love the ship!!", but the laser form "gets too small, or
+close together"; "full screen 1080, bigger player area, top to bottom with smaller panels".
+Asked the width (AskUserQuestion with mock-ups): he picked **360 wide, square**.
+
+**Shipped**
+- FIELD_W 360 (CLAUDE.md non-negotiable 5 updated), panels 140 px (420 at 1080p),
+  PORTRAIT_W 360 (phones drop from 4x to 3x). Field-relative positions moved with it:
+  HOLE_X/START_X/BOT_HOME x 180, sandbox mounts x4/3, dummies (83/180/261), DUMMY_SWING
+  107, popcorn spline sweeps x4/3 (stage1::flight), boss intro pass uses FIELD_W,
+  JAWS_HOME (195, 165), JAWS_SWAY 16, P3 curtain n 23. Lanes already scaled with FIELD_W.
+- HUD landscape panels: STAGE 1 / OUTER DISK on two lines, rows shifted +10, flags at
+  track 1, `panel_stamps` (LEFT_STAMP / RIGHT_STAMP broken lines), rule at ch-42, controls
+  end above it. Touch buttons centred in the right panel.
+- Full screen by default: Settings.fullscreen (default true, saved as `fullscreen=`),
+  `start_fullscreen()` in window_conf (not wasm, not `debug::scripted()` = any PG_ env var);
+  F11 / Alt+Enter toggles and saves. Not tried on Jason's display (didn't take over his
+  screen); asked him to confirm.
+- Laser form: KEYS now end at outer -8 (sword 17 px wide), nacelle -11, per-key `corner`
+  (-13 flight .. -10 laser, a sharper point), a 2 px `M::Bevel` on broad faces.
+- Screenshot crops for 1280x720 shots: the field is x 280..1000 now (strip.py etc).
+
+**Measured:** PG_SIM=200 100% cleared/no-miss, kills 79% (was 86), derelict 94% (was
+100), Jaws 100%; boss:200 medians 24.9/29.5/29.0/25.0 s, P2/P4 2% timeouts, P3 1% deaths;
+patterns 100%. 215 tests.
+
+**Open:** red or teal wide shot? Ship size OK? Is the wider field too easy (Sprint 9 is
+balance)? Sprint 7 (Score & shell) next.
+
 ## v0.7.1 Split sword (the Pilgrim redesigned) - 2026-10-12
 
 **Jason's call:** a new ship from his reference `docs/reference/Split-sword starship_ flight

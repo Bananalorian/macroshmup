@@ -105,22 +105,25 @@ mod tests {
     fn phones_get_portrait() {
         let l = Layout::fit(390, 844);
         assert_eq!(l.orient, Orient::Portrait);
-        assert_eq!((l.cw, l.ch, l.scale), (270, 480, 1));
+        assert_eq!((l.cw, l.ch, l.scale), (360, 480, 1));
         let l = Layout::fit(1170, 2532); // the same phone in physical pixels
-        assert_eq!(l.scale, 4);
-        assert_eq!(l.ox, (1170 - 270 * 4) / 2);
+        assert_eq!(l.scale, 3);
+        assert_eq!(l.ox, (1170 - 360 * 3) / 2);
     }
 
     #[test]
     fn the_playfield_is_the_same_everywhere() {
         for (w, h) in [(1280, 720), (390, 844), (800, 600), (1080, 1920), (300, 200)] {
             let l = Layout::fit(w, h);
-            assert_eq!((l.field.w, l.field.h), (270, 360));
+            assert_eq!((l.field.w, l.field.h), (360, 360), "square, full height");
             assert!(l.field.x >= 0 && l.field.right() <= l.cw);
             assert!(l.field.y >= 0 && l.field.bottom() <= l.ch);
         }
         let l = Layout::fit(1280, 720);
-        assert_eq!(l.field.x, (640 - 270) / 2, "centered in landscape");
+        assert_eq!(l.field.x, (640 - 360) / 2, "centered in landscape");
+        let l = Layout::fit(1920, 1080);
+        assert_eq!((l.scale, l.ox, l.oy), (3, 0, 0), "1080p fills the screen at 3x");
+        assert_eq!((l.field.w * l.scale, l.field.h * l.scale), (1080, 1080), "a 1080 x 1080 play area");
     }
 
     #[test]

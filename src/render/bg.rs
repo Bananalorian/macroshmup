@@ -137,7 +137,7 @@ mod tests {
     use super::*;
     use crate::render::palette::luma;
 
-    const FIELD: IRect = IRect::new(185, 0, 270, 360);
+    const FIELD: IRect = IRect::new(140, 0, 360, 360);
 
     fn field() -> Starfield {
         Starfield::new(640.0 * 480.0)
@@ -213,7 +213,7 @@ mod tests {
     fn density_is_the_same_in_a_smaller_rect() {
         let s = field();
         let big = s.at(IRect::new(0, 0, 640, 480), 0).count() as f32 / (640.0 * 480.0);
-        let small = s.at(FIELD, 0).count() as f32 / (270.0 * 360.0);
+        let small = s.at(FIELD, 0).count() as f32 / (360.0 * 360.0);
         assert!((big / small - 1.0).abs() < 0.1, "{big} vs {small}");
     }
 }

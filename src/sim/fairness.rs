@@ -111,11 +111,11 @@ fn every_band_in_the_bottom_half_keeps_a_12_px_gap() {
 #[test]
 fn the_wall_check_would_catch_a_wall() {
     let mut w = World::new(1, Default::default());
-    for k in 0..28 {
+    for k in 0..=FIELD_W / 10 {
         w.hazards.bullets.push(Spawn { x: 5.0 + k as f32 * 10.0, y: 250.0, vx: 0.0, vy: 0.0, kind: Kind::Orb, behavior: Behavior::Straight, owner: 0, hue: Default::default() });
     }
     assert!(widest_gap(&w, 248.0, 252.0) < 12.0);
-    assert!(widest_gap(&w, 300.0, 304.0) >= 270.0);
+    assert!(widest_gap(&w, 300.0, 304.0) >= FIELD_W as f32);
 }
 
 fn parked_bullet(w: &mut World, dx: f32, kind: Kind, age: u16) {

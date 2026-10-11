@@ -25,11 +25,12 @@ pub const VSYNC_SNAP: f64 = 0.0006;
 /// Landscape: the whole low-res canvas, with the playfield in the middle.
 pub const CANVAS_W: u32 = 640;
 pub const CANVAS_H: u32 = 360;
-/// The playfield is the same size (3:4) in every layout, so the game plays the same everywhere.
-pub const FIELD_W: u32 = 270;
+/// The playfield is the same size (square, full height) in every layout, so the game
+/// plays the same everywhere. At 1080p it's 1080 x 1080 screen pixels.
+pub const FIELD_W: u32 = 360;
 pub const FIELD_H: u32 = 360;
 /// Portrait (phones): a HUD strip above the playfield and a thumb zone below it.
-pub const PORTRAIT_W: u32 = 270;
+pub const PORTRAIT_W: u32 = 360;
 pub const PORTRAIT_H: u32 = 480;
 pub const PORTRAIT_HUD_H: u32 = 24;
 
@@ -55,7 +56,7 @@ pub const EDGE_X: f32 = 13.0;
 pub const EDGE_TOP: f32 = 14.0;
 pub const EDGE_BOTTOM: f32 = 22.0;
 /// Where a new run starts, in playfield px.
-pub const START_X: f32 = 135.0;
+pub const START_X: f32 = 180.0;
 pub const START_Y: f32 = 300.0;
 
 /// Wing pods sit this far either side of the center, closer while focused.
@@ -101,7 +102,7 @@ pub const AURA_DMG: f32 = 1.0;
 pub const DUMMY_RESPAWN: u32 = 90;
 pub const DUMMY_HP: [f32; 3] = [120.0, 80.0, 1500.0]; // still, moving, big
 /// The moving dummy swings this far either side, once per this many frames.
-pub const DUMMY_SWING: (f32, u32) = (80.0, 300);
+pub const DUMMY_SWING: (f32, u32) = (107.0, 300);
 /// Hit flash: frames lit, and the minimum gap between flashes.
 pub const HIT_FLASH: (u8, u8) = (2, 6);
 /// Bumping a dummy flashes the hull (no damage yet); frames of flash and cooldown.
@@ -233,7 +234,7 @@ pub const FX_STRESS_EVERY: u64 = 40;
 // Drawn by a shader after Jason's falling-figure image. It grows as you approach.
 
 /// Where it hangs in the playfield (px), and its shadow's radius at the start and end of the stage.
-pub const HOLE_X: f32 = 135.0;
+pub const HOLE_X: f32 = 180.0;
 pub const HOLE_Y: f32 = 92.0;
 pub const HOLE_R: (f32, f32) = (11.0, 30.0);
 /// How long the approach takes (the length of Stage 1, frames).
@@ -256,60 +257,60 @@ pub const SANDBOX: &[Preset] = &[
         name: "AIMED FANS",
         guns: &[
             gun(Mount::Dummy(1), Shape::Fan { n: 5, spread: 48.0, aimed: true }, Kind::Orb, 2.6, 50, 30, STRAIGHT).hue(Hue::Red),
-            gun(Mount::At(60.0, 40.0), Shape::Fan { n: 3, spread: 24.0, aimed: true }, Kind::Small, 3.2, 70, 60, STRAIGHT).hue(Hue::Amber),
-            gun(Mount::At(210.0, 40.0), Shape::Fan { n: 3, spread: 24.0, aimed: true }, Kind::Small, 3.2, 70, 95, STRAIGHT).hue(Hue::Amber),
+            gun(Mount::At(80.0, 40.0), Shape::Fan { n: 3, spread: 24.0, aimed: true }, Kind::Small, 3.2, 70, 60, STRAIGHT).hue(Hue::Amber),
+            gun(Mount::At(280.0, 40.0), Shape::Fan { n: 3, spread: 24.0, aimed: true }, Kind::Small, 3.2, 70, 95, STRAIGHT).hue(Hue::Amber),
         ],
         fill: 0,
     },
     Preset {
         name: "RINGS",
         guns: &[
-            gun(Mount::At(135.0, 56.0), Shape::Ring { n: 20, turn: 9.0 }, Kind::Small, 1.8, 36, 20, STRAIGHT).hue(Hue::Teal),
-            gun(Mount::At(66.0, 70.0), Shape::Ring { n: 14, turn: -6.0 }, Kind::Orb, 1.5, 60, 38, STRAIGHT).hue(Hue::Blue),
-            gun(Mount::At(204.0, 70.0), Shape::Ring { n: 14, turn: 6.0 }, Kind::Orb, 1.5, 60, 68, STRAIGHT).hue(Hue::Blue),
+            gun(Mount::At(180.0, 56.0), Shape::Ring { n: 20, turn: 9.0 }, Kind::Small, 1.8, 36, 20, STRAIGHT).hue(Hue::Teal),
+            gun(Mount::At(88.0, 70.0), Shape::Ring { n: 14, turn: -6.0 }, Kind::Orb, 1.5, 60, 38, STRAIGHT).hue(Hue::Blue),
+            gun(Mount::At(272.0, 70.0), Shape::Ring { n: 14, turn: 6.0 }, Kind::Orb, 1.5, 60, 68, STRAIGHT).hue(Hue::Blue),
         ],
         fill: 0,
     },
     Preset {
         name: "SPIRAL",
-        guns: &[gun(Mount::At(135.0, 70.0), Shape::Spiral { arms: 3, spin: 11.0, flip: 40 }, Kind::Rice, 2.2, 5, 20, STRAIGHT).hue(Hue::Violet)],
+        guns: &[gun(Mount::At(180.0, 70.0), Shape::Spiral { arms: 3, spin: 11.0, flip: 40 }, Kind::Rice, 2.2, 5, 20, STRAIGHT).hue(Hue::Violet)],
         fill: 0,
     },
     Preset {
         name: "STREAMS",
         guns: &[
-            gun(Mount::At(80.0, 46.0), Shape::Stream { burst: 8, gap: 4 }, Kind::Needle, 4.5, 75, 20, STRAIGHT).hue(Hue::Red),
-            gun(Mount::At(190.0, 46.0), Shape::Stream { burst: 8, gap: 4 }, Kind::Needle, 4.5, 75, 57, STRAIGHT).hue(Hue::Red),
+            gun(Mount::At(107.0, 46.0), Shape::Stream { burst: 8, gap: 4 }, Kind::Needle, 4.5, 75, 20, STRAIGHT).hue(Hue::Red),
+            gun(Mount::At(253.0, 46.0), Shape::Stream { burst: 8, gap: 4 }, Kind::Needle, 4.5, 75, 57, STRAIGHT).hue(Hue::Red),
         ],
         fill: 0,
     },
     Preset {
         name: "RANDOM CONE",
-        guns: &[gun(Mount::Sweep { y: 40.0, x0: 70.0, x1: 200.0, period: 360 }, Shape::Cone { n: 3, spread: 70.0, jitter: 0.25 }, Kind::Small, 2.4, 6, 20, STRAIGHT).hue(Hue::Amber)],
+        guns: &[gun(Mount::Sweep { y: 40.0, x0: 93.0, x1: 267.0, period: 360 }, Shape::Cone { n: 3, spread: 70.0, jitter: 0.25 }, Kind::Small, 2.4, 6, 20, STRAIGHT).hue(Hue::Amber)],
         fill: 0,
     },
     Preset {
         name: "ACCELERATE",
-        guns: &[gun(Mount::At(135.0, 70.0), Shape::Ring { n: 16, turn: 7.0 }, Kind::Orb, 0.6, 45, 20, Behavior::Accel { accel: 0.05, max: 3.6 }).hue(Hue::Blue)],
+        guns: &[gun(Mount::At(180.0, 70.0), Shape::Ring { n: 16, turn: 7.0 }, Kind::Orb, 0.6, 45, 20, Behavior::Accel { accel: 0.05, max: 3.6 }).hue(Hue::Blue)],
         fill: 0,
     },
     Preset {
         name: "SLOW, PAUSE, AIM",
-        guns: &[gun(Mount::At(135.0, 80.0), Shape::Ring { n: 12, turn: 15.0 }, Kind::Orb, 3.0, 70, 20, Behavior::SlowAim { slow: 30, pause: 20, speed: 3.2 }).hue(Hue::Violet)],
+        guns: &[gun(Mount::At(180.0, 80.0), Shape::Ring { n: 12, turn: 15.0 }, Kind::Orb, 3.0, 70, 20, Behavior::SlowAim { slow: 30, pause: 20, speed: 3.2 }).hue(Hue::Violet)],
         fill: 0,
     },
     Preset {
         name: "CURVE",
         guns: &[
-            gun(Mount::At(135.0, 56.0), Shape::Fan { n: 5, spread: 100.0, aimed: false }, Kind::Rice, 2.0, 24, 20, Behavior::Curve { turn: 0.7, frames: 120 }).hue(Hue::Teal),
-            gun(Mount::At(135.0, 56.0), Shape::Fan { n: 5, spread: 100.0, aimed: false }, Kind::Rice, 2.0, 24, 32, Behavior::Curve { turn: -0.7, frames: 120 }).hue(Hue::Teal),
+            gun(Mount::At(180.0, 56.0), Shape::Fan { n: 5, spread: 100.0, aimed: false }, Kind::Rice, 2.0, 24, 20, Behavior::Curve { turn: 0.7, frames: 120 }).hue(Hue::Teal),
+            gun(Mount::At(180.0, 56.0), Shape::Fan { n: 5, spread: 100.0, aimed: false }, Kind::Rice, 2.0, 24, 32, Behavior::Curve { turn: -0.7, frames: 120 }).hue(Hue::Teal),
         ],
         fill: 0,
     },
     Preset {
         name: "SPLIT",
         guns: &[gun(
-            Mount::At(135.0, 50.0),
+            Mount::At(180.0, 50.0),
             Shape::Fan { n: 3, spread: 60.0, aimed: true },
             Kind::Large,
             1.6,
@@ -323,15 +324,15 @@ pub const SANDBOX: &[Preset] = &[
     Preset {
         name: "PULL",
         guns: &[
-            gun(Mount::At(40.0, 60.0), Shape::Ring { n: 10, turn: 13.0 }, Kind::Small, 2.2, 30, 20, Behavior::Pull { x: 135.0, y: 120.0, pull: 0.035, max: 3.0 }).hue(Hue::Violet),
-            gun(Mount::At(230.0, 60.0), Shape::Ring { n: 10, turn: -13.0 }, Kind::Small, 2.2, 30, 35, Behavior::Pull { x: 135.0, y: 120.0, pull: 0.035, max: 3.0 }).hue(Hue::Violet),
+            gun(Mount::At(53.0, 60.0), Shape::Ring { n: 10, turn: 13.0 }, Kind::Small, 2.2, 30, 20, Behavior::Pull { x: 180.0, y: 120.0, pull: 0.035, max: 3.0 }).hue(Hue::Violet),
+            gun(Mount::At(307.0, 60.0), Shape::Ring { n: 10, turn: -13.0 }, Kind::Small, 2.2, 30, 35, Behavior::Pull { x: 180.0, y: 120.0, pull: 0.035, max: 3.0 }).hue(Hue::Violet),
         ],
         fill: 0,
     },
     Preset {
         name: "LAYERED",
         guns: &[
-            gun(Mount::At(135.0, 56.0), Shape::Ring { n: 18, turn: 10.0 }, Kind::Small, 1.6, 40, 20, STRAIGHT).hue(Hue::Teal),
+            gun(Mount::At(180.0, 56.0), Shape::Ring { n: 18, turn: 10.0 }, Kind::Small, 1.6, 40, 20, STRAIGHT).hue(Hue::Teal),
             gun(Mount::Dummy(1), Shape::Fan { n: 3, spread: 20.0, aimed: true }, Kind::Orb, 3.0, 30, 40, STRAIGHT).hue(Hue::Red),
         ],
         fill: 0,
@@ -503,8 +504,8 @@ pub const JAWS_FIN_BLOW: f32 = 0.25;
 /// Where it swims: its height, and its home across the screen facing right and left
 /// (the whole fish stays on the screen); how far it sways and bobs (px, period).
 pub const JAWS_Y: f32 = 82.0;
-pub const JAWS_HOME: (f32, f32) = (150.0, 120.0);
-pub const JAWS_SWAY: (f32, u32) = (12.0, 480);
+pub const JAWS_HOME: (f32, f32) = (195.0, 165.0);
+pub const JAWS_SWAY: (f32, u32) = (16.0, 480);
 pub const JAWS_BOB: (f32, u32) = (5.0, 300);
 /// How quickly it closes on where it wants to be (share of the gap per frame).
 pub const JAWS_FOLLOW: f32 = 0.05;
@@ -583,7 +584,7 @@ pub const JAWS_P2: &[BossGun] = &[
 /// sideways, a lane drifting through it; random sprinkles off the tail; and the laser
 /// sweeps (they pause the curtain).
 pub const JAWS_P3: &[BossGun] = &[
-    bgun(Muzzle::Belly, gun(O, Shape::Curtain { n: 17, spacing: 15.0, gap: 3, period: 22, jitter: 6.0 }, Kind::Rice, 1.45, 20, 30, STRAIGHT).hue(Hue::Teal)),
+    bgun(Muzzle::Belly, gun(O, Shape::Curtain { n: 23, spacing: 15.0, gap: 3, period: 22, jitter: 6.0 }, Kind::Rice, 1.45, 20, 30, STRAIGHT).hue(Hue::Teal)),
     bgun(Muzzle::Tail, gun(O, Shape::Cone { n: 2, spread: 140.0, jitter: 0.3 }, Kind::Small, 1.5, 11, 40, STRAIGHT).hue(Hue::Violet)),
 ];
 /// Phase 4, EVENT HORIZON: everything it throws bends toward the black hole: a turning
@@ -600,7 +601,7 @@ pub const JAWS_GUNS: [&[BossGun]; 4] = [JAWS_P1, JAWS_P2, JAWS_P3, JAWS_P4];
 
 pub const BOT_LOOKAHEAD: usize = 12;
 /// Where it likes to sit, and how much it cares.
-pub const BOT_HOME: (f32, f32) = (135.0, 285.0);
+pub const BOT_HOME: (f32, f32) = (180.0, 285.0);
 pub const BOT_HOME_PULL: f32 = 0.1;
 /// A small bonus for keeping the same choice (so it doesn't dither).
 pub const BOT_STICKY: f32 = 0.3;

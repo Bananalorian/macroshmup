@@ -22,10 +22,9 @@ const BANKS: usize = 5;
 const SIZE: (i32, i32) = (33, 49);
 const CX: i32 = SIZE.0 / 2;
 const CY: i32 = SIZE.1 / 2;
-/// Rows from the hitbox: the sword's tip (the beam leaves from here), where its
-/// bevelled top meets the outer edge, the shoulder, and the foot of the blades.
+/// Rows from the hitbox: the sword's tip (the beam leaves from here), the shoulder,
+/// and the foot of the blades.
 pub const TIP: i32 = -21;
-const CORNER: i32 = -13;
 const SHOULDER: i32 = -8;
 const FOOT: i32 = 7;
 /// The channel: the point of its arch, and the step where it widens.
@@ -41,6 +40,9 @@ struct Key {
     outer: i32,
     upper: i32,
     nacelle: i32,
+    /// The row where the bevelled top meets the outer edge (lower as the blades
+    /// join, so the sword's point stays sharp).
+    corner: i32,
     /// The antenna on the bevelled top: its column, and how far it stands up (0
     /// once it has folded away).
     antenna: (i32, i32),
@@ -48,15 +50,16 @@ struct Key {
     strut: i32,
 }
 
-/// Flight form to laser form. The blades close in 3 px and slim down, their
-/// channels slide together into one core, the antennas fold away and the
-/// nacelles tuck in (in flight they hang under the blades' outer edges).
+/// Flight form to laser form. The blades close in 3 px into one broad sword (as
+/// wide as both blades' stone, so the ship doesn't shrink as it focuses), their
+/// channels slide together into one core, the antennas fold away and the nacelles
+/// tuck in beside the sword (in flight they hang under the blades' outer edges).
 const KEYS: [Key; FORMS] = [
-    Key { inner: -3, core: -7, outer: -12, upper: -11, nacelle: -12, antenna: (-9, 4), strut: -7 },
-    Key { inner: -2, core: -5, outer: -10, upper: -9, nacelle: -11, antenna: (-7, 3), strut: -7 },
-    Key { inner: -1, core: -3, outer: -8, upper: -7, nacelle: -10, antenna: (-5, 1), strut: -6 },
-    Key { inner: 0, core: -1, outer: -6, upper: -6, nacelle: -10, antenna: (0, 0), strut: -6 },
-    Key { inner: 0, core: 0, outer: -5, upper: -5, nacelle: -9, antenna: (0, 0), strut: -5 },
+    Key { inner: -3, core: -7, outer: -12, upper: -11, nacelle: -12, corner: -13, antenna: (-9, 4), strut: -7 },
+    Key { inner: -2, core: -5, outer: -11, upper: -10, nacelle: -12, corner: -13, antenna: (-8, 3), strut: -7 },
+    Key { inner: -1, core: -3, outer: -10, upper: -9, nacelle: -12, corner: -12, antenna: (-7, 1), strut: -7 },
+    Key { inner: 0, core: -1, outer: -9, upper: -9, nacelle: -11, corner: -11, antenna: (0, 0), strut: -6 },
+    Key { inner: 0, core: 0, outer: -8, upper: -8, nacelle: -11, corner: -10, antenna: (0, 0), strut: -6 },
 ];
 /// The nacelles' and the capsule's half widths.
 const NACELLE_W: i32 = 3;
@@ -65,8 +68,9 @@ const POD_W: i32 = 3;
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum M {
     Empty,
-    /// The blade's face.
+    /// The blade's face, and the bevel down its outer edge.
     Face,
+    Bevel,
     /// The lighter inner face, between the channel and the gap.
     Rail,
     /// The channel: its dark walls, its black core (the teal dashes), the grooves
@@ -141,8 +145,8 @@ fn top_at(k: &Key, x: i32) -> i32 {
 
 /// The blade's outermost column on row `y`.
 fn left_at(k: &Key, y: i32) -> i32 {
-    if y < CORNER {
-        k.inner + ((k.upper - k.inner) as f32 * (y - TIP) as f32 / (CORNER - TIP) as f32).round() as i32
+    if y < k.corner {
+        k.inner + ((k.upper - k.inner) as f32 * (y - TIP) as f32 / (k.corner - TIP) as f32).round() as i32
     } else if y < SHOULDER {
         k.upper
     } else {
@@ -183,6 +187,12 @@ fn layout(k: &Key) -> Map {
     }
     for (dx, y) in [(2, -6), (3, -5), (2, 2)] {
         map.over(k.outer + dx, y, M::Crack);
+    }
+    // a broad face (the sword's) gets a wider bevel down its edge
+    if k.core - k.outer - 3 >= 5 {
+        for y in k.corner..=FOOT {
+            map.over(left_at(k, y) + 2, y, M::Bevel);
+        }
     }
     let (ax, ah) = k.antenna;
     let base = top_at(k, ax);
@@ -359,6 +369,7 @@ fn paint(map: &Map, bank: i8) -> Image {
                         tone(t - (speck < 0.16) as i32 - (speck < 0.03) as i32)
                     }
                     M::Rail => tone(4 - (speck < 0.08) as i32),
+                    M::Bevel => tone(3 - (speck < 0.16) as i32),
                     M::Wall => BONE[0],
                     M::Core | M::Window => VOIDISH,
                     M::Groove => if y % 2 == 0 { BONE[0] } else { OUTLINE },
@@ -570,7 +581,7 @@ fn frame_image(form: usize, bank: i8) -> (Image, Vec<Light>, [(i32, i32); 3], [(
     let nozzles = [at(n, 16), at(-n, 16), at(0, 23)];
     let tips = [at(k.inner, TIP), at(-k.inner, TIP)];
     let (ax, ah) = k.antenna;
-    let gun = if ah > 0 { (ax, top_at(k, ax) - ah) } else { (k.upper + 1, CORNER - 1) };
+    let gun = if ah > 0 { (ax, top_at(k, ax) - ah) } else { (k.upper + 1, k.corner - 1) };
     let guns = [at(gun.0, gun.1), at(-gun.0, gun.1)];
     (paint(&map, bank), lights(&map), nozzles, tips, guns)
 }
@@ -830,7 +841,7 @@ mod tests {
         assert_eq!(gap(0), (FOOT - TIP + 1) as usize, "flight: split from tip to foot");
         assert_eq!(gap(FORMS - 1), 0, "laser: one blade");
         assert!(antenna(0) > 0 && antenna(FORMS - 1) == 0);
-        assert!(KEYS[FORMS - 1].nacelle - KEYS[0].nacelle >= 3, "the nacelles tuck in");
+        assert!(KEYS[FORMS - 1].nacelle > KEYS[0].nacelle, "the nacelles tuck in");
         assert!(width(FORMS - 1) < width(0), "the laser form is slimmer");
         let cores = |f: usize| (-CX..=CX).filter(|&x| mat(f, x, -5) == M::Core).collect::<Vec<_>>();
         assert_eq!(cores(0), vec![-7, 7]);

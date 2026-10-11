@@ -204,9 +204,9 @@ fn flight(path: Flight, lx: f32, s: f32) -> Spline {
     let p = |dx: f32, y: f32| (lx + dx * s, y);
     match path {
         Dive => Spline::new(&[p(0.0, -12.0), p(14.0, 110.0), p(-14.0, 230.0), p(0.0, 380.0)], DRONE_SPEED),
-        Swoop => Spline::new(&[p(0.0, -12.0), p(0.0, 60.0), p(36.0, 118.0), p(96.0, 122.0), p(150.0, 70.0), p(176.0, -30.0)], DRONE_SPEED),
-        Arc => Spline::new(&[p(0.0, -12.0), p(0.0, 90.0), p(30.0, 140.0), p(64.0, 110.0), p(70.0, -30.0)], DRONE_SPEED),
-        Cross => Spline::new(&[p(0.0, -12.0), p(70.0, 140.0), p(160.0, 260.0), p(220.0, 400.0)], DRONE_SPEED),
+        Swoop => Spline::new(&[p(0.0, -12.0), p(0.0, 60.0), p(48.0, 118.0), p(128.0, 122.0), p(200.0, 70.0), p(235.0, -30.0)], DRONE_SPEED),
+        Arc => Spline::new(&[p(0.0, -12.0), p(0.0, 90.0), p(40.0, 140.0), p(85.0, 110.0), p(93.0, -30.0)], DRONE_SPEED),
+        Cross => Spline::new(&[p(0.0, -12.0), p(93.0, 140.0), p(213.0, 260.0), p(293.0, 400.0)], DRONE_SPEED),
     }
 }
 

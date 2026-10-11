@@ -47,7 +47,7 @@ impl Dummy {
 
     /// The three dummies of the empty stage.
     pub fn sandbox() -> Vec<Dummy> {
-        vec![Dummy::new(DummyKind::Still, 62.0, 86.0), Dummy::new(DummyKind::Moving, 135.0, 170.0), Dummy::new(DummyKind::Big, 196.0, 78.0)]
+        vec![Dummy::new(DummyKind::Still, 83.0, 86.0), Dummy::new(DummyKind::Moving, 180.0, 170.0), Dummy::new(DummyKind::Big, 261.0, 78.0)]
     }
 
     pub fn alive(&self) -> bool {
@@ -152,14 +152,14 @@ mod tests {
 
     #[test]
     fn the_moving_one_swings_about_home() {
-        let mut d = Dummy::new(DummyKind::Moving, 135.0, 100.0);
+        let mut d = Dummy::new(DummyKind::Moving, 180.0, 100.0);
         let (mut lo, mut hi) = (f32::MAX, f32::MIN);
         for f in 0..DUMMY_SWING.1 as u64 {
             d.tick(f);
             lo = lo.min(d.x);
             hi = hi.max(d.x);
         }
-        assert!((hi - 135.0 - DUMMY_SWING.0).abs() < 0.5 && (135.0 - lo - DUMMY_SWING.0).abs() < 0.5);
-        assert!(Dummy::sandbox().iter().all(|d| d.rect().x0 >= 20.0 && d.rect().x1 <= 250.0), "nothing hugs the edges");
+        assert!((hi - 180.0 - DUMMY_SWING.0).abs() < 0.5 && (180.0 - lo - DUMMY_SWING.0).abs() < 0.5);
+        assert!(Dummy::sandbox().iter().all(|d| d.rect().x0 >= 20.0 && d.rect().x1 <= crate::tune::FIELD_W as f32 - 20.0), "nothing hugs the edges");
     }
 }

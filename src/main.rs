@@ -345,12 +345,19 @@ impl Game {
     }
 }
 
+/// The game opens full screen unless the player last chose a window (F11). A
+/// browser only goes full screen on a click, and debug runs keep their window.
+fn start_fullscreen() -> bool {
+    !cfg!(target_arch = "wasm32") && !debug::scripted() && Settings::load().fullscreen
+}
+
 fn window_conf() -> Conf {
     let (w, h) = debug::window_size().unwrap_or((1280, 720));
     Conf {
         window_title: "PILGRIM".to_owned(),
         window_width: w,
         window_height: h,
+        fullscreen: start_fullscreen(),
         // physical pixels, so the integer scale is exact on high-DPI screens and phones
         high_dpi: true,
         window_resizable: true,
@@ -808,7 +815,7 @@ async fn amain() {
     let mut perf = debug::Perf::new();
     let mut keys = debug::Keys::default();
     game.settings.view.fps |= hooks.perf;
-    let mut fullscreen = false;
+    let mut fullscreen = start_fullscreen();
     let mut mode_known = false;
     let mut dip_skip = false;
     let mut slow_n = 0u32;
@@ -829,6 +836,8 @@ async fn amain() {
         if fs_key {
             fullscreen = !fullscreen;
             set_fullscreen(fullscreen);
+            game.settings.fullscreen = fullscreen;
+            game.settings.save();
         }
         let f7 = keys.read(&mut game.settings.view);
         if std::mem::take(&mut keys.skip) {
@@ -913,7 +922,7 @@ async fn amain() {
                     }
                     if let Some(size) = game.boom.take() {
                         let me = (world.player.x, world.player.y);
-                        explode(&mut renderer.fx, &mut renderer.parts, 135.0, 150.0, size, me, game.settings.reduce_flash, world.frame);
+                        explode(&mut renderer.fx, &mut renderer.parts, tune::FIELD_W as f32 * 0.5, 150.0, size, me, game.settings.reduce_flash, world.frame);
                         audio.blast(size);
                     }
                     audio.handle(world);

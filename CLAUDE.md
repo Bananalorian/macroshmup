@@ -9,7 +9,7 @@ from `SPRINTS.md`. The project setup mirrors https://github.com/Bananalorian/shi
 
 ## Build and run
 ```sh
-cargo run --release                              # desktop
+cargo run --release                              # desktop (opens full screen; F11 for a window)
 cargo test                                       # sim tests, headless (also run in CI)
 rustup target add wasm32-unknown-unknown         # once
 cargo build --release --target wasm32-unknown-unknown
@@ -22,7 +22,7 @@ The toolchain is pinned in `rust-toolchain.toml` and CI uses the same version. D
 2. **A fixed 60 Hz sim.** Every gameplay timing is in frames. Gameplay RNG is seeded; cosmetic RNG is separate. `sim/` never draws, plays audio, or touches macroquad globals.
 3. **Enemy bullets draw above everything except the HUD**, and their cores are the brightest pixels on screen. Check with F2 or `PG_GRAY=1`.
 4. **Color is for the Pilgrim, the boss, enemy bullets and explosion fringes.** Teal is the Pilgrim's; red marks danger (telegraphs, enemy lights). Enemy bullets come in several hues (red, teal, violet, amber, blue: Jason's call, v0.6.4), always with a white-hot core and a black outline. Everything else uses the monochrome palette.
-5. **Pixel-perfect:** a 640×360 canvas, a 270×360 playfield, integer scaling, nearest filtering, effects locked to the low-res grid.
+5. **Pixel-perfect:** a 640×360 canvas, a 360×360 playfield (square, full height: 1080×1080 at 1080p, Jason's call in v0.7.2), integer scaling, nearest filtering, effects locked to the low-res grid.
 6. **No camera shake while enemy bullets are live.** At most 3 full-screen flashes per second. Respect the Reduce flashing and Screen shake options.
 7. **No asset files.** Art, font, sound and music are generated in code. The only exceptions are PNG sprite overrides or music files that Jason adds himself.
 8. **Every tunable number lives in `tune.rs`.**

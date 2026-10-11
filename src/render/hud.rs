@@ -92,6 +92,25 @@ fn stamps(a: &Atlas, x0: i32, x1: i32, y: i32, right: bool) {
     }
 }
 
+/// The stamps' long lines, broken to fit a side panel.
+const LEFT_STAMP: [&str; 2] = ["HUMANITY", "STILL LOOKS UP"];
+const RIGHT_STAMP: [&str; 3] = ["A SMALL SHIP", "A LONG WAY", "FROM HOME"];
+
+/// The stamps for a side panel: three short lines under the rule at `y`.
+fn panel_stamps(a: &Atlas, x0: i32, x1: i32, y: i32, right: bool) {
+    hrule(a, x0, x1, y);
+    if right {
+        for (i, s) in RIGHT_STAMP.iter().enumerate() {
+            text_r(a, s, x1, y + 6 + i as i32 * 10, if i == 0 { ASH } else { SLATE });
+        }
+    } else {
+        small(a, &version_stamp(), x0, y + 6, ASH);
+        for (i, s) in LEFT_STAMP.iter().enumerate() {
+            small(a, s, x0, y + 16 + i as i32 * 10, SLATE);
+        }
+    }
+}
+
 fn start_hint(mode: Option<Mode>) -> &'static str {
     match mode {
         None => "PRESS Z  //  TAP TO START",
@@ -305,46 +324,51 @@ pub fn stage(r: &Renderer, lay: &Layout, v: &HudView) {
             a.fill(f.x - 1, 0, 1, lay.ch, DUSK);
             a.fill(f.right(), 0, 1, lay.ch, DUSK);
 
+            // the side panels are narrow: long lines break, and the stamps stack
             let (l0, l1) = (12, f.x - 13);
             small(a, "PILGRIM", l0, 12, CREAM);
             small(a, "TYPE-07", l0, 22, ASH);
             hrule(a, l0, l1, 34);
-            let place = match v.stage {
-                Some(_) => format!("STAGE 1  //  {STAGE_NAME}"),
-                None => "PATTERN SANDBOX".to_string(),
-            };
-            small(a, &place, l0, 42, SLATE);
-            small(a, "LIVES", l0, 56, ASH);
-            icons(a, a.r.life_icon, v.lives, l1, 56);
-            small(a, "BOMBS", l0, 66, ASH);
-            icons(a, a.r.bomb_icon, v.bombs, l1, 66);
+            match v.stage {
+                Some(_) => {
+                    small(a, "STAGE 1", l0, 42, SLATE);
+                    small(a, STAGE_NAME, l0, 52, SLATE);
+                }
+                None => small(a, "PATTERN SANDBOX", l0, 42, SLATE),
+            }
+            small(a, "LIVES", l0, 66, ASH);
+            icons(a, a.r.life_icon, v.lives, l1, 66);
+            small(a, "BOMBS", l0, 76, ASH);
+            icons(a, a.r.bomb_icon, v.bombs, l1, 76);
             if let Some(s) = v.stage {
-                small(a, "SECTION", l0, 82, ASH);
-                text_r(a, &clock(s.t), l1, 82, SLATE);
-                small(a, SECTIONS[s.section].1, l0, 94, CREAM);
-                small(a, "KILLS", l0, 106, SLATE);
-                text_r(a, &format!("{}/{}", s.killed, s.spawned), l1, 106, ASH);
-                small(a, "MISSES", l0, 116, SLATE);
-                text_r(a, &v.hits.to_string(), l1, 116, ASH);
+                small(a, "SECTION", l0, 92, ASH);
+                text_r(a, &clock(s.t), l1, 92, SLATE);
+                small(a, SECTIONS[s.section].1, l0, 104, CREAM);
+                small(a, "KILLS", l0, 116, SLATE);
+                text_r(a, &format!("{}/{}", s.killed, s.spawned), l1, 116, ASH);
+                small(a, "MISSES", l0, 126, SLATE);
+                text_r(a, &v.hits.to_string(), l1, 126, ASH);
             } else {
                 let n = SANDBOX.len();
-                small(a, "PATTERN", l0, 82, ASH);
-                text_r(a, &format!("{}/{}", v.pattern % n + 1, n), l1, 82, SLATE);
-                small(a, SANDBOX[v.pattern % n].name, l0, 94, CREAM);
-                small(a, "BULLETS", l0, 106, SLATE);
-                text_r(a, &v.bullets.to_string(), l1, 106, ASH);
-                small(a, "HITS", l0, 116, SLATE);
-                text_r(a, &v.hits.to_string(), l1, 116, ASH);
+                small(a, "PATTERN", l0, 92, ASH);
+                text_r(a, &format!("{}/{}", v.pattern % n + 1, n), l1, 92, SLATE);
+                small(a, SANDBOX[v.pattern % n].name, l0, 104, CREAM);
+                small(a, "BULLETS", l0, 116, SLATE);
+                text_r(a, &v.bullets.to_string(), l1, 116, ASH);
+                small(a, "HITS", l0, 126, SLATE);
+                text_r(a, &v.hits.to_string(), l1, 126, ASH);
             }
-            small(a, "GRAZE", l0, 126, SLATE);
-            text_r(a, &v.grazes.to_string(), l1, 126, ASH);
+            small(a, "GRAZE", l0, 136, SLATE);
+            text_r(a, &v.grazes.to_string(), l1, 136, ASH);
             let flags = sandbox_flags(&v.settings.view);
             if !flags.is_empty() {
-                small(a, &flags, l0, 138, CREAM);
+                // set tighter than the rest, so all three fit
+                a.fill(l0 - 1, 147, text_width(&flags, 1, 1) + 2, font::GH as i32 + 2, VOID);
+                text(a, &flags, l0, 148, 1, 1, CREAM);
             }
-            small(a, "TUNING", l0, 152, ASH);
+            small(a, "TUNING", l0, 162, ASH);
             for (i, (k, val)) in tuning_lines(v.settings).iter().enumerate() {
-                let y = 164 + i as i32 * 10;
+                let y = 174 + i as i32 * 10;
                 small(a, k, l0, y, SLATE);
                 text_r(a, val, l1, y, CREAM);
             }
@@ -352,25 +376,23 @@ pub fn stage(r: &Renderer, lay: &Layout, v: &HudView) {
                 Mode::Keys => "1-6 TO CHANGE",
                 _ => "PAUSE TO CHANGE",
             };
-            small(a, hint, l0, 196, SLATE);
+            small(a, hint, l0, 206, SLATE);
             // the pattern keys only matter in the sandbox
             let rows: Vec<&(&str, &str)> = controls(v.mode).iter().filter(|(_, act)| v.stage.is_none() || *act != "PATTERN").collect();
-            let y0 = lay.ch - 42 - rows.len() as i32 * 10;
+            let y0 = lay.ch - 52 - rows.len() as i32 * 10;
             for (i, (k, act)) in rows.iter().enumerate() {
                 let y = y0 + i as i32 * 10;
                 small(a, k, l0, y, ASH);
                 text_r(a, act, l1, y, SLATE);
             }
-            stamps(a, l0, l1, lay.ch - 32, false);
+            panel_stamps(a, l0, l1, lay.ch - 42, false);
 
             let (r0, r1) = (f.right() + 13, lay.cw - 12);
             for (i, s) in ["SOMEWHERE", "BEYOND", "THE", "EVENT HORIZON"].iter().enumerate() {
                 small(a, s, r0, 12 + i as i32 * 10, ASH);
             }
             sparkle(a, r1 - 7, 12);
-            hrule(a, r0, r1, lay.ch - 32);
-            text_r(a, "A SMALL SHIP", r1, lay.ch - 26, ASH);
-            text_r(a, "A LONG WAY FROM HOME", r1, lay.ch - 16, SLATE);
+            panel_stamps(a, r0, r1, lay.ch - 42, true);
             if v.mode == Mode::Touch {
                 buttons(a, lay, v);
             }
@@ -708,7 +730,7 @@ fn pause_menu(a: &Atlas, lay: &Layout, v: &HudView, sel: usize) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tune::{CANVAS_W, PORTRAIT_W};
+    use crate::tune::{CANVAS_H, CANVAS_W, FIELD_W, PORTRAIT_W};
 
     #[test]
     fn the_stamp_reads_like_the_sheet() {
@@ -734,21 +756,29 @@ mod tests {
 
     #[test]
     fn panel_text_fits_the_side_panels() {
-        // the landscape side panels are 185 px wide with 12 px margins
-        let room = 185 - 25;
-        for s in ["HUMANITY STILL LOOKS UP", "A LONG WAY FROM HOME", "PATTERN SANDBOX", "STAGE 1  //  OUTER DISK", "PAUSE TO CHANGE", "BOT SLOW INVINCIBLE"] {
+        // the landscape side panels, with 12 px margins and 13 by the playfield
+        let room = (CANVAS_W - FIELD_W) as i32 / 2 - 25;
+        assert_eq!(room, 115);
+        let stamp = version_stamp();
+        let lines = LEFT_STAMP.iter().chain(RIGHT_STAMP.iter()).copied();
+        for s in lines.chain(["PATTERN SANDBOX", "STAGE 1", STAGE_NAME, "PAUSE TO CHANGE", "EVENT HORIZON", &stamp]) {
             assert!(text_width(s, 1, TRACK) <= room, "{s}");
         }
+        assert!(text_width("BOT SLOW INVINCIBLE", 1, 1) <= room, "the flags, set tighter");
         for (_, name) in SECTIONS {
             assert!(text_width(name, 1, TRACK) <= room, "{name}");
         }
-        assert!(text_width("KILLS 999/999  MISSES 99  GRAZE 9999", 1, 1) <= 270 - 16);
+        let port = PORTRAIT_W as i32;
+        assert!(text_width("KILLS 999/999  MISSES 99  GRAZE 9999", 1, 1) <= port - 16);
         for p in SANDBOX {
             assert!(text_width(p.name, 1, TRACK) <= room, "{}", p.name);
             // the portrait thumb zone line, beside the buttons
-            assert!(text_width(&format!("{} 13/13", p.name), 1, 1) <= 270 - 8 - 100, "{}", p.name);
-            assert!(text_width("BULLETS 8192  HITS 999  GRAZE 9999", 1, 1) <= 270 - 16);
+            assert!(text_width(&format!("{} 13/13", p.name), 1, 1) <= port - 8 - 100, "{}", p.name);
+            assert!(text_width("BULLETS 8192  HITS 999  GRAZE 9999", 1, 1) <= port - 16);
         }
+        // the left panel's rows: the tuning hint clears the controls
+        let most = controls(Mode::Keys).len() as i32;
+        assert!(206 + font::GH as i32 <= CANVAS_H as i32 - 52 - most * 10, "the hint and the controls overlap");
         for mode in [Mode::Keys, Mode::Pad, Mode::Touch] {
             for (k, act) in controls(mode) {
                 assert!(text_width(k, 1, TRACK) + 8 + text_width(act, 1, TRACK) <= room, "{k} {act}");

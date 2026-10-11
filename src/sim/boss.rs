@@ -134,11 +134,11 @@ pub fn intro_pose(t: u32) -> (f32, f32, f32, Option<f32>) {
     };
     if t < pass {
         let k = t as f32 / pass as f32;
-        (-20.0 + 270.0 * k, surface + 36.0, 1.0, Some(surface))
+        (-20.0 + FIELD_W as f32 * k, surface + 36.0, 1.0, Some(surface))
     } else if t < under {
         let k = (t - pass) as f32 / (under - pass) as f32;
         let facing = if k < 0.5 { 1.0 } else { -1.0 };
-        let x = if k < 0.5 { 250.0 + 40.0 * k } else { JAWS_HOME.1 };
+        let x = if k < 0.5 { FIELD_W as f32 - 20.0 + 40.0 * k } else { JAWS_HOME.1 };
         (x, surface + 36.0 + 60.0 * smooth(k * 2.0), facing, Some(surface))
     } else if t < peak {
         let k = (t - under) as f32 / (peak - under) as f32;

@@ -3,6 +3,69 @@
 Every version is one build sprint. Newest first. Versions are tagged in git, and
 each tag publishes a GitHub Release with downloads.
 
+## [0.7.2] - 2026-10-12 - Full screen
+
+### Changed
+- **A bigger play area** (your call: 360 wide). The playfield is square now,
+  360 × 360 pixels instead of 270 × 360, and it still runs top to bottom. On a
+  1080p screen that's 1080 × 1080, with the side panels narrowed from 555 to 420
+  screen pixels each ([in play](docs/screenshots/boss.png)).
+  - **Everything placed across the field spreads with it:**
+    - the enemies' lanes and the popcorn's sweeps;
+    - the black hole and the derelict over it;
+    - your starting point;
+    - the sandbox's guns and target dummies;
+    - JAWSTHIC's home spots, its sway, and its fin's pass through the disk.
+  - **Its phase 3 curtain** is 23 bullets wide instead of 17, so it still spans
+    the field.
+  - **Patterns themselves are unchanged:** the same bullets at the same speeds,
+    with more room around them.
+  - **The side panels** break their long lines in two (STAGE 1 / OUTER DISK, and
+    the stamps at the bottom) so everything fits.
+  - On a phone the screen is 360 wide too, so each pixel is drawn a little smaller
+    there (3x instead of 4x on an iPhone-sized screen).
+- **The game opens full screen** on the desktop. F11 (or Alt+Enter) switches to a
+  window, and the game remembers your choice. Debug runs (any `PG_` setting) stay
+  in their window. The browser version is unchanged: F11 still takes it full
+  screen.
+- **The laser form keeps its size.** In v0.7.1 the blades closed into a narrow
+  sword and the whole ship shrank by a third when you focused. Now they close into
+  one broad sword, nearly as wide as the two blades were
+  ([in play](docs/screenshots/pilgrim-forms.png)). It has a sharper point, and a
+  bevel down each edge. The nacelles tuck in beside it.
+
+### Checked
+- **The bot, with all that room:**
+  - **The whole stage** (`PG_SIM=200`, the bot with lives and bombs): 100%
+    cleared, 100% with no misses, 0.03 bombs a run.
+    - It kills 79% of the enemies, down from 86%, since they're spread wider.
+    - The derelict is destroyed in 94% of runs, down from 100%; in the rest it
+      leaves on its timer.
+    - JAWSTHIC is destroyed in every run.
+  - **Each boss phase without bombs** (`PG_SIM=boss:200`): every phase is survived
+    in 99-100% of runs.
+    - Each breaks in a median 24.9 / 29.5 / 29.0 / 25.0 s, inside the 20-35 s
+      target. FINS and GLITCH take longer than before (23.1 and 26.0 s): the bot
+      has further to go to line up under the fins.
+    - Phases 2 and 4 time out in 2% of runs, and the GLITCH laser catches the bot
+      once in 100.
+  - **Every sandbox pattern** (`PG_SIM=patterns:50`): 100% survived.
+- **Tests prove:**
+  - the playfield is 360 × 360 in every layout, and 1080 × 1080 on a 1080p screen
+    with no letterbox;
+  - every line of the side panels fits them, and the tuning hint clears the
+    controls;
+  - the touch buttons sit outside the wider field;
+  - no wave spawns closer than 20 px to a side;
+  - the sandbox's patterns still leave a 12 px gap in every band, and the boss's
+    fairness and 20-35 s checks still pass in every phase;
+  - the game opens full screen until you choose a window, an old save included.
+- **Not checked on your screen:** I didn't take over your display to try full
+  screen while you were working. Please check that it opens full screen and that
+  F11 brings back a window.
+- Every screenshot is retaken with the wider field. Native and web builds are
+  warning-free, and all 215 tests pass.
+
 ## [0.7.1] - 2026-10-12 - Split sword
 
 ### Changed

@@ -52,10 +52,14 @@ the font and every sound are built when the game starts. Written in Rust on
 
 ## Status
 
+**v0.7.2, a bigger play area:** the playfield is square now, 1080 × 1080 on a
+1080p screen, top to bottom, with narrower panels either side, and the game opens
+full screen (F11 for a window).
+
 **v0.7.1, the split sword:** the Pilgrim is redesigned from Jason's sheet: two
 bone-white blades with teal channels, on a crossbar with an engine at each end.
-When you focus, the blades close into one sword and the teal beam fires from its
-tip. It flies exactly as before.
+When you focus, the blades close into one broad sword and the teal beam fires from
+its tip. It flies exactly as before.
 
 **v0.7, the boss:** JAWSTHIC, a great white carved from moon rock with a gothic
 cathedral for a body, from Jason's concept. Its fin cuts through the black hole's

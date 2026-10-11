@@ -61,9 +61,9 @@ pub fn touch_buttons(lay: &Layout) -> [(Button, f32, f32, f32); 3] {
             (Button::Next, (lay.cw - 80) as f32, (f.bottom() + 52) as f32, 13.0),
         ],
         Orient::Landscape => [
-            (Button::Bomb, (f.right() + 92) as f32, (lay.ch - 96) as f32, 20.0),
-            (Button::Pause, (f.right() + 92) as f32, 70.0, 12.0),
-            (Button::Next, (f.right() + 92) as f32, (lay.ch - 156) as f32, 15.0),
+            (Button::Bomb, ((f.right() + lay.cw) / 2) as f32, (lay.ch - 96) as f32, 20.0),
+            (Button::Pause, ((f.right() + lay.cw) / 2) as f32, 70.0, 12.0),
+            (Button::Next, ((f.right() + lay.cw) / 2) as f32, (lay.ch - 156) as f32, 15.0),
         ],
     }
 }
@@ -355,7 +355,7 @@ mod tests {
                 assert!(cx - r >= 0.0 && cx + r <= lay.cw as f32 && cy - r >= 0.0 && cy + r <= lay.ch as f32, "{b:?} off the canvas");
                 assert_eq!(button_at(&lay, cx, cy), Some(b));
             }
-            assert_eq!(button_at(&lay, (lay.field.x + 135) as f32, (lay.field.y + 180) as f32), None);
+            assert_eq!(button_at(&lay, (lay.field.x + lay.field.w / 2) as f32, (lay.field.y + 180) as f32), None);
         }
     }
 }
