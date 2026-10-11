@@ -500,6 +500,13 @@ pub const RUMBLE_GRAZE: (f32, f32, u32) = (0.0, 0.12, 35);
 pub const RUMBLE_WARNING: (f32, f32, u32) = (0.35, 0.1, 700);
 /// Continuous rumble is re-sent every this many frames.
 pub const RUMBLE_REPEAT: u64 = 4;
+/// Every rumble command is a radio packet to the controller, and over Bluetooth each
+/// one can take tens of ms, so the motors are only told when the strength changes.
+/// A command lasts this much longer than asked (s), and is topped up when less than
+/// RUMBLE_REFRESH (s) of it is left; when the rumble's time is up the motors are
+/// switched off.
+pub const RUMBLE_TAIL: f64 = 0.6;
+pub const RUMBLE_REFRESH: f64 = 0.1;
 /// "Low" rumble scales everything by this.
 pub const RUMBLE_LOW: f32 = 0.5;
 

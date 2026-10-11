@@ -782,11 +782,11 @@ async fn amain() {
         }
         next_frame().await;
     }
-    // a controller keeps the last strength it was given: zero it, and give the
-    // controller thread a couple of its 50 ms ticks to send that before we go
+    if hooks.perf && !scripted {
+        println!("{}  rumble commands {}", perf.summary(), input.pads.commands);
+    }
+    // a controller keeps the last strength it was given: zero it before we go
     input.pads.stop();
-    #[cfg(not(target_arch = "wasm32"))]
-    std::thread::sleep(std::time::Duration::from_millis(150));
 }
 
 #[cfg(test)]

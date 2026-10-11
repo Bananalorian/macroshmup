@@ -3,6 +3,28 @@
 Every version is one build sprint. Newest first. Versions are tagged in git, and
 each tag publishes a GitHub Release with downloads.
 
+## [0.6.2] - 2026-10-11 - Quiet radio
+
+### Fixed
+- **Input lag with a Bluetooth controller.** Every rumble command is a radio packet
+  to the controller, and over Bluetooth each one took 8 ms on average and up to
+  62 ms. On Windows the controller library re-sent the motor level 20 times a
+  second the whole time the game ran, even at rest, and the game re-sent its fire
+  hum 15 times a second on top. Now the motors are only told when the strength
+  changes (with a top-up before a long rumble runs out, and an "off" when it ends),
+  and on Windows the game drives them itself from a thread of its own, so a slow
+  write never holds up a frame.
+
+### Checked
+- 15 s of bot play through the buoys on the desktop: 52 rumble commands, where the
+  old code sent about 20 a second from the library alone plus 15 a second for the
+  hum; every frame on time (865 frames, none over 20 ms).
+- In the browser: 7 rumble commands in 3 s of firing, down from about 56.
+- Tests prove a held hum tells the controller once, not every few frames; a
+  weaker rumble never cuts off a stronger one; the motors go off when it's over.
+- `PG_PERF=1` now reports on any exit: frames over 20 ms, frames that didn't run
+  exactly one tick, and rumble commands sent.
+
 ## [0.6.1] - 2026-10-11 - The rumble stops
 
 ### Fixed

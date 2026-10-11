@@ -3,6 +3,18 @@
 Session notes for Claude Code: what shipped, tuning that changed, known issues, what's next.
 Newest first.
 
+## v0.6.2 Quiet radio (hotfix) - 2026-10-11
+
+Jason: lag in all three builds (exe, cargo run, browser). His controller: Xbox Wireless
+over **Bluetooth**; XInputSetState there costs avg 7.8 ms, worst 62 ms. gilrs ff (WGI)
+calls SetVibration every 50 ms for every ff device even at zero; the game re-sent the fire
+hum every 4 frames. Fix: `pad::Gate` (send only on change / top-up within RUMBLE_REFRESH of
+the command's end / explicit off at the end; RUMBLE_TAIL 0.6 s); Windows: gilrs built
+`with_force_feedback(false)`, rumble via XInputSetState (raw-dylib xinput1_4) on a motor
+thread that collapses a backlog to the latest level; `Pads::stop()` waits for the write.
+Frame pacing on his PC was already perfect (real clock, 60 Hz both monitors), so "lag" is
+input latency. If it persists: USB cable, or Rumble OFF in the pause menu.
+
 ## v0.6.1 The rumble stops (hotfix) - 2026-10-11
 
 Jason's controller kept rumbling (and Chrome/PC felt laggy; restart fixed it before).

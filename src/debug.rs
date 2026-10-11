@@ -386,11 +386,15 @@ pub struct Perf {
     sum: f64,
     cpu_sum: f64,
     cpu_worst: (f32, u64),
+    /// Frames that ran no tick, or more than one (stutter on a 60 Hz screen), and
+    /// frames slower than 20 ms.
+    uneven: u64,
+    slow: u64,
 }
 
 impl Perf {
     pub fn new() -> Perf {
-        Perf { dts: [1.0 / 60.0; PERF_WINDOW], cpu: [0.0; PERF_WINDOW], i: 0, ticks: 0, frames: 0, worst: 0.0, sum: 0.0, cpu_sum: 0.0, cpu_worst: (0.0, 0) }
+        Perf { dts: [1.0 / 60.0; PERF_WINDOW], cpu: [0.0; PERF_WINDOW], i: 0, ticks: 0, frames: 0, worst: 0.0, sum: 0.0, cpu_sum: 0.0, cpu_worst: (0.0, 0), uneven: 0, slow: 0 }
     }
 
     /// `dt` is the whole frame; `cpu` is the time spent updating and drawing it.
@@ -408,18 +412,22 @@ impl Perf {
             if cpu > self.cpu_worst.0 {
                 self.cpu_worst = (cpu, self.frames);
             }
+            self.uneven += (ticks != 1) as u64;
+            self.slow += (dt > 0.020) as u64;
         }
     }
 
-    /// One line for the console when a scripted run ends.
+    /// One line for the console when a run with PG_PERF ends.
     pub fn summary(&self) -> String {
         let n = self.frames.saturating_sub(30).max(1) as f64;
         format!(
-            "frames {}  avg {:.2} ms ({:.1} fps)  worst {:.2} ms  cpu avg {:.2} ms  cpu worst {:.2} ms (frame {})",
+            "frames {}  avg {:.2} ms ({:.1} fps)  worst {:.2} ms  over 20 ms {}  not 1 tick {}  cpu avg {:.2} ms  cpu worst {:.2} ms (frame {})",
             self.frames,
             self.sum / n * 1000.0,
             n / self.sum.max(1e-9),
             self.worst * 1000.0,
+            self.slow,
+            self.uneven,
             self.cpu_sum / n * 1000.0,
             self.cpu_worst.0 * 1000.0,
             self.cpu_worst.1
