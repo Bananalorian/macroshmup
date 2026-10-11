@@ -21,7 +21,7 @@ The toolchain is pinned in `rust-toolchain.toml` and CI uses the same version. D
 1. **The ship has no inertia.** Diagonals are normalized. Input moves the ship on the tick it's read.
 2. **A fixed 60 Hz sim.** Every gameplay timing is in frames. Gameplay RNG is seeded; cosmetic RNG is separate. `sim/` never draws, plays audio, or touches macroquad globals.
 3. **Enemy bullets draw above everything except the HUD**, and their cores are the brightest pixels on screen. Check with F2 or `PG_GRAY=1`.
-4. **Red means danger, teal means the Pilgrim.** Only the Pilgrim, the boss, enemy bullets and explosion fringes get color. Everything else uses the monochrome palette.
+4. **Color is for the Pilgrim, the boss, enemy bullets and explosion fringes.** Teal is the Pilgrim's; red marks danger (telegraphs, enemy lights). Enemy bullets come in several hues (red, teal, violet, amber, blue: Jason's call, v0.6.4), always with a white-hot core and a black outline. Everything else uses the monochrome palette.
 5. **Pixel-perfect:** a 640×360 canvas, a 270×360 playfield, integer scaling, nearest filtering, effects locked to the low-res grid.
 6. **No camera shake while enemy bullets are live.** At most 3 full-screen flashes per second. Respect the Reduce flashing and Screen shake options.
 7. **No asset files.** Art, font, sound and music are generated in code. The only exceptions are PNG sprite overrides or music files that Jason adds himself.
@@ -45,7 +45,7 @@ The toolchain is pinned in `rust-toolchain.toml` and CI uses the same version. D
 |---|---|
 | `PG_SCENE=title` / `stage:<seconds>` / `midboss` / `boss:<phase>` / `sandbox:<pattern>` / `stress` | jump straight there |
 | `PG_SHOTS=60,300` | save those frames to `./shots/` and quit |
-| `PG_AUTO=1` | the dodging bot plays |
+| `PG_AUTO=1` | the dodging bot plays (and retries forever) |
 | `PG_SIM=200` | 200 headless seeded bot runs with a balance report |
 | `PG_SEED=<n>` | fixed seed |
 | `PG_GRAY=1` | grayscale screenshots (value check) |

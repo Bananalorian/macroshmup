@@ -3,6 +3,26 @@
 Session notes for Claude Code: what shipped, tuning that changed, known issues, what's next.
 Newest first.
 
+## v0.6.4 Colors (after v0.6.3 feedback) - 2026-10-11
+
+**Jason's calls:** "I don't want every bullet red; should be some teal and other colors"
+(CLAUDE.md/AGENTS.md rule 4 and the art bible updated to say so). The game is hard ("probably
+a good thing"). Asked whether the drones were removed (no: redrawn as the Clerk in v0.6.3).
+Still sees lag after a while in every build, but not in my runs.
+
+**Shipped**: `bullets::Hue` (Red/Teal/Violet/Amber/Blue, Default Red) in Spawn, the SoA and
+Gun (`gun(..).hue(Hue::X)` in tune.rs); splits inherit it; stress fill random hues.
+`palette::hue_rims(h)` -> (rim, wobble rim); BulletArt.frames [hue][kind][wobble][turn];
+bloom ring and trails use the rim. Assignment: aimed singles/needles red, rings teal/blue,
+spirals violet, fans and sprinkles amber. PG_PERF interval lines every 30 s + summary on
+exit; PG_AUTO auto-retries 2 s after game over / stage end (`Game::retry`).
+
+**Lag investigation**: 10-min soak (scratchpad/soak/soak.ps1, bot + sound + his controller
+connected): memory/handles flat, cpu 0.3 ms/frame flat, avg 16.67 ms; sporadic present stalls
+(up to 1.6 s) with low cpu = outside the game. No accumulation in the game. Remaining suspect:
+his Bluetooth controller link (XInputSetState was 8-62 ms earlier). Asked him to test keyboard
+only / USB cable / FPS overlay (pause menu FPS: ON) when it lags, or run with PG_PERF=1.
+
 ## v0.6.3 Bone white (after v0.6 feedback) - 2026-10-11
 
 **Jason's calls:** remove rumble altogether for now (he had to restart the PC; he thinks

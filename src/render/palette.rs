@@ -1,6 +1,8 @@
 //! The palette, sampled from the PILGRIM sheet (SPRINTS.md §2).
-//! Red means danger, teal means the Pilgrim; everything else is monochrome.
+//! Red means danger, teal means the Pilgrim; enemy bullets come in several hues;
+//! everything else is monochrome.
 
+use crate::sim::bullets::Hue;
 use macroquad::color::Color;
 
 const fn hex(c: u32) -> Color {
@@ -35,6 +37,18 @@ pub const CORE: Color = hex(0xF4F1E6);
 pub const EMBER: Color = hex(0xFF6A50);
 /// The bullets' outline: as dark as it gets.
 pub const INK: Color = hex(0x000000);
+
+/// An enemy bullet's rim by hue, and the lighter rim of its wobble frame. Whatever
+/// the hue, the core is CORE and the outline INK, so cores stay the brightest pixels.
+pub fn hue_rims(h: Hue) -> (Color, Color) {
+    match h {
+        Hue::Red => (SIGNAL, EMBER),
+        Hue::Teal => (TEAL, hex(0x8AF2D6)),
+        Hue::Violet => (hex(0xA65CFF), hex(0xCB98FF)),
+        Hue::Amber => (hex(0xFFA62B), hex(0xFFD27A)),
+        Hue::Blue => (hex(0x3F7DFF), hex(0x8DB4FF)),
+    }
+}
 
 /// Plain white at full strength (a sprite's own colors, untinted).
 pub const WHITE_A: Color = Color::new(1.0, 1.0, 1.0, 1.0);
@@ -86,6 +100,10 @@ mod tests {
     fn bullet_cores_outshine_everything_else() {
         for c in [CREAM, ASH, SLATE, SOOT, DUSK, SIGNAL, TEAL, EMBER, VOID] {
             assert!(luma(CORE) > luma(c) + 0.08, "{c:?}");
+        }
+        for h in Hue::ALL {
+            let (rim, light) = hue_rims(h);
+            assert!(luma(CORE) > luma(rim) + 0.08 && luma(CORE) > luma(light) + 0.08, "{h:?}");
         }
         assert!(luma(INK) == 0.0, "a 0% outline");
     }

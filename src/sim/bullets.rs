@@ -37,6 +37,22 @@ impl Kind {
     }
 }
 
+/// A bullet's color: the hue of its rim. Every bullet keeps a white-hot core and a
+/// black outline whatever its hue, so it reads by value first.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
+pub enum Hue {
+    #[default]
+    Red,
+    Teal,
+    Violet,
+    Amber,
+    Blue,
+}
+
+impl Hue {
+    pub const ALL: [Hue; 5] = [Hue::Red, Hue::Teal, Hue::Violet, Hue::Amber, Hue::Blue];
+}
+
 /// How a bullet flies after it's fired.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Behavior {
@@ -64,6 +80,7 @@ pub struct Spawn {
     pub behavior: Behavior,
     /// The enemy that fired it (0: nobody), so its bullets can go when it dies.
     pub owner: u32,
+    pub hue: Hue,
 }
 
 #[derive(Clone)]
@@ -80,6 +97,7 @@ pub struct Bullets {
     pub age: Vec<u16>,
     pub grazed: Vec<bool>,
     pub owner: Vec<u32>,
+    pub hue: Vec<Hue>,
 }
 
 impl Bullets {
@@ -97,6 +115,7 @@ impl Bullets {
             age: Vec::with_capacity(n),
             grazed: Vec::with_capacity(n),
             owner: Vec::with_capacity(n),
+            hue: Vec::with_capacity(n),
         }
     }
 
@@ -116,6 +135,7 @@ impl Bullets {
         self.age.clear();
         self.grazed.clear();
         self.owner.clear();
+        self.hue.clear();
     }
 
     /// Add a bullet. Past the pool's capacity it's dropped rather than reallocating.
@@ -136,6 +156,7 @@ impl Bullets {
         self.age.push(0);
         self.grazed.push(false);
         self.owner.push(s.owner);
+        self.hue.push(s.hue);
     }
 
     pub fn swap_remove(&mut self, i: usize) {
@@ -150,6 +171,7 @@ impl Bullets {
         self.age.swap_remove(i);
         self.grazed.swap_remove(i);
         self.owner.swap_remove(i);
+        self.hue.swap_remove(i);
     }
 
     /// Advance bullet `i` one frame. Returns true if it split (and should be removed);
@@ -189,7 +211,7 @@ impl Bullets {
                     let base = self.dy[i].atan2(self.dx[i]);
                     for k in 0..n {
                         let a = base + k as f32 * std::f32::consts::TAU / n as f32;
-                        out.push(Spawn { x: self.x[i], y: self.y[i], vx: a.cos() * speed, vy: a.sin() * speed, kind, behavior: Behavior::Straight, owner: self.owner[i] });
+                        out.push(Spawn { x: self.x[i], y: self.y[i], vx: a.cos() * speed, vy: a.sin() * speed, kind, behavior: Behavior::Straight, owner: self.owner[i], hue: self.hue[i] });
                     }
                     return true;
                 }
@@ -239,7 +261,7 @@ mod tests {
 
     fn one(kind: Kind, behavior: Behavior, vx: f32, vy: f32) -> Bullets {
         let mut b = Bullets::new();
-        b.push(Spawn { x: 100.0, y: 100.0, vx, vy, kind, behavior, owner: 0 });
+        b.push(Spawn { x: 100.0, y: 100.0, vx, vy, kind, behavior, owner: 0, hue: Default::default() });
         b
     }
 
@@ -258,13 +280,13 @@ mod tests {
         let mut b = Bullets::new();
         let cap = b.x.capacity();
         for _ in 0..BULLET_CAP + 100 {
-            b.push(Spawn { x: 0.0, y: 0.0, vx: 0.0, vy: 1.0, kind: Kind::Small, behavior: Behavior::Straight, owner: 0 });
+            b.push(Spawn { x: 0.0, y: 0.0, vx: 0.0, vy: 1.0, kind: Kind::Small, behavior: Behavior::Straight, owner: 0, hue: Default::default() });
         }
         assert_eq!(b.len(), BULLET_CAP);
         assert_eq!(b.x.capacity(), cap, "no reallocation");
         b.swap_remove(0);
         assert_eq!(b.len(), BULLET_CAP - 1);
-        assert!(b.kind.len() == b.len() && b.age.len() == b.len() && b.grazed.len() == b.len() && b.owner.len() == b.len());
+        assert!(b.kind.len() == b.len() && b.age.len() == b.len() && b.grazed.len() == b.len() && b.owner.len() == b.len() && b.hue.len() == b.len());
     }
 
     #[test]

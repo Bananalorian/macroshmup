@@ -3,7 +3,7 @@
 //! are the brightest pixels on screen.
 
 use super::art::{Atlas, TURNS};
-use super::palette::{SIGNAL, WHITE_A};
+use super::palette::{SIGNAL, WHITE_A, hue_rims};
 use crate::sim::World;
 use crate::sim::bullets::{Behavior, Kind};
 use crate::sim::pattern::Mount;
@@ -48,22 +48,23 @@ pub fn draw_bullets(a: &Atlas, w: &World, ox: i32, oy: i32) {
             }
             let (x, y) = (b.x[i], b.y[i]);
             let age = b.age[i];
+            let (rim, _) = hue_rims(b.hue[i]);
             // odd trajectories leave a short trail
             if matches!(b.behavior[i], Behavior::Curve { .. } | Behavior::Pull { .. }) && age > 6 {
                 for s in 1..4 {
                     let d = s as f32 * 3.0 + kind.half_len();
-                    let c = Color { a: 0.5 / s as f32, ..SIGNAL };
+                    let c = Color { a: 0.5 / s as f32, ..rim };
                     a.fill(ox + (x - b.dx[i] * d).round() as i32, oy + (y - b.dy[i] * d).round() as i32, 1, 1, c);
                 }
             }
             let wob = ((age / 4) as usize + k) % 2;
-            let src = art.frames[k][wob][turn(b.dx[i], b.dy[i])];
+            let src = art.frames[b.hue[i] as usize][k][wob][turn(b.dx[i], b.dy[i])];
             let (sx, sy) = (ox + (x - src.w * 0.5).round() as i32, oy + (y - src.h * 0.5).round() as i32);
             if age < BLOOM_FRAMES {
                 // the spawn bloom: harmless, and it looks it
                 let ring = art.bloom[age as usize];
                 let (rx, ry) = (ox + (x - ring.w * 0.5).round() as i32, oy + (y - ring.h * 0.5).round() as i32);
-                a.blit(ring, rx, ry, 1, Color { a: 0.7 - age as f32 * 0.15, ..SIGNAL });
+                a.blit(ring, rx, ry, 1, Color { a: 0.7 - age as f32 * 0.15, ..rim });
                 a.blit(src, sx, sy, 1, Color { a: 0.35 + age as f32 * 0.15, ..WHITE_A });
             } else {
                 a.blit(src, sx, sy, 1, WHITE_A);

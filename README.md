@@ -18,6 +18,7 @@ the font and every sound are built when the game starts. Written in Rust on
 | | |
 |---|---|
 | ![Gunships alternate sides, popcorn around them](docs/screenshots/gunships.png) | ![A heavy: rings of big orbs and needle bursts](docs/screenshots/heavies.png) |
+| ![Turret buoys: teal rings and violet spirals among amber fans](docs/screenshots/buoys.png) | |
 | ![The derelict rises out of the disk, its turrets firing](docs/screenshots/derelict.png) | ![The same in grayscale: bullet cores are the brightest pixels](docs/screenshots/derelict-gray.png) |
 | ![The breather: the disk flares, debris drifts, a tiny figure falls](docs/screenshots/breather.png) | ![WARNING](docs/screenshots/warning.png) |
 | ![The end of the stage, for now](docs/screenshots/stage-end.png) | ![The pattern sandbox](docs/screenshots/sandbox.png) |
@@ -87,12 +88,12 @@ Rust is pinned to 1.91.1 in `rust-toolchain.toml`, the same version CI uses.
 |---|---|
 | `PG_SCENE=title` / `stage:<seconds>` / `midboss` / `sandbox:<pattern>` / `stress` / `shots:<n>` | jump straight there (`stage:85` starts Stage 1 at 1:25; `sandbox:3` or `sandbox:spiral`; `shots`: keep n player shots alive in the sandbox) |
 | `PG_SHOTS=60,300` | save those frames to `./shots/` and quit |
-| `PG_AUTO=1` | the dodging bot plays |
+| `PG_AUTO=1` | the dodging bot plays (and retries forever) |
 | `PG_SIM=200` | 200 headless seeded bot runs of Stage 1: clears, deaths per section, section timing, the derelict's kill time (`PG_SIM=patterns:200` runs every sandbox pattern) |
 | `PG_SEED=<n>` | fixed seed |
 | `PG_GRAY=1` | grayscale screenshots (value check) |
 | `PG_SIZE=1280x720` | window size |
-| `PG_PERF=1` | the performance overlay (and a summary when a `PG_SHOTS` run ends) |
+| `PG_PERF=1` | the performance overlay, a line every 30 s in the terminal, and a summary when the game closes |
 | `PG_SHEET=1` | save the ship's animation sheet and the enemy sheet to `./shots/` and quit |
 | `PG_FXSHEET=1` | save every explosion size at 4 moments and the black hole at the start and end of the stage |
 | `PG_BOOM=<0-3>` | set off a small, medium, large or boss blast 30 frames in |

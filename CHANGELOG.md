@@ -3,6 +3,36 @@
 Every version is one build sprint. Newest first. Versions are tagged in git, and
 each tag publishes a GitHub Release with downloads.
 
+## [0.6.4] - 2026-10-11 - Colors
+
+### Changed
+- **Enemy bullets come in five colors:** red, teal, violet, amber and blue. Each
+  pattern has its own, so layered fire reads as separate families: aimed singles
+  and needle bursts red, rings teal or blue, spirals violet, fans and random
+  sprinkles amber. Every bullet still has a white-hot core and a black outline,
+  so the cores stay the brightest pixels on screen. The spawn bloom and the trails
+  of curving bullets take the bullet's color. The sandbox patterns are colored
+  too, and the stress scenes mix all five.
+- The rule in CLAUDE.md and the art bible now says so: teal is still the Pilgrim's,
+  red still marks danger (telegraphs, enemy lights), and enemy bullets come in
+  several hues.
+
+### Added
+- `PG_PERF=1` prints a line every 30 s (frame times, how much of each frame was
+  the game's own work, particles, bullets, enemies) and a summary when the game
+  closes. `PG_AUTO=1` now plays on forever, retrying two seconds after a game over
+  or the stage's end.
+
+### Checked
+- **A 10-minute soak on Jason's PC** (the bot playing the stage over and over,
+  sound on, his controller connected): memory flat at 151 MB, handles flat at 473,
+  60 fps on average throughout, the game's own work 0.3 ms a frame from the first
+  minute to the last. No slowdown builds up. A few hitches (one of 1.6 s) came
+  from outside the game: its own work in those frames was under 9 ms.
+- Tests prove every bullet sprite, in every color, has a white core, a rim in its
+  color and a black outline, and that no rim is as bright as a core.
+- `PG_SIM=200`: unchanged, 100% cleared, every section on time.
+
 ## [0.6.3] - 2026-10-11 - Bone white
 
 ### Changed

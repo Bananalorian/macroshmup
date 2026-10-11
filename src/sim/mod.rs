@@ -264,7 +264,7 @@ impl World {
     /// Debug (PG_DIE): a live bullet right on the Pilgrim.
     pub fn debug_strike(&mut self) {
         let (x, y) = (self.player.x, self.player.y);
-        self.hazards.bullets.push(bullets::Spawn { x, y, vx: 0.0, vy: 0.0, kind: bullets::Kind::Orb, behavior: bullets::Behavior::Straight, owner: 0 });
+        self.hazards.bullets.push(bullets::Spawn { x, y, vx: 0.0, vy: 0.0, kind: bullets::Kind::Orb, behavior: bullets::Behavior::Straight, owner: 0, hue: Default::default() });
         let i = self.hazards.bullets.len() - 1;
         self.hazards.bullets.age[i] = 30;
     }

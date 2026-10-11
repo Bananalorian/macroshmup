@@ -390,11 +390,13 @@ pub struct Perf {
     /// frames slower than 20 ms.
     uneven: u64,
     slow: u64,
+    /// Since the last `interval()` report: frames, dt sum, worst dt, cpu sum, worst cpu, slow frames.
+    iv: (u64, f64, f32, f64, f32, u64),
 }
 
 impl Perf {
     pub fn new() -> Perf {
-        Perf { dts: [1.0 / 60.0; PERF_WINDOW], cpu: [0.0; PERF_WINDOW], i: 0, ticks: 0, frames: 0, worst: 0.0, sum: 0.0, cpu_sum: 0.0, cpu_worst: (0.0, 0), uneven: 0, slow: 0 }
+        Perf { dts: [1.0 / 60.0; PERF_WINDOW], cpu: [0.0; PERF_WINDOW], i: 0, ticks: 0, frames: 0, worst: 0.0, sum: 0.0, cpu_sum: 0.0, cpu_worst: (0.0, 0), uneven: 0, slow: 0, iv: (0, 0.0, 0.0, 0.0, 0.0, 0) }
     }
 
     /// `dt` is the whole frame; `cpu` is the time spent updating and drawing it.
@@ -415,6 +417,29 @@ impl Perf {
             self.uneven += (ticks != 1) as u64;
             self.slow += (dt > 0.020) as u64;
         }
+        let iv = &mut self.iv;
+        iv.0 += 1;
+        iv.1 += dt as f64;
+        iv.2 = iv.2.max(dt);
+        iv.3 += cpu as f64;
+        iv.4 = iv.4.max(cpu);
+        iv.5 += (dt > 0.020) as u64;
+    }
+
+    /// One line on the frames since the last call (for long runs with PG_PERF), then start over.
+    pub fn interval(&mut self) -> String {
+        let (n, dt, worst, cpu, cpu_worst, slow) = self.iv;
+        let n1 = n.max(1) as f64;
+        self.iv = (0, 0.0, 0.0, 0.0, 0.0, 0);
+        format!(
+            "{:>6} frames  avg {:.2} ms  worst {:.1} ms  over 20 ms {:>4}  cpu avg {:.2} ms  cpu worst {:.2} ms",
+            n,
+            dt / n1 * 1000.0,
+            worst * 1000.0,
+            slow,
+            cpu / n1 * 1000.0,
+            cpu_worst * 1000.0
+        )
     }
 
     /// One line for the console when a run with PG_PERF ends.

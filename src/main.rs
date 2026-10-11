@@ -146,6 +146,16 @@ impl Game {
         g
     }
 
+    /// Play the same mode again from the top.
+    fn retry(&mut self) {
+        let staged = matches!(&self.scene, Scene::Stage { world, .. } if world.stage.is_some());
+        if staged {
+            self.start_stage(0.0);
+        } else {
+            self.start_sandbox();
+        }
+    }
+
     /// Stage 1, `secs` seconds in.
     fn start_stage(&mut self, secs: f32) {
         let mut w = World::stage_at(self.seed, self.settings.tuning, secs);
@@ -611,6 +621,9 @@ async fn amain() {
     let mut mode_known = false;
     let mut dip_skip = false;
     let mut frame: u64 = 0;
+    let mut ended_at: Option<u64> = None;
+    let started = miniquad::date::now();
+    let mut perf_at = started;
     // closing the window comes through the loop (so PG_PERF can report)
     prevent_quit();
 
@@ -688,6 +701,7 @@ async fn amain() {
                     let cleared = world.stage.as_ref().is_some_and(|s| s.over);
                     if (world.life == Life::GameOver || cleared) && over.is_none() {
                         *over = Some(0);
+                        ended_at = Some(frame);
                     }
                     if let Some(size) = game.boom.take() {
                         let me = (world.player.x, world.player.y);
@@ -748,6 +762,20 @@ async fn amain() {
         }
         renderer.end(&lay);
         perf.record(dt, (miniquad::date::now() - t0) as f32, ticks);
+        // long runs with PG_PERF: a line every 30 s
+        if hooks.perf && !scripted && miniquad::date::now() - perf_at >= 30.0 {
+            perf_at = miniquad::date::now();
+            let (bullets, foes) = match &game.scene {
+                Scene::Stage { world, .. } => (world.hazards.bullets.len(), world.foes.list.len()),
+                _ => (0, 0),
+            };
+            println!("{:>5.0} s  {}  particles {}  bullets {}  enemies {}", perf_at - started, perf.interval(), renderer.parts.len(), bullets, foes);
+        }
+        // the bot plays on forever (PG_AUTO): two seconds after a game over or the stage's end, RETRY
+        if hooks.auto && ended_at.is_some_and(|f| frame >= f + 120) {
+            ended_at = None;
+            game.retry();
+        }
 
         frame += 1;
         if hooks.shots.contains(&frame) {

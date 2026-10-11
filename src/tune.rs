@@ -2,7 +2,7 @@
 //! fixed 60 Hz simulation, distances in low-res canvas pixels, speeds in px per
 //! frame, angles in degrees (0 is right, 90 is straight down the screen).
 
-use crate::sim::bullets::{Behavior, Kind};
+use crate::sim::bullets::{Behavior, Hue, Kind};
 use crate::sim::enemy::{Arm, arm};
 use crate::sim::pattern::{Gun, Mount, Preset, Shape};
 
@@ -245,7 +245,7 @@ pub const HOLE_TILT: f32 = 0.18;
 // the NEXT button or the pause menu). Speeds are px per frame.
 
 const fn gun(mount: Mount, shape: Shape, kind: Kind, speed: f32, every: u32, delay: u32, behavior: Behavior) -> Gun {
-    Gun { mount, shape, kind, speed, every, delay, behavior }
+    Gun { mount, shape, kind, speed, every, delay, behavior, hue: Hue::Red }
 }
 const STRAIGHT: Behavior = Behavior::Straight;
 
@@ -254,54 +254,54 @@ pub const SANDBOX: &[Preset] = &[
     Preset {
         name: "AIMED FANS",
         guns: &[
-            gun(Mount::Dummy(1), Shape::Fan { n: 5, spread: 48.0, aimed: true }, Kind::Orb, 2.6, 50, 30, STRAIGHT),
-            gun(Mount::At(60.0, 40.0), Shape::Fan { n: 3, spread: 24.0, aimed: true }, Kind::Small, 3.2, 70, 60, STRAIGHT),
-            gun(Mount::At(210.0, 40.0), Shape::Fan { n: 3, spread: 24.0, aimed: true }, Kind::Small, 3.2, 70, 95, STRAIGHT),
+            gun(Mount::Dummy(1), Shape::Fan { n: 5, spread: 48.0, aimed: true }, Kind::Orb, 2.6, 50, 30, STRAIGHT).hue(Hue::Red),
+            gun(Mount::At(60.0, 40.0), Shape::Fan { n: 3, spread: 24.0, aimed: true }, Kind::Small, 3.2, 70, 60, STRAIGHT).hue(Hue::Amber),
+            gun(Mount::At(210.0, 40.0), Shape::Fan { n: 3, spread: 24.0, aimed: true }, Kind::Small, 3.2, 70, 95, STRAIGHT).hue(Hue::Amber),
         ],
         fill: 0,
     },
     Preset {
         name: "RINGS",
         guns: &[
-            gun(Mount::At(135.0, 56.0), Shape::Ring { n: 20, turn: 9.0 }, Kind::Small, 1.8, 36, 20, STRAIGHT),
-            gun(Mount::At(66.0, 70.0), Shape::Ring { n: 14, turn: -6.0 }, Kind::Orb, 1.5, 60, 38, STRAIGHT),
-            gun(Mount::At(204.0, 70.0), Shape::Ring { n: 14, turn: 6.0 }, Kind::Orb, 1.5, 60, 68, STRAIGHT),
+            gun(Mount::At(135.0, 56.0), Shape::Ring { n: 20, turn: 9.0 }, Kind::Small, 1.8, 36, 20, STRAIGHT).hue(Hue::Teal),
+            gun(Mount::At(66.0, 70.0), Shape::Ring { n: 14, turn: -6.0 }, Kind::Orb, 1.5, 60, 38, STRAIGHT).hue(Hue::Blue),
+            gun(Mount::At(204.0, 70.0), Shape::Ring { n: 14, turn: 6.0 }, Kind::Orb, 1.5, 60, 68, STRAIGHT).hue(Hue::Blue),
         ],
         fill: 0,
     },
     Preset {
         name: "SPIRAL",
-        guns: &[gun(Mount::At(135.0, 70.0), Shape::Spiral { arms: 3, spin: 11.0, flip: 40 }, Kind::Rice, 2.2, 5, 20, STRAIGHT)],
+        guns: &[gun(Mount::At(135.0, 70.0), Shape::Spiral { arms: 3, spin: 11.0, flip: 40 }, Kind::Rice, 2.2, 5, 20, STRAIGHT).hue(Hue::Violet)],
         fill: 0,
     },
     Preset {
         name: "STREAMS",
         guns: &[
-            gun(Mount::At(80.0, 46.0), Shape::Stream { burst: 8, gap: 4 }, Kind::Needle, 4.5, 75, 20, STRAIGHT),
-            gun(Mount::At(190.0, 46.0), Shape::Stream { burst: 8, gap: 4 }, Kind::Needle, 4.5, 75, 57, STRAIGHT),
+            gun(Mount::At(80.0, 46.0), Shape::Stream { burst: 8, gap: 4 }, Kind::Needle, 4.5, 75, 20, STRAIGHT).hue(Hue::Red),
+            gun(Mount::At(190.0, 46.0), Shape::Stream { burst: 8, gap: 4 }, Kind::Needle, 4.5, 75, 57, STRAIGHT).hue(Hue::Red),
         ],
         fill: 0,
     },
     Preset {
         name: "RANDOM CONE",
-        guns: &[gun(Mount::Sweep { y: 40.0, x0: 70.0, x1: 200.0, period: 360 }, Shape::Cone { n: 3, spread: 70.0, jitter: 0.25 }, Kind::Small, 2.4, 6, 20, STRAIGHT)],
+        guns: &[gun(Mount::Sweep { y: 40.0, x0: 70.0, x1: 200.0, period: 360 }, Shape::Cone { n: 3, spread: 70.0, jitter: 0.25 }, Kind::Small, 2.4, 6, 20, STRAIGHT).hue(Hue::Amber)],
         fill: 0,
     },
     Preset {
         name: "ACCELERATE",
-        guns: &[gun(Mount::At(135.0, 70.0), Shape::Ring { n: 16, turn: 7.0 }, Kind::Orb, 0.6, 45, 20, Behavior::Accel { accel: 0.05, max: 3.6 })],
+        guns: &[gun(Mount::At(135.0, 70.0), Shape::Ring { n: 16, turn: 7.0 }, Kind::Orb, 0.6, 45, 20, Behavior::Accel { accel: 0.05, max: 3.6 }).hue(Hue::Blue)],
         fill: 0,
     },
     Preset {
         name: "SLOW, PAUSE, AIM",
-        guns: &[gun(Mount::At(135.0, 80.0), Shape::Ring { n: 12, turn: 15.0 }, Kind::Orb, 3.0, 70, 20, Behavior::SlowAim { slow: 30, pause: 20, speed: 3.2 })],
+        guns: &[gun(Mount::At(135.0, 80.0), Shape::Ring { n: 12, turn: 15.0 }, Kind::Orb, 3.0, 70, 20, Behavior::SlowAim { slow: 30, pause: 20, speed: 3.2 }).hue(Hue::Violet)],
         fill: 0,
     },
     Preset {
         name: "CURVE",
         guns: &[
-            gun(Mount::At(135.0, 56.0), Shape::Fan { n: 5, spread: 100.0, aimed: false }, Kind::Rice, 2.0, 24, 20, Behavior::Curve { turn: 0.7, frames: 120 }),
-            gun(Mount::At(135.0, 56.0), Shape::Fan { n: 5, spread: 100.0, aimed: false }, Kind::Rice, 2.0, 24, 32, Behavior::Curve { turn: -0.7, frames: 120 }),
+            gun(Mount::At(135.0, 56.0), Shape::Fan { n: 5, spread: 100.0, aimed: false }, Kind::Rice, 2.0, 24, 20, Behavior::Curve { turn: 0.7, frames: 120 }).hue(Hue::Teal),
+            gun(Mount::At(135.0, 56.0), Shape::Fan { n: 5, spread: 100.0, aimed: false }, Kind::Rice, 2.0, 24, 32, Behavior::Curve { turn: -0.7, frames: 120 }).hue(Hue::Teal),
         ],
         fill: 0,
     },
@@ -315,22 +315,23 @@ pub const SANDBOX: &[Preset] = &[
             80,
             20,
             Behavior::Split { at: 70, n: 10, kind: Kind::Small, speed: 2.0 },
-        )],
+        )
+        .hue(Hue::Amber)],
         fill: 0,
     },
     Preset {
         name: "PULL",
         guns: &[
-            gun(Mount::At(40.0, 60.0), Shape::Ring { n: 10, turn: 13.0 }, Kind::Small, 2.2, 30, 20, Behavior::Pull { x: 135.0, y: 120.0, pull: 0.035, max: 3.0 }),
-            gun(Mount::At(230.0, 60.0), Shape::Ring { n: 10, turn: -13.0 }, Kind::Small, 2.2, 30, 35, Behavior::Pull { x: 135.0, y: 120.0, pull: 0.035, max: 3.0 }),
+            gun(Mount::At(40.0, 60.0), Shape::Ring { n: 10, turn: 13.0 }, Kind::Small, 2.2, 30, 20, Behavior::Pull { x: 135.0, y: 120.0, pull: 0.035, max: 3.0 }).hue(Hue::Violet),
+            gun(Mount::At(230.0, 60.0), Shape::Ring { n: 10, turn: -13.0 }, Kind::Small, 2.2, 30, 35, Behavior::Pull { x: 135.0, y: 120.0, pull: 0.035, max: 3.0 }).hue(Hue::Violet),
         ],
         fill: 0,
     },
     Preset {
         name: "LAYERED",
         guns: &[
-            gun(Mount::At(135.0, 56.0), Shape::Ring { n: 18, turn: 10.0 }, Kind::Small, 1.6, 40, 20, STRAIGHT),
-            gun(Mount::Dummy(1), Shape::Fan { n: 3, spread: 20.0, aimed: true }, Kind::Orb, 3.0, 30, 40, STRAIGHT),
+            gun(Mount::At(135.0, 56.0), Shape::Ring { n: 18, turn: 10.0 }, Kind::Small, 1.6, 40, 20, STRAIGHT).hue(Hue::Teal),
+            gun(Mount::Dummy(1), Shape::Fan { n: 3, spread: 20.0, aimed: true }, Kind::Orb, 3.0, 30, 40, STRAIGHT).hue(Hue::Red),
         ],
         fill: 0,
     },
@@ -440,38 +441,38 @@ pub const HULL_SWAY: f32 = 12.0;
 /// In a firing flight of popcorn, this share fire (the rest are just obstacles).
 pub const DRONE_FIRE_SHARE: f32 = 0.8;
 /// Popcorn: one aimed shot, about half a second in.
-pub const DRONE_GUNS: &[Arm] = &[arm(0, 0, gun(Mount::Owner { dx: 0.0, dy: 6.0 }, Shape::Fan { n: 1, spread: 0.0, aimed: true }, Kind::Small, 2.6, 10_000, 34, STRAIGHT))];
+pub const DRONE_GUNS: &[Arm] = &[arm(0, 0, gun(Mount::Owner { dx: 0.0, dy: 6.0 }, Shape::Fan { n: 1, spread: 0.0, aimed: true }, Kind::Small, 2.6, 10_000, 34, STRAIGHT).hue(Hue::Red))];
 /// Couriers: one fast aimed needle, early.
-pub const COURIER_GUNS: &[Arm] = &[arm(0, 0, gun(Mount::Owner { dx: 0.0, dy: 10.0 }, Shape::Fan { n: 1, spread: 0.0, aimed: true }, Kind::Needle, 3.2, 10_000, 24, STRAIGHT))];
+pub const COURIER_GUNS: &[Arm] = &[arm(0, 0, gun(Mount::Owner { dx: 0.0, dy: 10.0 }, Shape::Fan { n: 1, spread: 0.0, aimed: true }, Kind::Needle, 3.2, 10_000, 24, STRAIGHT).hue(Hue::Red))];
 /// Ushers: an aimed shot from each prong, twice, while they wait.
 pub const USHER_GUNS: &[Arm] = &[
-    arm(0, 0, gun(Mount::Owner { dx: -10.0, dy: 10.0 }, Shape::Fan { n: 1, spread: 0.0, aimed: true }, Kind::Small, 2.4, 34, 40, STRAIGHT)),
-    arm(0, 0, gun(Mount::Owner { dx: 10.0, dy: 10.0 }, Shape::Fan { n: 1, spread: 0.0, aimed: true }, Kind::Small, 2.4, 34, 40, STRAIGHT)),
+    arm(0, 0, gun(Mount::Owner { dx: -10.0, dy: 10.0 }, Shape::Fan { n: 1, spread: 0.0, aimed: true }, Kind::Small, 2.4, 34, 40, STRAIGHT).hue(Hue::Violet)),
+    arm(0, 0, gun(Mount::Owner { dx: 10.0, dy: 10.0 }, Shape::Fan { n: 1, spread: 0.0, aimed: true }, Kind::Small, 2.4, 34, 40, STRAIGHT).hue(Hue::Violet)),
 ];
 /// Gunships: aimed 3-way fans, then 5-way, while they hover.
 pub const GUNSHIP_GUNS: &[Arm] = &[
-    arm(0, 0, gun(Mount::Owner { dx: 0.0, dy: 11.0 }, Shape::Fan { n: 3, spread: 24.0, aimed: true }, Kind::Rice, 2.6, 90, 56, STRAIGHT)),
-    arm(0, 0, gun(Mount::Owner { dx: 0.0, dy: 11.0 }, Shape::Fan { n: 5, spread: 48.0, aimed: true }, Kind::Small, 2.2, 90, 101, STRAIGHT)),
+    arm(0, 0, gun(Mount::Owner { dx: 0.0, dy: 11.0 }, Shape::Fan { n: 3, spread: 24.0, aimed: true }, Kind::Rice, 2.6, 90, 56, STRAIGHT).hue(Hue::Amber)),
+    arm(0, 0, gun(Mount::Owner { dx: 0.0, dy: 11.0 }, Shape::Fan { n: 5, spread: 48.0, aimed: true }, Kind::Small, 2.2, 90, 101, STRAIGHT).hue(Hue::Red)),
 ];
 /// Buoys: a static ring, or a three-armed spiral.
-pub const BUOY_RING: &[Arm] = &[arm(0, 0, gun(Mount::Owner { dx: 0.0, dy: 0.0 }, Shape::Ring { n: 16, turn: 5.6 }, Kind::Orb, 1.35, 50, 30, STRAIGHT))];
-pub const BUOY_SPIRAL: &[Arm] = &[arm(0, 0, gun(Mount::Owner { dx: 0.0, dy: 0.0 }, Shape::Spiral { arms: 3, spin: 13.0, flip: 0 }, Kind::Rice, 1.6, 7, 30, STRAIGHT))];
+pub const BUOY_RING: &[Arm] = &[arm(0, 0, gun(Mount::Owner { dx: 0.0, dy: 0.0 }, Shape::Ring { n: 16, turn: 5.6 }, Kind::Orb, 1.35, 50, 30, STRAIGHT).hue(Hue::Teal))];
+pub const BUOY_SPIRAL: &[Arm] = &[arm(0, 0, gun(Mount::Owner { dx: 0.0, dy: 0.0 }, Shape::Spiral { arms: 3, spin: 13.0, flip: 0 }, Kind::Rice, 1.6, 7, 30, STRAIGHT).hue(Hue::Violet))];
 /// Heavies: slow rings of big orbs (static) layered with needle bursts from both flanks
 /// (aimed) and a sprinkle of small ones (random).
 pub const HEAVY_GUNS: &[Arm] = &[
-    arm(0, 0, gun(Mount::Owner { dx: 0.0, dy: 6.0 }, Shape::Ring { n: 18, turn: 10.0 }, Kind::Large, 1.15, 64, 56, STRAIGHT)),
-    arm(0, 0, gun(Mount::Owner { dx: -16.0, dy: 15.0 }, Shape::Stream { burst: 4, gap: 5 }, Kind::Needle, 3.0, 70, 90, STRAIGHT)),
-    arm(0, 0, gun(Mount::Owner { dx: 16.0, dy: 15.0 }, Shape::Stream { burst: 4, gap: 5 }, Kind::Needle, 3.0, 70, 90, STRAIGHT)),
-    arm(0, 0, gun(Mount::Owner { dx: 0.0, dy: 10.0 }, Shape::Cone { n: 3, spread: 90.0, jitter: 0.25 }, Kind::Small, 1.9, 18, 70, STRAIGHT)),
+    arm(0, 0, gun(Mount::Owner { dx: 0.0, dy: 6.0 }, Shape::Ring { n: 18, turn: 10.0 }, Kind::Large, 1.15, 64, 56, STRAIGHT).hue(Hue::Blue)),
+    arm(0, 0, gun(Mount::Owner { dx: -16.0, dy: 15.0 }, Shape::Stream { burst: 4, gap: 5 }, Kind::Needle, 3.0, 70, 90, STRAIGHT).hue(Hue::Red)),
+    arm(0, 0, gun(Mount::Owner { dx: 16.0, dy: 15.0 }, Shape::Stream { burst: 4, gap: 5 }, Kind::Needle, 3.0, 70, 90, STRAIGHT).hue(Hue::Red)),
+    arm(0, 0, gun(Mount::Owner { dx: 0.0, dy: 10.0 }, Shape::Cone { n: 3, spread: 90.0, jitter: 0.25 }, Kind::Small, 1.9, 18, 70, STRAIGHT).hue(Hue::Amber)),
 ];
 /// The derelict. First: aimed fans from the hanging gun pods and slow rings from the
 /// nose gun. Cracked: a reversing spiral from the iris and aimed needle bursts.
 pub const HULL_GUNS: &[Arm] = &[
-    arm(1, 0, gun(Mount::Owner { dx: -44.0, dy: 41.0 }, Shape::Fan { n: 5, spread: 36.0, aimed: true }, Kind::Rice, 2.4, 60, 20, STRAIGHT)),
-    arm(3, 0, gun(Mount::Owner { dx: 44.0, dy: 41.0 }, Shape::Fan { n: 5, spread: 36.0, aimed: true }, Kind::Rice, 2.4, 60, 50, STRAIGHT)),
-    arm(2, 0, gun(Mount::Owner { dx: 0.0, dy: 46.0 }, Shape::Ring { n: 20, turn: 4.5 }, Kind::Orb, 1.35, 64, 40, STRAIGHT)),
-    arm(0, 2, gun(Mount::Owner { dx: 0.0, dy: -2.0 }, Shape::Spiral { arms: 5, spin: 8.5, flip: 30 }, Kind::Rice, 1.7, 7, 0, STRAIGHT)),
-    arm(0, 2, gun(Mount::Owner { dx: 0.0, dy: 26.0 }, Shape::Stream { burst: 5, gap: 4 }, Kind::Needle, 3.1, 90, 50, STRAIGHT)),
+    arm(1, 0, gun(Mount::Owner { dx: -44.0, dy: 41.0 }, Shape::Fan { n: 5, spread: 36.0, aimed: true }, Kind::Rice, 2.4, 60, 20, STRAIGHT).hue(Hue::Amber)),
+    arm(3, 0, gun(Mount::Owner { dx: 44.0, dy: 41.0 }, Shape::Fan { n: 5, spread: 36.0, aimed: true }, Kind::Rice, 2.4, 60, 50, STRAIGHT).hue(Hue::Amber)),
+    arm(2, 0, gun(Mount::Owner { dx: 0.0, dy: 46.0 }, Shape::Ring { n: 20, turn: 4.5 }, Kind::Orb, 1.35, 64, 40, STRAIGHT).hue(Hue::Teal)),
+    arm(0, 2, gun(Mount::Owner { dx: 0.0, dy: -2.0 }, Shape::Spiral { arms: 5, spin: 8.5, flip: 30 }, Kind::Rice, 1.7, 7, 0, STRAIGHT).hue(Hue::Violet)),
+    arm(0, 2, gun(Mount::Owner { dx: 0.0, dy: 26.0 }, Shape::Stream { burst: 5, gap: 4 }, Kind::Needle, 3.1, 90, 50, STRAIGHT).hue(Hue::Red)),
 ];
 
 // ------------------------------------------------------------------ the bot

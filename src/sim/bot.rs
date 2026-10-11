@@ -245,6 +245,7 @@ mod tests {
             kind: crate::sim::bullets::Kind::Large,
             behavior: crate::sim::bullets::Behavior::Straight,
             owner: 0,
+            hue: Default::default(),
         });
         w.hazards.bullets.age[0] = 10;
         let mut bot = Bot::new();
@@ -263,7 +264,7 @@ mod tests {
         let mut w = World::new(1, Default::default());
         w.dummies.clear();
         let (x, y) = (w.player.x, w.player.y);
-        w.hazards.bullets.push(crate::sim::bullets::Spawn { x, y, vx: 0.0, vy: 0.0, kind: crate::sim::bullets::Kind::Orb, behavior: crate::sim::bullets::Behavior::Straight, owner: 0 });
+        w.hazards.bullets.push(crate::sim::bullets::Spawn { x, y, vx: 0.0, vy: 0.0, kind: crate::sim::bullets::Kind::Orb, behavior: crate::sim::bullets::Behavior::Straight, owner: 0, hue: Default::default() });
         w.hazards.bullets.age[0] = 30;
         w.tick(Controls::default());
         assert!(matches!(w.life, crate::sim::Life::Struck { .. }));

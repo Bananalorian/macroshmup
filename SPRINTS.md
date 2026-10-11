@@ -55,7 +55,7 @@ The black hole image uses the same family: disk highlights around `#DFDBD1`, spa
 Its RGB streaks are mostly red, with thin hints of green and blue.
 
 ### Color rules
-- **Red means danger.** Enemy bullets are the only things with a white-hot core, a red rim and a black outline.
+- **Enemy bullets** are the only things with a white-hot core, a colored rim and a black outline. Each pattern has its hue (red, teal, violet, amber, blue; Jason, v0.6.4), so layered patterns read as separate families. Red still marks danger everywhere else: telegraphs and enemy lights.
 - **Teal means you.** Engines, trails, collected shards, graze sparks, the hitbox.
 - The Pilgrim's red bolts stay (they're on your sheet), but they're drawn translucent (60% or less), streaked and without an outline, so they never read as enemy bullets.
 - **The boss** gets red highlights: seams and a core that glow brighter as it charges an attack, so the color doubles as a telegraph.

@@ -25,7 +25,7 @@ fn quiet() -> World {
 /// A stationary, already-live bullet right on the Pilgrim.
 fn park(w: &mut World) {
     let (x, y) = (w.player.x, w.player.y);
-    w.hazards.bullets.push(Spawn { x, y, vx: 0.0, vy: 0.0, kind: Kind::Orb, behavior: Behavior::Straight, owner: 0 });
+    w.hazards.bullets.push(Spawn { x, y, vx: 0.0, vy: 0.0, kind: Kind::Orb, behavior: Behavior::Straight, owner: 0, hue: Default::default() });
     let i = w.hazards.bullets.len() - 1;
     w.hazards.bullets.age[i] = 30;
 }
@@ -48,7 +48,7 @@ fn the_bomb_cancels_every_enemy_bullet_inside_its_ring() {
     // a field full of bullets that don't move
     for i in 0..400 {
         let (x, y) = ((i * 37 % 270) as f32, (i * 53 % 360) as f32);
-        w.hazards.bullets.push(Spawn { x, y, vx: 0.0, vy: 0.0, kind: Kind::Small, behavior: Behavior::Straight, owner: 0 });
+        w.hazards.bullets.push(Spawn { x, y, vx: 0.0, vy: 0.0, kind: Kind::Small, behavior: Behavior::Straight, owner: 0, hue: Default::default() });
     }
     w.player.x = 30.0; // off to one side, so the ring has a long way to go
     w.tick(bomb());
@@ -163,7 +163,7 @@ fn respawn_invincibility_lasts_exactly_210_frames_and_you_cant_die_in_it() {
 fn bullets_cancel_30_frames_after_the_hit() {
     let mut w = quiet();
     for i in 0..50 {
-        w.hazards.bullets.push(Spawn { x: 20.0 + i as f32 * 4.0, y: 40.0, vx: 0.0, vy: 0.0, kind: Kind::Small, behavior: Behavior::Straight, owner: 0 });
+        w.hazards.bullets.push(Spawn { x: 20.0 + i as f32 * 4.0, y: 40.0, vx: 0.0, vy: 0.0, kind: Kind::Small, behavior: Behavior::Straight, owner: 0, hue: Default::default() });
     }
     park(&mut w);
     w.tick(idle());

@@ -2,7 +2,7 @@
 //! this one texture so the whole frame batches into a few draw calls.
 
 use super::font;
-use super::palette::{ASH, CORE, DUSK, EMBER, INK, SIGNAL, SLATE, SOOT};
+use super::palette::{ASH, CORE, DUSK, INK, SLATE, SOOT};
 use super::ship::{self, ShipArt};
 use macroquad::prelude::*;
 
@@ -170,7 +170,7 @@ pub const TURNS: usize = 8;
 
 /// One enemy bullet sprite: an ink outline, a red rim, a white-hot core.
 /// `f(x, y)` is the distance (px) from the bullet's core shape.
-fn bullet_image(size: u16, wobble: bool, f: impl Fn(f32, f32) -> f32, (outline, rim, core): (f32, f32, f32)) -> Image {
+fn bullet_image(size: u16, wobble: bool, f: impl Fn(f32, f32) -> f32, (outline, rim, core): (f32, f32, f32), (rim_c, light_c): (Color, Color)) -> Image {
     let mut img = Image::gen_image_color(size, size, Color::new(0.0, 0.0, 0.0, 0.0));
     let c = size as f32 * 0.5;
     let grow = if wobble { 0.35 } else { 0.0 };
@@ -180,7 +180,7 @@ fn bullet_image(size: u16, wobble: bool, f: impl Fn(f32, f32) -> f32, (outline, 
             let col = if d <= core + grow {
                 CORE
             } else if d <= rim {
-                if wobble { EMBER } else { SIGNAL }
+                if wobble { light_c } else { rim_c }
             } else if d <= outline {
                 INK
             } else {
@@ -195,7 +195,8 @@ fn bullet_image(size: u16, wobble: bool, f: impl Fn(f32, f32) -> f32, (outline, 
 /// The enemy bullets' sprites, and the guns' turrets.
 pub struct BulletArt {
     /// [kind][wobble frame][turn] (round bullets repeat their one turn).
-    pub frames: [[[Rect; TURNS]; 2]; 5],
+    /// [hue][kind][wobble frame][turn].
+    pub frames: [[[[Rect; TURNS]; 2]; 5]; 5],
     /// The spawn bloom, growing over 4 frames.
     pub bloom: [Rect; 4],
     pub turret: Rect,
@@ -203,7 +204,11 @@ pub struct BulletArt {
 
 fn bullet_art(p: &mut Packer) -> BulletArt {
     use crate::sim::bullets::{Kind, seg_dist};
-    let mut frames = [[[Rect::default(); TURNS]; 2]; 5];
+    use crate::sim::bullets::Hue;
+    let mut frames = [[[[Rect::default(); TURNS]; 2]; 5]; 5];
+    for hue in Hue::ALL {
+    let rims = super::palette::hue_rims(hue);
+    let frames = &mut frames[hue as usize];
     for kind in Kind::ALL {
         let r = kind.radius();
         let h = kind.half_len();
@@ -214,8 +219,8 @@ fn bullet_art(p: &mut Packer) -> BulletArt {
                 let wob = w == 1;
                 let img = match kind {
                     // an ellipse, long along the direction of flight
-                    Kind::Rice => bullet_image(12, wob, |x, y| ((x * c + y * s) / 1.8).hypot(-x * s + y * c), (r, r - 0.8, r - 1.6)),
-                    Kind::Needle => bullet_image(16, wob, |x, y| seg_dist(x, y, 0.0, 0.0, c, s, h), (r + 1.05, r + 0.05, 0.55)),
+                    Kind::Rice => bullet_image(12, wob, |x, y| ((x * c + y * s) / 1.8).hypot(-x * s + y * c), (r, r - 0.8, r - 1.6), rims),
+                    Kind::Needle => bullet_image(16, wob, |x, y| seg_dist(x, y, 0.0, 0.0, c, s, h), (r + 1.05, r + 0.05, 0.55), rims),
                     _ => {
                         let size = (2.0 * r).ceil() as u16 + 1;
                         let (rim, core) = match kind {
@@ -223,7 +228,7 @@ fn bullet_art(p: &mut Packer) -> BulletArt {
                             Kind::Orb => (r - 1.1, 2.5),
                             _ => (r - 1.7, 4.6),
                         };
-                        bullet_image(size, wob, |x, y| x.hypot(y), (r, rim, core))
+                        bullet_image(size, wob, |x, y| x.hypot(y), (r, rim, core), rims)
                     }
                 };
                 frames[kind as usize][w][t] = p.add(&img);
@@ -232,6 +237,7 @@ fn bullet_art(p: &mut Packer) -> BulletArt {
                 frames[kind as usize][w][t] = frames[kind as usize][w][0];
             }
         }
+    }
     }
     let mut bloom = [Rect::default(); 4];
     for (i, b) in bloom.iter_mut().enumerate() {
@@ -478,7 +484,7 @@ mod tests {
         all.extend(r.dummy);
         all.extend(r.dummy_sil);
         all.extend(r.ship.rects());
-        let mut b: Vec<Rect> = r.bullets.frames.iter().flatten().flatten().copied().collect();
+        let mut b: Vec<Rect> = r.bullets.frames.iter().flatten().flatten().flatten().copied().collect();
         b.sort_by(|a, c| (a.x, a.y).partial_cmp(&(c.x, c.y)).unwrap());
         b.dedup();
         all.extend(b);
@@ -501,7 +507,9 @@ mod tests {
     fn bullets_have_core_rim_and_outline() {
         let (img, r) = build();
         let same = |p: Color, c: Color| (p.r, p.g, p.b) == (c.r, c.g, c.b);
-        for (k, kind) in r.bullets.frames.iter().enumerate() {
+        for (hi, hue_frames) in r.bullets.frames.iter().enumerate() {
+        let (rim_c, light_c) = crate::render::palette::hue_rims(crate::sim::bullets::Hue::ALL[hi]);
+        for (k, kind) in hue_frames.iter().enumerate() {
             for (w, frame) in kind.iter().enumerate() {
                 for rect in frame {
                     let mut seen = (false, false, false);
@@ -510,14 +518,15 @@ mod tests {
                             let p = img.get_pixel(rect.x as u32 + x, rect.y as u32 + y);
                             if p.a > 0.0 {
                                 seen.0 |= same(p, CORE);
-                                seen.1 |= same(p, SIGNAL) || same(p, EMBER);
+                                seen.1 |= same(p, rim_c) || same(p, light_c);
                                 seen.2 |= same(p, INK);
                             }
                         }
                     }
-                    assert_eq!(seen, (true, true, true), "kind {k} wobble {w} {rect:?}");
+                    assert_eq!(seen, (true, true, true), "hue {hi} kind {k} wobble {w} {rect:?}");
                 }
             }
+        }
         }
     }
 

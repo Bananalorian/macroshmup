@@ -2,7 +2,7 @@
 //! points or from a moving enemy. Patterns are aimed, static or random, and the
 //! presets in `tune::SANDBOX` layer them together.
 
-use super::bullets::{Behavior, Bullets, Kind, Spawn};
+use super::bullets::{Behavior, Bullets, Hue, Kind, Spawn};
 use super::rng::Rng;
 use crate::tune::{BULLET_MARGIN, BULLET_MAX_AGE, FIELD_H, FIELD_W, SAFE_SPAWN, SANDBOX};
 
@@ -43,6 +43,15 @@ pub struct Gun {
     /// Frames before the first shot.
     pub delay: u32,
     pub behavior: Behavior,
+    /// The color of its bullets.
+    pub hue: Hue,
+}
+
+impl Gun {
+    /// The same gun, firing bullets of another color.
+    pub const fn hue(self, hue: Hue) -> Gun {
+        Gun { hue, ..self }
+    }
 }
 
 pub struct Preset {
@@ -189,7 +198,8 @@ impl Hazards {
             let a = self.rng.range(60.0, 120.0);
             let v = self.rng.range(0.8, 2.6);
             let (c, s) = deg(a);
-            self.bullets.push(Spawn { x, y: -BULLET_MARGIN * 0.5, vx: c * v, vy: s * v, kind: k, behavior: Behavior::Straight, owner: 0 });
+            let hue = Hue::ALL[(self.rng.next_u64() % 5) as usize];
+            self.bullets.push(Spawn { x, y: -BULLET_MARGIN * 0.5, vx: c * v, vy: s * v, kind: k, behavior: Behavior::Straight, owner: 0, hue });
         }
     }
 }
@@ -231,7 +241,7 @@ impl Emitter {
         let aim = (player.1 - self.y).atan2(player.0 - self.x).to_degrees();
         let shot = |angle: f32, speed: f32, out: &mut Vec<Spawn>| {
             let (c, s) = deg(angle);
-            Hazards::fire(out, Spawn { x: self.x, y: self.y, vx: c * speed, vy: s * speed, kind: g.kind, behavior: g.behavior, owner: self.owner }, player);
+            Hazards::fire(out, Spawn { x: self.x, y: self.y, vx: c * speed, vy: s * speed, kind: g.kind, behavior: g.behavior, owner: self.owner, hue: g.hue }, player);
         };
         let fired = match g.shape {
             Shape::Stream { burst, gap } => {
@@ -347,7 +357,7 @@ mod tests {
 
     #[test]
     fn spirals_reverse_and_streams_burst() {
-        let spiral = Gun { mount: Mount::At(135.0, 60.0), shape: Shape::Spiral { arms: 1, spin: 10.0, flip: 3 }, kind: Kind::Rice, speed: 2.0, every: 1, delay: 0, behavior: Behavior::Straight };
+        let spiral = Gun { mount: Mount::At(135.0, 60.0), shape: Shape::Spiral { arms: 1, spin: 10.0, flip: 3 }, kind: Kind::Rice, speed: 2.0, every: 1, delay: 0, behavior: Behavior::Straight, hue: Hue::Red };
         let mut e = Emitter::new(spiral, 0, 0.0);
         let mut out = vec![];
         let mut rng = Rng::new(1);
@@ -376,7 +386,7 @@ mod tests {
 
     #[test]
     fn until_next_counts_down_to_each_shot() {
-        let g = Gun { mount: Mount::Owner { dx: 0.0, dy: 5.0 }, shape: Shape::Fan { n: 3, spread: 20.0, aimed: true }, kind: Kind::Small, speed: 2.0, every: 10, delay: 4, behavior: Behavior::Straight };
+        let g = Gun { mount: Mount::Owner { dx: 0.0, dy: 5.0 }, shape: Shape::Fan { n: 3, spread: 20.0, aimed: true }, kind: Kind::Small, speed: 2.0, every: 10, delay: 4, behavior: Behavior::Straight, hue: Hue::Teal };
         let mut e = Emitter::new(g, 7, 0.0);
         let (mut rng, mut out) = (Rng::new(1), vec![]);
         for _ in 0..40 {
@@ -393,6 +403,7 @@ mod tests {
             assert_eq!(fired_at, promised, "it fires exactly when it said it would");
         }
         assert!(out.iter().all(|s| s.owner == 7 && s.y == 55.0), "owned, and fired from the enemy plus the offset");
+        assert!(out.iter().all(|s| s.hue == Hue::Teal), "in its gun's color");
         // a gun whose enemy may not fire stays quiet
         let mut e = Emitter::new(g, 7, 0.0);
         out.clear();

@@ -1,6 +1,6 @@
 [package]
 name = "pilgrim"
-version = "0.6.3"
+version = "0.6.4"
 description = "A vertical bullet-hell shmup: one small ship, a long way from home"
 repository = "https://github.com/Bananalorian/macroshmup"
 edition = "2024"
