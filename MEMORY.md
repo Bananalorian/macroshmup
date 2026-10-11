@@ -3,6 +3,49 @@
 Session notes for Claude Code: what shipped, tuning that changed, known issues, what's next.
 Newest first.
 
+## v0.7.1 Split sword (the Pilgrim redesigned) - 2026-10-12
+
+**Jason's call:** a new ship from his reference `docs/reference/Split-sword starship_ flight
+to laser.png` (two bone-white blades with teal channels in flight, closing into one sword
+that fires a teal laser): "the ship works the same but redesigned to this, along with the
+animation". Done out of sprint order as a point release; Sprint 7 is still next.
+
+**Shipped**
+- `render/ship.rs` rewritten. `KEYS[FORMS=5]`: per frame (left half, mirrored) the blade's
+  inner edge, channel core, outer edge (and above the shoulder), nacelle center, antenna
+  (column, height), strut start. Rows from the hitbox: TIP -21, CORNER -13, SHOULDER -8,
+  FOOT 7, channel ARCH -15 / STEP -1; crossbar rows 8-10; nacelles (half width 3) rows 8-14,
+  nozzle 15; capsule (half width 3) rows 11-21, nozzle 22. Canvas 33x49 centered on the
+  hitbox. `layout(k)` -> material map (M: Face, Rail, Wall, Core, Groove, Seam, Crack,
+  Metal, Window, Nozzle, Antenna, Strut, Red; Piece: Blade, Bar, Nacelle, Pod, Strut).
+- Banking: `dropped()` removes 1 or 2 plain Face columns from the middle of the dipping
+  side's outer face (never Core/Wall/Window/Red/Antenna/Seam/Groove); `roll_x` maps points.
+  The dipping side paints a tone darker.
+- `paint()`: bone (foes::BONE) with selective outlines: ink on bottoms, outer sides and
+  piece seams; a BONE[2] rim on top edges (so the tip shows on black); no ink down the
+  blades' inner edges. Face BONE[4] stippled, bevel 3, rail 4, walls BONE[0], core black.
+- Lights are found in the painted map: Channel (teal dashes flowing up, 0.8 idle, faster
+  and TEAL_HOT while beaming, a charge band running up on lock), Heart, Beacon, Keel,
+  Strobe, Window. Frame points: nozzles (flames hang below), tips (bolt muzzles), guns
+  (antenna tips: pod muzzles).
+- `Pose { form (= focus blend), locked, ... }`; `ShipArt::frame(form, bank)`,
+  `form_index`, `draw_silhouette`, `TIP` (the beam's nose). Player gained `locked`
+  (frames since the blend hit 1; cosmetic). main.rs: trails from the nacelle nozzles,
+  `Particles::lock` (2 sparks each way off the crossbar + a Cross at the tip) on locked == 1.
+- Beam is teal (TEAL / TEAL_HOT, now in palette.rs). Life icon redrawn. Afterimage alpha
+  0.14/0.08/0.04. Atlas 1024x512. `blit_flip` removed (pods were its only user).
+- Sheet (PG_SHEET / F9) is 440x344 with the transform row; CPU review sheet:
+  `cargo test --release pilgrim_sheet -- --ignored` -> shots/pilgrim_frames.png.
+- Every screenshot retaken (recipes: see the v0.6.4 `shot()` helper and the v0.7.0 boss
+  strip commands; breather = stage:70 frame 200, warning = stage:150 frame 90).
+  docs/screenshots/pilgrim-forms.png = boss:2 seed 3 bot, frames 509-516.
+
+**Measured:** 214 tests; PG_SIM=50 100% cleared/no-miss, JAWSTHIC destroyed in all;
+PG_PERF boss:2 60.2 fps, cpu 0.35 ms avg.
+
+**Open questions for Jason:** should the wide shot's red bolts go teal to match the laser?
+Is the bigger ship (31x44 vs 30x34) OK, or should it shrink? Sprint 7 (Score & shell) next.
+
 ## v0.7.0 JAWSTHIC (Sprint 6, the boss) - 2026-10-11
 
 **Jason's calls:** the boss is JAWSTHIC, his concept ("name jawsthic? lol"), 100% drawn
