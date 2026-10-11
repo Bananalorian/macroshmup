@@ -37,15 +37,19 @@ use render::{PostParams, Renderer};
 use render::hud::{self, HudView};
 use render::layout::Layout;
 use sim::player::Controls;
-use sim::{Event, World};
+use sim::{Event, Life, World};
+
+const TEAL_C: Color = render::palette::TEAL;
+const SIGNAL_C: Color = render::palette::SIGNAL;
 use storage::Settings;
 use synth::Id;
 
 enum Scene {
     /// The title, `t` ticks after it appeared.
     Title { t: u64 },
-    /// A run. `menu` is the pause menu's selected row while paused.
-    Stage { world: Box<World>, menu: Option<usize> },
+    /// A run. `menu` is the pause menu's selected row while paused; `over` the
+    /// game-over menu's once the last ship is gone.
+    Stage { world: Box<World>, menu: Option<usize>, over: Option<usize> },
 }
 
 struct Game {
@@ -137,7 +141,7 @@ impl Game {
         w.fill_shots = self.fill_shots;
         w.set_pattern(self.settings.view.pattern);
         w.invincible = self.settings.view.invincible;
-        self.scene = Scene::Stage { world: Box::new(w), menu: None };
+        self.scene = Scene::Stage { world: Box::new(w), menu: None, over: None };
     }
 
     /// The sandbox switches changed: apply them to the running stage.
@@ -153,7 +157,7 @@ impl Game {
 
     /// Step the sandbox pattern from a key, LB or the NEXT button.
     fn step_pattern(&mut self, dir: i32) {
-        if dir == 0 || !matches!(self.scene, Scene::Stage { menu: None, .. }) {
+        if dir == 0 || !matches!(self.scene, Scene::Stage { menu: None, over: None, .. }) {
             return;
         }
         menu::adjust(&mut self.settings, Item::Pattern, dir.signum());
@@ -201,6 +205,38 @@ impl Game {
                     audio.play(Id::Select, 1.0);
                     input.release();
                     self.start_stage();
+                }
+            }
+            Scene::Stage { over: Some(sel), .. } => {
+                let n = hud::OVER_ITEMS.len() as i32;
+                let before = *sel;
+                *sel = (*sel as i32 + ui.nav.1).rem_euclid(n) as usize;
+                let mut choice = ui.confirm.then_some(*sel);
+                if let Some((x, y)) = ui.tap {
+                    if let Some(i) = hud::over_tap(lay, x, y) {
+                        *sel = i;
+                        choice = Some(i);
+                    }
+                }
+                if *sel != before {
+                    audio.play(Id::Select, 0.5);
+                }
+                if ui.back {
+                    choice = Some(1);
+                }
+                match choice {
+                    Some(0) => {
+                        audio.play(Id::Select, 1.0);
+                        audio.silence();
+                        input.release();
+                        self.start_stage();
+                    }
+                    Some(_) => {
+                        audio.silence();
+                        input.release();
+                        self.scene = Scene::Title { t: 0 };
+                    }
+                    None => {}
                 }
             }
             Scene::Stage { menu: menu @ None, .. } => {
@@ -270,12 +306,20 @@ fn window_conf() -> Conf {
 fn effects(w: &World, r: &mut Renderer, input: &mut Input, s: &Settings, audio: &mut Audio) {
     let p = &w.player;
     let me = (p.x, p.y);
-    if w.frame % 2 == 0 {
-        r.parts.trail(p.x, p.y + 23.0, p.thrust());
+    let flying = matches!(w.life, Life::Alive | Life::Respawning { .. });
+    if flying && w.frame % 2 == 0 {
+        r.parts.trail(p.x, p.y + 23.0, p.thrust() || !w.alive());
     }
-    if w.frame % 4 == 0 {
+    if flying && w.frame % 4 == 0 {
         for (gx, gy) in p.pod_guns() {
             r.parts.trail(gx, gy + 13.0, false);
+        }
+    }
+    // a bomb's cancelled bullets become teal shards that fly to you (a sample on a crowded screen)
+    if w.cancel_shards {
+        let step = (w.cancelled.len() / 500).max(1);
+        for &(cx, cy) in w.cancelled.iter().step_by(step) {
+            r.parts.shard_to_you(cx, cy);
         }
     }
     for e in &w.events {
@@ -288,9 +332,36 @@ fn effects(w: &World, r: &mut Renderer, input: &mut Input, s: &Settings, audio: 
                 audio.blast(size);
             }
             Event::Graze { x, y } => r.parts.graze(x, y, p.x, p.y),
+            Event::Bomb { x, y } => {
+                // Shinjuku's grenade blast, scaled up to fill the screen: the boss-sized
+                // blast, smoke, a hot glow (its temporary light), a screen-wide shock ring
+                // and the RGB surge
+                explode(&mut r.fx, &mut r.parts, x, y, Size::Boss, me, s.reduce_flash, w.frame);
+                r.parts.smoke(x, y, 36, 120.0);
+                r.parts.glow(x, y, 7.0, 28);
+                r.parts.ring(x, y, 7.0, 30, TEAL_C);
+                r.fx.shock(x, y, 320.0, 6.0, 44);
+                let (px, frames) = tune::BOMB_SURGE;
+                r.fx.surge(if s.reduce_flash { px * tune::REDUCED_CA } else { px }, frames);
+            }
+            // the ring has swept the screen clean: now it may shake
+            Event::BombSwept => {
+                r.fx.shake(tune::SHAKE_BOMB, w.hazards.bullets.len(), s.shake);
+            }
+            Event::NoBomb => {}
+            Event::Struck { x, y } => {
+                r.parts.ring(x, y, 2.5, 10, SIGNAL_C);
+                r.parts.hit(x, y, false);
+                r.fx.aberrate(if s.reduce_flash { 0.6 } else { 1.6 });
+            }
             Event::Death { x, y } => {
+                // the sheet's destroy frames: the hull shatters into its own pixels
+                r.parts.shatter(x, y, &r.atlas.r.ship.pixels);
                 explode(&mut r.fx, &mut r.parts, x, y, Size::Large, me, s.reduce_flash, w.frame);
-                // every cancelled bullet pops (a sample of them on a crowded screen)
+                r.fx.surge(if s.reduce_flash { tune::DEATH_SURGE.0 * tune::REDUCED_CA } else { tune::DEATH_SURGE.0 }, tune::DEATH_SURGE.1);
+            }
+            Event::Cancel => {
+                // every bullet pops (a sample of them on a crowded screen)
                 let step = (w.cancelled.len() / 600).max(1);
                 for &(cx, cy) in w.cancelled.iter().step_by(step) {
                     r.parts.cancel(cx, cy);
@@ -298,6 +369,8 @@ fn effects(w: &World, r: &mut Renderer, input: &mut Input, s: &Settings, audio: 
                 // the screen's been cancelled, so it may shake
                 r.fx.shake(tune::SHAKE_DEATH, w.hazards.bullets.len(), s.shake);
             }
+            Event::Respawn => r.parts.ring(tune::START_X, tune::FIELD_H as f32 - 4.0, 3.0, 24, TEAL_C),
+            Event::GameOver => r.parts.ring(w.player.x, w.player.y, 4.0, 60, render::palette::CREAM),
             _ => {}
         }
         if let Some(k) = rumble::for_event(e).and_then(|k| rumble::scaled(k, s.rumble)) {
@@ -333,7 +406,14 @@ fn main() {
         debug::sim_report(n.trim().parse().unwrap_or(200));
         return;
     }
-    macroquad::Window::from_config(window_conf(), amain());
+    let conf = macroquad::conf::Conf {
+        miniquad_conf: window_conf(),
+        default_filter_mode: FilterMode::Nearest,
+        draw_call_vertex_capacity: tune::DRAW_CALL_VERTICES,
+        draw_call_index_capacity: tune::DRAW_CALL_INDICES,
+        ..Default::default()
+    };
+    macroquad::Window::from_config(conf, amain());
 }
 
 async fn amain() {
@@ -354,8 +434,11 @@ async fn amain() {
         return;
     }
 
-    // a frame to look at while the sounds are synthesized
+    // a frame to look at while the sounds are synthesized; it also draws enough to
+    // create every batch buffer up front, so no explosion ever waits on one
     let lay = Renderer::layout();
+    renderer.begin(&lay);
+    renderer.prewarm();
     renderer.begin(&lay);
     renderer.post(&lay, &PostParams { field: IRect::new(0, 0, lay.cw, lay.ch), time: 0.0 });
     hud::text(&renderer.atlas, "P I L G R I M", lay.cw / 2 - 38, lay.ch / 2 - 4, 1, 1, render::palette::ASH);
@@ -385,6 +468,7 @@ async fn amain() {
     game.settings.view.fps |= hooks.perf;
     let mut fullscreen = false;
     let mut mode_known = false;
+    let mut dip_skip = false;
     let mut frame: u64 = 0;
 
     loop {
@@ -422,26 +506,44 @@ async fn amain() {
         let dt = get_frame_time();
         let ticks = keys.filter(if scripted { 1 } else { clock.advance(dt as f64) }, game.settings.view.slowmo);
         for _ in 0..ticks {
+            // the bomb's slow-motion dip: half the ticks run while it lasts
+            if let Scene::Stage { world, menu: None, .. } = &game.scene {
+                if world.dip > 0 {
+                    dip_skip = !dip_skip;
+                    if dip_skip {
+                        continue;
+                    }
+                }
+            }
             match &mut game.scene {
                 Scene::Title { t } => *t += 1,
-                Scene::Stage { world, menu: None } => {
+                Scene::Stage { world, menu: None, over } => {
                     let (drag, bomb) = input.take();
-                    let c = if game.settings.view.autopilot { bot.decide(world) } else { Controls { mv: held.mv, drag, fire: held.fire, focus: held.focus, bomb } };
+                    let mut c = if game.settings.view.autopilot { bot.decide(world) } else { Controls { mv: held.mv, drag, fire: held.fire, focus: held.focus, bomb } };
+                    if hooks.bomb_at == Some(world.frame + 1) {
+                        c.bomb = true;
+                    }
+                    if hooks.die_at == Some(world.frame + 1) {
+                        world.debug_strike();
+                    }
                     world.tick(c);
                     if hooks.boom.is_some() && world.frame == 30 {
                         game.boom = hooks.boom.map(|i| Size::ALL[i]);
                     }
-                    renderer.parts.tick();
+                    renderer.parts.tick((world.player.x, world.player.y));
                     renderer.fx.tick();
                     effects(world, &mut renderer, &mut input, &game.settings, &mut audio);
+                    if world.life == Life::GameOver && over.is_none() {
+                        *over = Some(0);
+                    }
                     if let Some(size) = game.boom.take() {
                         let me = (world.player.x, world.player.y);
                         explode(&mut renderer.fx, &mut renderer.parts, 135.0, 150.0, size, me, game.settings.reduce_flash, world.frame);
                         audio.blast(size);
                     }
                     audio.handle(world);
-                    if world.events.contains(&Event::BombStub) {
-                        game.toast = Some(("THE BOMB ARRIVES IN V0.5".into(), tune::TOAST_FRAMES));
+                    if world.events.contains(&Event::NoBomb) {
+                        game.toast = Some(("NO BOMBS LEFT".into(), tune::TOAST_FRAMES / 2));
                     }
                     world.events.clear();
                 }
@@ -462,7 +564,7 @@ async fn amain() {
                 renderer.post(&lay, &PostParams { field: IRect::new(0, 0, lay.cw, lay.ch), time });
                 hud::title(&renderer, &lay, *t, mode_known.then_some(input.mode));
             }
-            Scene::Stage { world, menu } => {
+            Scene::Stage { world, menu, over } => {
                 render::scene::draw(&renderer, &lay, world, game.settings.view.hitboxes);
                 renderer.post(&lay, &PostParams { field: lay.field, time });
                 let view = HudView {
@@ -471,6 +573,9 @@ async fn amain() {
                     menu: *menu,
                     toast: game.toast.as_ref().map(|(m, l)| (m.as_str(), *l)),
                     bomb_flash: input.bomb_flash,
+                    lives: world.lives,
+                    bombs: world.bombs,
+                    over: *over,
                     pattern: world.hazards.preset,
                     bullets: world.hazards.bullets.len(),
                     hits: world.deaths,

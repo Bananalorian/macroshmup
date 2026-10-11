@@ -17,9 +17,13 @@ the font and every sound are built when the game starts. Written in Rust on
 
 | | |
 |---|---|
+| ![The bomb: the cancel ring sweeps the screen](docs/screenshots/bomb.png) | ![The Pilgrim shatters into its own pixels](docs/screenshots/death.png) |
 | ![A boss-sized blast: the shock ring bends the black hole](docs/screenshots/blast.png) | ![On a phone](docs/screenshots/phone.png) |
 | ![Layered rings and aimed fans](docs/screenshots/layered.png) | ![The same in grayscale: bullet cores are the brightest pixels](docs/screenshots/layered-gray.png) |
 | ![The title and the black hole](docs/screenshots/title.png) | ![The pause menu: sandbox, options and tuning](docs/screenshots/tuning.png) |
+| ![Game over](docs/screenshots/game-over.png) | |
+
+![The bomb beside Last Train to Shinjuku's grenade: the same blast, scaled up](docs/screenshots/bomb-vs-grenade.png)
 
 ![Every explosion size at 4 moments, and the black hole at the start and end of the stage](docs/screenshots/fx-sheet.png)
 
@@ -27,11 +31,12 @@ the font and every sound are built when the game starts. Written in Rust on
 
 ## Status
 
-**v0.4, Light & particles:** the black hole, a pixel-locked post pass (shock
-rings, the RGB split, bloom, grain), explosions in four sizes and thousands of
-particles, over the bullet engine and pattern sandbox from v0.3 (13 patterns plus
-stress scenes, keyboard, controller and touch, a dodging bot). A hit just resets
-the screen for now; lives, bombs and the real death arrive in v0.5.
+**v0.5, The special weapon:** the bomb (Shinjuku's grenade, scaled up to fill
+the screen, with a cancel ring that turns bullets into shards), the deathbomb, the
+real death and respawn, lives and game over. Over the black hole and post effects
+from v0.4 and the bullet engine and pattern sandbox from v0.3 (13 patterns plus
+stress scenes, keyboard, controller and touch, a dodging bot). The stage itself
+arrives in v0.6.
 See [SPRINTS.md](SPRINTS.md) for the plan.
 
 ## Controls
@@ -41,7 +46,7 @@ See [SPRINTS.md](SPRINTS.md) for the plan.
 | Move | arrows or WASD | D-pad or left stick | drag anywhere |
 | Fire | Z | A | automatic while you steer |
 | Focus (slow + beam) | Shift | RB or RT | a second finger |
-| Bomb (arrives in v0.5) | X | B | BOMB button |
+| Bomb (8 frames after a hit still saves you) | X | B | BOMB button |
 | Next sandbox pattern | `]` (`[` goes back) | LB | NEXT button |
 | Pause, sandbox and tuning | Esc | Start | II button |
 | Sound on/off | M | | |
@@ -82,6 +87,7 @@ Rust is pinned to 1.91.1 in `rust-toolchain.toml`, the same version CI uses.
 | `PG_FXSHEET=1` | save every explosion size at 4 moments and the black hole at the start and end of the stage |
 | `PG_BOOM=<0-3>` | set off a small, medium, large or boss blast 30 frames in |
 | `PG_INVINCIBLE=1` | bullets can't hurt you |
+| `PG_BOMB=<frame>` / `PG_DIE=<frame>` | bomb, or get hit, on that frame |
 | `PG_WAV=1` | dump every sound to `./shots/sfx/` |
 | `PG_MENU=1` | open the pause menu |
 | `PG_FRESH=1` | ignore the save file |

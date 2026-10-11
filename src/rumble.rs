@@ -15,10 +15,13 @@ pub fn for_event(e: &Event) -> Option<Kick> {
         Event::Break { big: false, .. } => Some(RUMBLE_BREAK),
         Event::Break { big: true, .. } => Some(RUMBLE_BIG_BREAK),
         Event::Bump => Some(RUMBLE_BUMP),
-        Event::BombStub => Some(RUMBLE_BOMB),
+        Event::Bomb { .. } => Some(RUMBLE_BOMB),
+        Event::Struck { .. } => Some(RUMBLE_STRUCK),
         Event::Death { .. } => Some(RUMBLE_DEATH),
+        Event::Respawn => Some(RUMBLE_RESPAWN),
+        Event::GameOver => Some(RUMBLE_GAME_OVER),
         Event::Graze { .. } => Some(RUMBLE_GRAZE),
-        Event::Volley { .. } | Event::Hit { .. } => None,
+        Event::Volley { .. } | Event::Hit { .. } | Event::BombSwept | Event::NoBomb | Event::Cancel => None,
     }
 }
 
@@ -47,7 +50,8 @@ pub fn scaled(k: Kick, level: Rumble) -> Option<Kick> {
 pub fn buzz(e: &Event) -> Option<u32> {
     match e {
         Event::Break { big: true, .. } => Some(40),
-        Event::BombStub => Some(60),
+        Event::Bomb { .. } => Some(60),
+        Event::Struck { .. } => Some(30),
         Event::Death { .. } => Some(80),
         Event::Bump => Some(15),
         _ => None,
@@ -63,7 +67,7 @@ mod tests {
     fn big_moments_kick_harder() {
         let small = for_event(&Event::Break { x: 0.0, y: 0.0, big: false }).unwrap();
         let big = for_event(&Event::Break { x: 0.0, y: 0.0, big: true }).unwrap();
-        let bomb = for_event(&Event::BombStub).unwrap();
+        let bomb = for_event(&Event::Bomb { x: 0.0, y: 0.0 }).unwrap();
         assert!(big.0 > small.0 && bomb.0 >= big.0);
         assert!(for_event(&Event::Hit { x: 0.0, y: 0.0, beam: false }).is_none(), "every hit would be a constant buzz");
     }

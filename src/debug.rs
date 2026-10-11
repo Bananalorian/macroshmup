@@ -16,6 +16,8 @@
 //!   PG_MENU=1                          open the pause menu (for screenshots)
 //!   PG_BOOM=<0-3>                      set off a small/medium/large/boss blast 30 frames in
 //!   PG_INVINCIBLE=1                    bullets can't hurt you (as in the pause menu)
+//!   PG_BOMB=<frame>                    press bomb on that frame
+//!   PG_DIE=<frame>                     put a bullet on the ship on that frame
 //!
 //! F1 hitboxes, F2 grayscale, F3 quarter speed, F4 frame step (Enter resumes),
 //! F5 invincible, F7 next pattern, F8 performance overlay, F9 export the ship sheet.
@@ -106,6 +108,8 @@ pub struct Hooks {
     pub fx_sheet: bool,
     pub boom: Option<usize>,
     pub invincible: bool,
+    pub bomb_at: Option<u64>,
+    pub die_at: Option<u64>,
     #[cfg_attr(target_arch = "wasm32", allow(dead_code))] // the sound dump is native-only
     pub wav: bool,
     pub menu: bool,
@@ -145,6 +149,8 @@ pub fn hooks() -> Hooks {
         sheet: env("PG_SHEET").is_some(),
         fx_sheet: env("PG_FXSHEET").is_some(),
         invincible: env("PG_INVINCIBLE").is_some(),
+        bomb_at: env("PG_BOMB").and_then(|s| s.trim().parse().ok()),
+        die_at: env("PG_DIE").and_then(|s| s.trim().parse().ok()),
         boom: env("PG_BOOM").and_then(|s| s.trim().parse().ok()).filter(|&n: &usize| n < 4),
         wav: env("PG_WAV").is_some(),
         menu: env("PG_MENU").is_some(),
@@ -161,7 +167,7 @@ pub fn sim_report(seeds: u32) {
     let presets: Vec<usize> = (0..SANDBOX.len()).filter(|&i| !SANDBOX[i].guns.is_empty()).collect();
     let threads = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4);
     let start = std::time::Instant::now();
-    println!("PG_SIM: {seeds} seeds x 60 s per pattern, {threads} threads");
+    println!("PG_SIM: {seeds} seeds x 60 s per pattern, {threads} threads, no bombs");
     println!("{:<18} {:>9} {:>11} {:>9} {:>11}", "PATTERN", "SURVIVED", "DEATHS/RUN", "GRAZES", "PEAK SHOTS");
     for &p in &presets {
         let next = std::sync::atomic::AtomicU32::new(0);
@@ -174,7 +180,7 @@ pub fn sim_report(seeds: u32) {
                         if k >= seeds {
                             break;
                         }
-                        let r = bot::trial(p, 1000 + k as u64, frames);
+                        let r = bot::trial(p, 1000 + k as u64, frames, false);
                         results.lock().unwrap().push(r);
                     }
                 });
@@ -291,11 +297,12 @@ pub struct Perf {
     worst: f32,
     sum: f64,
     cpu_sum: f64,
+    cpu_worst: (f32, u64),
 }
 
 impl Perf {
     pub fn new() -> Perf {
-        Perf { dts: [1.0 / 60.0; PERF_WINDOW], cpu: [0.0; PERF_WINDOW], i: 0, ticks: 0, frames: 0, worst: 0.0, sum: 0.0, cpu_sum: 0.0 }
+        Perf { dts: [1.0 / 60.0; PERF_WINDOW], cpu: [0.0; PERF_WINDOW], i: 0, ticks: 0, frames: 0, worst: 0.0, sum: 0.0, cpu_sum: 0.0, cpu_worst: (0.0, 0) }
     }
 
     /// `dt` is the whole frame; `cpu` is the time spent updating and drawing it.
@@ -310,6 +317,9 @@ impl Perf {
             self.worst = self.worst.max(dt);
             self.sum += dt as f64;
             self.cpu_sum += cpu as f64;
+            if cpu > self.cpu_worst.0 {
+                self.cpu_worst = (cpu, self.frames);
+            }
         }
     }
 
@@ -317,12 +327,14 @@ impl Perf {
     pub fn summary(&self) -> String {
         let n = self.frames.saturating_sub(30).max(1) as f64;
         format!(
-            "frames {}  avg {:.2} ms ({:.1} fps)  worst {:.2} ms  cpu avg {:.2} ms",
+            "frames {}  avg {:.2} ms ({:.1} fps)  worst {:.2} ms  cpu avg {:.2} ms  cpu worst {:.2} ms (frame {})",
             self.frames,
             self.sum / n * 1000.0,
             n / self.sum.max(1e-9),
             self.worst * 1000.0,
-            self.cpu_sum / n * 1000.0
+            self.cpu_sum / n * 1000.0,
+            self.cpu_worst.0 * 1000.0,
+            self.cpu_worst.1
         )
     }
 

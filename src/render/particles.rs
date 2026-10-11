@@ -30,11 +30,17 @@ enum Kind {
     Cross,
     /// A blast's hot core: a dithered disc that swells and fades fast (additive).
     Core,
+    /// One pixel of the shattered Pilgrim, in its own color.
+    Pixel,
+    /// A teal shard from a bomb-cancelled bullet, flying to the Pilgrim (additive).
+    Homing,
+    /// Dark smoke, swelling and thinning (the bomb, like Shinjuku's grenade).
+    Smoke,
 }
 
 impl Kind {
     fn additive(self) -> bool {
-        matches!(self, Kind::Spark | Kind::Ember | Kind::Spectral | Kind::Cross | Kind::Core)
+        matches!(self, Kind::Spark | Kind::Ember | Kind::Spectral | Kind::Cross | Kind::Core | Kind::Homing)
     }
 }
 
@@ -80,18 +86,71 @@ impl Particles {
         self.push(P { x, y, vx: angle.cos() * speed, vy: angle.sin() * speed, life, max: life, kind, color, drag, extra });
     }
 
-    pub fn tick(&mut self) {
+    /// Advance a frame. `target` is the Pilgrim, which teal shards fly to.
+    pub fn tick(&mut self, target: (f32, f32)) {
         for p in &mut self.list {
             p.x += p.vx;
             p.y += p.vy;
             p.vx *= p.drag;
             p.vy *= p.drag;
-            if p.kind == Kind::Ember {
-                p.vy -= 0.02; // embers rise a little
+            match p.kind {
+                Kind::Ember => p.vy -= 0.02, // embers rise a little
+                Kind::Homing if p.max - p.life > 8 => {
+                    // after a short burst outward, home in, faster and faster
+                    let (dx, dy) = (target.0 - p.x, target.1 - p.y);
+                    let d = dx.hypot(dy).max(0.001);
+                    let pull = 0.9 + (p.max - p.life) as f32 * 0.04;
+                    p.vx = p.vx * 0.8 + dx / d * pull;
+                    p.vy = p.vy * 0.8 + dy / d * pull;
+                    if d < 6.0 {
+                        p.life = 1; // collected
+                    }
+                }
+                _ => {}
             }
             p.life -= 1;
         }
         self.list.retain(|p| p.life > 0);
+    }
+
+    /// The Pilgrim shattering into its own pixels, flung outward from its center.
+    pub fn shatter(&mut self, x: f32, y: f32, pixels: &[(i8, i8, Color)]) {
+        for &(dx, dy, c) in pixels {
+            let (fx, fy) = (dx as f32, dy as f32);
+            let a = fy.atan2(fx) + self.rng.range(-0.5, 0.5);
+            let s = self.rng.range(0.3, 2.4) * (0.6 + fx.hypot(fy) * 0.06);
+            let life = self.rng.range(30.0, 90.0);
+            self.spawn(Kind::Pixel, x + fx, y + fy, a, s, life, c, 0.965);
+        }
+    }
+
+    /// A bomb-cancelled bullet: a teal shard that flies to the Pilgrim.
+    pub fn shard_to_you(&mut self, x: f32, y: f32) {
+        let a = self.rng.range(0.0, std::f32::consts::TAU);
+        let s = self.rng.range(0.6, 1.8);
+        self.spawn(Kind::Homing, x, y, a, s, 90.0, TEAL, 0.94);
+    }
+
+    /// Dark smoke rolling out from a blast.
+    pub fn smoke(&mut self, x: f32, y: f32, n: u16, spread: f32) {
+        for _ in 0..n {
+            let a = self.rng.range(0.0, std::f32::consts::TAU);
+            let s = self.rng.range(0.2, 1.0) * spread * 0.05;
+            let life = self.rng.range(40.0, 80.0);
+            let r = self.rng.range(2.0, 4.5);
+            let (ox, oy) = (a.cos() * spread * 0.3, a.sin() * spread * 0.3);
+            self.push(P { x: x + ox, y: y + oy, vx: a.cos() * s, vy: a.sin() * s - 0.15, life: life as u16, max: life as u16, kind: Kind::Smoke, color: SLATE, drag: 0.97, extra: r });
+        }
+    }
+
+    /// A big hot glow, like the grenade's temporary light.
+    pub fn glow(&mut self, x: f32, y: f32, grow: f32, life: u16) {
+        self.push(P { x, y, vx: 0.0, vy: 0.0, life, max: life, kind: Kind::Core, color: CREAM, drag: 1.0, extra: grow });
+    }
+
+    /// An expanding ring of dots.
+    pub fn ring(&mut self, x: f32, y: f32, grow: f32, life: u16, color: Color) {
+        self.push(P { x, y, vx: 0.0, vy: 0.0, life, max: life, kind: Kind::Ring, color, drag: 1.0, extra: grow });
     }
 
     /// A shot landing: a few sparks kicked back down.
@@ -254,6 +313,17 @@ impl Particles {
                         a.fill(x, y, 1, 1, fade(Color { a: 0.45, ..p.color }, k));
                     }
                 }
+                Kind::Pixel => a.fill(x, y, 1, 1, fade(p.color, (k * 1.6).min(1.0))),
+                Kind::Homing => {
+                    a.fill(x, y, 1, 1, fade(p.color, 0.9));
+                    let (tx, ty) = ((p.x - p.vx).round() as i32, (p.y - p.vy).round() as i32);
+                    a.fill(ox + tx, oy + ty, 1, 1, fade(p.color, 0.45));
+                }
+                Kind::Smoke => {
+                    // a dithered blob that swells and thins out
+                    let age = (p.max - p.life) as f32;
+                    disc(a, &a.r.stipple, x, y, p.extra + age * 0.12, fade(Color { a: 0.32, ..p.color }, k));
+                }
                 Kind::Ring => {
                     let r = (p.max - p.life) as f32 * p.extra + 2.0;
                     let dots = (r * 1.4).clamp(8.0, 96.0) as i32;
@@ -270,24 +340,23 @@ impl Particles {
                     a.fill(x, y - r, 1, 2 * r + 1, c);
                 }
                 Kind::Core => {
-                    // a disc, solid in the middle and dithered at the rim
+                    // a red disc, dithered at the rim, with a cream heart
                     let age = (p.max - p.life) as f32;
                     let r = (2.0 + age * p.extra * 0.5).min(p.extra * 4.0);
-                    let ri = r.ceil() as i32;
-                    for dy in -ri..=ri {
-                        for dx in -ri..=ri {
-                            let d = ((dx * dx + dy * dy) as f32).sqrt();
-                            if d > r || (d > r * 0.6 && (dx + dy + p.life as i32) % 2 != 0) {
-                                continue;
-                            }
-                            let c = if d < r * 0.45 { CREAM } else { SIGNAL };
-                            a.fill(x + dx, y + dy, 1, 1, Color { a: 0.55 * k, ..c });
-                        }
-                    }
+                    disc(a, &a.r.discs, x, y, r, Color { a: 0.55 * k, ..SIGNAL });
+                    disc(a, &a.r.discs, x, y, r * 0.45, Color { a: 0.55 * k, ..CREAM });
                 }
             }
         }
     }
+}
+
+/// Blit the pre-drawn disc nearest radius `r` (doubled up past 16 px), centered on `(x, y)`.
+fn disc(a: &Atlas, set: &[macroquad::math::Rect; 16], x: i32, y: i32, r: f32, c: Color) {
+    let (scale, r) = if r > 16.5 { (2, r * 0.5) } else { (1, r) };
+    let i = (r.round() as usize).clamp(1, 16) - 1;
+    let half = (i as i32 + 1) * scale;
+    a.blit(set[i], x - half, y - half, scale, c);
 }
 
 #[cfg(test)]
@@ -305,7 +374,7 @@ mod tests {
         assert_eq!(p.len(), PARTICLE_CAP);
         assert_eq!(p.list.capacity(), cap);
         for _ in 0..120 {
-            p.tick();
+            p.tick((0.0, 0.0));
         }
         assert_eq!(p.len(), 0, "everything burns out");
     }
@@ -337,11 +406,34 @@ mod tests {
     }
 
     #[test]
+    fn bomb_shards_fly_to_you_and_are_collected() {
+        let mut p = Particles::new();
+        for i in 0..50 {
+            p.shard_to_you(i as f32 * 5.0, 20.0);
+        }
+        let target = (135.0, 300.0);
+        for _ in 0..80 {
+            p.tick(target);
+        }
+        assert_eq!(p.len(), 0, "every shard reached the Pilgrim");
+    }
+
+    #[test]
+    fn the_shatter_is_one_particle_per_pixel() {
+        let mut p = Particles::new();
+        let px = vec![(0i8, 0i8, TEAL), (3, -2, SIGNAL), (-5, 4, CREAM)];
+        p.shatter(100.0, 100.0, &px);
+        assert_eq!(p.len(), 3);
+        assert!(p.list.iter().all(|q| q.kind == Kind::Pixel));
+        assert!(p.list.iter().any(|q| q.color == SIGNAL), "pixels keep their colors");
+    }
+
+    #[test]
     fn stress_fill_keeps_the_count_up() {
         let mut p = Particles::new();
         for _ in 0..100 {
             p.fill(6000, 270.0, 360.0);
-            p.tick();
+            p.tick((0.0, 0.0));
         }
         p.fill(6000, 270.0, 360.0);
         assert!(p.len() >= 6000);

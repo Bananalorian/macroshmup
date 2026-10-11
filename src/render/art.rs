@@ -285,6 +285,13 @@ pub struct Rects {
     /// Still, moving, big; and their white silhouettes (the hit flash).
     pub dummy: [Rect; 3],
     pub dummy_sil: [Rect; 3],
+    /// White discs of radius 1..=16 px: solid inside with a dithered rim (glows),
+    /// and dithered all through (smoke). One blit each instead of a pixel per pixel.
+    pub discs: [Rect; 16],
+    pub stipple: [Rect; 16],
+    /// The HUD's life (a tiny Pilgrim) and bomb icons, 7x7.
+    pub life_icon: Rect,
+    pub bomb_icon: Rect,
 }
 
 impl Rects {
@@ -332,6 +339,39 @@ pub fn build() -> (Image, Rects) {
 
     let ship = ship::build(&mut p);
     let bullets = bullet_art(&mut p);
+    let icon = |c: char| match c {
+        'C' => Some(super::palette::CREAM),
+        'A' => Some(ASH),
+        'S' => Some(SLATE),
+        _ => None,
+    };
+    let mut discs = [Rect::default(); 16];
+    let mut stipple = [Rect::default(); 16];
+    for i in 0..16 {
+        let r = (i + 1) as f32;
+        let size = 2 * (i as u16 + 1) + 1;
+        let (mut solid, mut dots) = (Image::gen_image_color(size, size, Color::new(0.0, 0.0, 0.0, 0.0)), Image::gen_image_color(size, size, Color::new(0.0, 0.0, 0.0, 0.0)));
+        let c = size as i32 / 2;
+        for y in 0..size as i32 {
+            for x in 0..size as i32 {
+                let d = (((x - c) * (x - c) + (y - c) * (y - c)) as f32).sqrt();
+                if d > r + 0.3 {
+                    continue;
+                }
+                let odd = (x + y) % 2 == 0;
+                if d <= r * 0.6 || odd {
+                    solid.set_pixel(x as u32, y as u32, WHITE);
+                }
+                if odd {
+                    dots.set_pixel(x as u32, y as u32, WHITE);
+                }
+            }
+        }
+        discs[i] = p.add(&solid);
+        stipple[i] = p.add(&dots);
+    }
+    let life_icon = p.add(&grid_image(&rows(&["...C...", "..CAC..", ".CACAC.", "CACACAC", "CAACAAC", ".CA.AC.", "..S.S.."]), icon));
+    let bomb_icon = p.add(&grid_image(&rows(&["..CCC..", ".C...C.", "C..A..C", "C.AAA.C", "C..A..C", ".C...C.", "..CCC.."]), icon));
     let ims = dummy_images();
     let mut dummy = [Rect::default(); 3];
     let mut dummy_sil = [Rect::default(); 3];
@@ -339,7 +379,7 @@ pub fn build() -> (Image, Rects) {
         (dummy[i], dummy_sil[i]) = p.add_with_silhouette(im);
     }
 
-    (p.img, Rects { glyphs, px, plus, sparkle, ship, bullets, dummy, dummy_sil })
+    (p.img, Rects { glyphs, px, plus, sparkle, ship, bullets, dummy, dummy_sil, discs, stipple, life_icon, bomb_icon })
 }
 
 pub struct Atlas {
@@ -441,6 +481,9 @@ mod tests {
         all.extend(b);
         all.extend(r.bullets.bloom);
         all.push(r.bullets.turret);
+        all.extend([r.life_icon, r.bomb_icon]);
+        all.extend(r.discs);
+        all.extend(r.stipple);
         for (i, a) in all.iter().enumerate() {
             assert!(a.x >= 0.0 && a.y >= 0.0 && a.x + a.w <= W as f32 && a.y + a.h <= H as f32);
             for b in &all[i + 1..] {

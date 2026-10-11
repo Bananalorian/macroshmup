@@ -8,6 +8,8 @@ pub mod dummy;
 #[cfg(test)]
 mod fairness;
 pub mod geom;
+#[cfg(test)]
+mod lives;
 pub mod pattern;
 pub mod player;
 pub mod rng;
@@ -32,12 +34,55 @@ pub enum Event {
     Break { x: f32, y: f32, big: bool },
     /// The hull bumped into a target.
     Bump,
-    /// The bomb button (the bomb itself arrives in Sprint 4).
-    BombStub,
     /// A bullet's core passed close by.
     Graze { x: f32, y: f32 },
-    /// The placeholder death: the Pilgrim was hit at `(x, y)` and the screen resets.
+    /// The bomb went off at `(x, y)`.
+    Bomb { x: f32, y: f32 },
+    /// The bomb's ring has swept the whole screen (the moment to shake).
+    BombSwept,
+    /// The bomb button with no bombs left.
+    NoBomb,
+    /// A bullet hit the Pilgrim at `(x, y)`: the deathbomb window opens.
+    Struck { x: f32, y: f32 },
+    /// The window closed without a bomb: the Pilgrim is destroyed at `(x, y)`.
     Death { x: f32, y: f32 },
+    /// Every bullet on screen cancelled (after a death).
+    Cancel,
+    /// The next ship flies in.
+    Respawn,
+    /// No ships left.
+    GameOver,
+}
+
+/// Where the Pilgrim is in its life.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Life {
+    Alive,
+    /// Hit, with `left` frames to bomb and survive.
+    Struck { left: u32 },
+    /// Destroyed `t` frames ago.
+    Dead { t: u32 },
+    /// The next ship, `t` frames into flying up from the bottom.
+    Respawning { t: u32 },
+    GameOver,
+}
+
+/// A bomb going off.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct BombBlast {
+    pub x: f32,
+    pub y: f32,
+    /// Frames since it went off.
+    pub t: u32,
+    /// Which targets it's already hurt (once each).
+    hit: [bool; 8],
+}
+
+impl BombBlast {
+    /// The cancel ring's radius `t` frames in.
+    pub fn radius(t: u32) -> f32 {
+        BOMB_REACH * ((t + 1) as f32 / BOMB_GROW as f32).min(1.0)
+    }
 }
 
 /// The focus beam this frame, in playfield px.
@@ -58,7 +103,7 @@ impl Beam {
 }
 
 /// One run of the game: for now the Pilgrim, three target dummies and the
-/// pattern sandbox's guns.
+/// pattern sandbox's guns, with lives and bombs.
 pub struct World {
     pub seed: u64,
     /// Ticks since the run began. Every gameplay timing counts these.
@@ -78,10 +123,25 @@ pub struct World {
     pub hazards: Hazards,
     /// Bullets can't hurt you (sandbox option, F5).
     pub invincible: bool,
+    pub life: Life,
+    /// Ships left, including the one flying.
+    pub lives: u8,
+    pub bombs: u8,
+    /// Frames left that bullets can't hurt you (after a bomb or a respawn), and
+    /// whether it came from a respawn (the ship blinks) rather than a bomb.
+    pub invuln: u32,
+    pub invuln_blink: bool,
+    pub bomb: Option<BombBlast>,
+    /// Ticks left of the bomb's slow-motion dip (the caller runs them at half speed).
+    pub dip: u32,
+    /// Times struck (including ones a deathbomb saved), and times destroyed.
+    pub hits: u32,
     pub deaths: u32,
     pub grazes: u32,
-    /// Where bullets were when a death cleared them (for the effects), this frame only.
+    /// Where bullets were when they were cancelled this frame (for the effects), and
+    /// whether a bomb did it (they turn into teal shards that fly to you).
     pub cancelled: Vec<(f32, f32)>,
+    pub cancel_shards: bool,
 }
 
 impl World {
@@ -99,10 +159,42 @@ impl World {
             fill_shots: 0,
             hazards: Hazards::new(0, seed),
             invincible: false,
+            life: Life::Alive,
+            lives: LIVES,
+            bombs: BOMBS,
+            invuln: 0,
+            invuln_blink: false,
+            bomb: None,
+            dip: 0,
+            hits: 0,
             deaths: 0,
             grazes: 0,
             cancelled: Vec::with_capacity(crate::tune::BULLET_CAP),
+            cancel_shards: false,
         }
+    }
+
+    /// Flying and in control.
+    pub fn alive(&self) -> bool {
+        self.life == Life::Alive
+    }
+
+    /// Can a bullet hurt the Pilgrim right now?
+    pub fn vulnerable(&self) -> bool {
+        self.alive() && self.invuln == 0 && !self.invincible && self.hazards.preset().fill == 0
+    }
+
+    /// Can the Pilgrim bomb right now (in control, or inside the deathbomb window)?
+    pub fn can_bomb(&self) -> bool {
+        self.bombs > 0 && self.bomb.is_none() && matches!(self.life, Life::Alive | Life::Struck { .. })
+    }
+
+    /// Debug (PG_DIE): a live bullet right on the Pilgrim.
+    pub fn debug_strike(&mut self) {
+        let (x, y) = (self.player.x, self.player.y);
+        self.hazards.bullets.push(bullets::Spawn { x, y, vx: 0.0, vy: 0.0, kind: bullets::Kind::Orb, behavior: bullets::Behavior::Straight });
+        let i = self.hazards.bullets.len() - 1;
+        self.hazards.bullets.age[i] = 30;
     }
 
     /// Switch the sandbox to preset `i`.
@@ -124,13 +216,36 @@ impl World {
         self.frame += 1;
         let f = self.frame;
         self.cancelled.clear();
-        self.player.step(&c, &self.tuning);
+        self.cancel_shards = false;
+
+        // the bomb first, so a bomb pressed this frame already protects this frame
+        let mut saved = false;
+        if c.bomb {
+            if self.can_bomb() {
+                saved = matches!(self.life, Life::Struck { .. });
+                self.start_bomb();
+            } else if self.bombs == 0 && self.alive() {
+                self.events.push(Event::NoBomb);
+            }
+        }
+        self.advance_life(saved);
+
+        let flying = self.alive();
+        if flying {
+            self.player.step(&c, &self.tuning);
+        } else if let Life::Respawning { t } = self.life {
+            // up from below the screen, easing to a stop
+            let k = 1.0 - (1.0 - (t + 1) as f32 / RESPAWN_FLY as f32).powi(2);
+            let y0 = FIELD_H as f32 + 24.0;
+            self.player.place(START_X, y0 + (START_Y - y0) * k);
+        }
         for d in &mut self.dummies {
             d.tick(f);
         }
         let mut m = [(0.0, 0.0, false); 8];
         let n = self.mounts(&mut m);
         self.hazards.step((self.player.x, self.player.y), &m[..n]);
+        self.step_bomb();
 
         for s in &mut self.shots {
             s.x += s.vx;
@@ -139,11 +254,12 @@ impl World {
         }
         self.shots.retain(|s| !s.gone());
 
-        // the wide shot without focus; the beam with it
+        // the wide shot without focus; the beam with it (only while flying)
         let p = &mut self.player;
-        p.firing = c.fire && !c.focus;
-        p.beaming = c.fire && c.focus;
-        p.fire_t = if c.fire { p.fire_t + 1 } else { 0 };
+        let fire = c.fire && flying;
+        p.firing = fire && !c.focus;
+        p.beaming = fire && c.focus;
+        p.fire_t = if fire { p.fire_t + 1 } else { 0 };
         if p.firing && p.fire_cd == 0 {
             shots::volley(p, &mut self.shots);
             p.volley += 1;
@@ -154,12 +270,100 @@ impl World {
 
         self.collide_shots();
         self.fire_beam();
-        self.bump();
-        self.collide_bullets();
-        if c.bomb {
-            self.events.push(Event::BombStub);
+        if flying {
+            self.bump();
+            self.collide_bullets();
         }
         self.refill_shots();
+        self.invuln = self.invuln.saturating_sub(1);
+        self.dip = self.dip.saturating_sub(1);
+    }
+
+    /// The deathbomb window, the death, the cancel, the respawn.
+    fn advance_life(&mut self, saved: bool) {
+        match self.life {
+            Life::Struck { left } => {
+                if saved {
+                    self.life = Life::Alive;
+                } else if left <= 1 {
+                    self.final_death();
+                } else {
+                    self.life = Life::Struck { left: left - 1 };
+                }
+            }
+            Life::Dead { t } => {
+                let t = t + 1;
+                let since_hit = t + DEATHBOMB;
+                if since_hit == DEATH_CANCEL {
+                    let mut out = std::mem::take(&mut self.cancelled);
+                    self.hazards.cancel_within(0.0, 0.0, f32::MAX, &mut out);
+                    self.cancelled = out;
+                    self.events.push(Event::Cancel);
+                }
+                if since_hit < RESPAWN_AT {
+                    self.life = Life::Dead { t };
+                } else if self.lives == 0 {
+                    self.life = Life::GameOver;
+                    self.events.push(Event::GameOver);
+                } else {
+                    self.player = Player::new();
+                    self.player.place(START_X, FIELD_H as f32 + 24.0);
+                    self.player.history = [(START_X, FIELD_H as f32 + 24.0); player::HISTORY];
+                    self.bombs = BOMBS;
+                    self.invuln = RESPAWN_INVULN;
+                    self.invuln_blink = true;
+                    self.life = Life::Respawning { t: 0 };
+                    self.events.push(Event::Respawn);
+                }
+            }
+            Life::Respawning { t } => {
+                self.life = if t + 1 >= RESPAWN_FLY { Life::Alive } else { Life::Respawning { t: t + 1 } };
+            }
+            Life::Alive | Life::GameOver => {}
+        }
+    }
+
+    fn final_death(&mut self) {
+        self.deaths += 1;
+        self.lives = self.lives.saturating_sub(1);
+        self.life = Life::Dead { t: 0 };
+        self.beam = None;
+        self.events.push(Event::Death { x: self.player.x, y: self.player.y });
+    }
+
+    fn start_bomb(&mut self) {
+        let (x, y) = (self.player.x, self.player.y);
+        self.bombs -= 1;
+        self.bomb = Some(BombBlast { x, y, t: 0, hit: [false; 8] });
+        self.invuln = self.invuln.max(BOMB_INVULN);
+        self.invuln_blink = false;
+        self.dip = BOMB_DIP;
+        self.events.push(Event::Bomb { x, y });
+    }
+
+    /// The bomb's ring spreads, cancelling every bullet it crosses (into teal
+    /// shards) and hurting every target once.
+    fn step_bomb(&mut self) {
+        let Some(mut b) = self.bomb else { return };
+        let r = BombBlast::radius(b.t);
+        let mut out = std::mem::take(&mut self.cancelled);
+        let before = out.len();
+        self.hazards.cancel_within(b.x, b.y, r, &mut out);
+        self.cancel_shards |= out.len() > before;
+        self.cancelled = out;
+        for k in 0..self.dummies.len().min(8) {
+            let d = &self.dummies[k];
+            if !b.hit[k] && d.alive() && d.rect().dist(b.x, b.y) <= r {
+                b.hit[k] = true;
+                let dmg = if d.kind == dummy::DummyKind::Big { BOMB_DAMAGE.min(d.max_hp * BOMB_BOSS_CAP) } else { BOMB_DAMAGE };
+                self.hurt(k, dmg);
+            }
+        }
+        if b.t + 1 == BOMB_GROW {
+            self.events.push(Event::BombSwept);
+        }
+        b.t += 1;
+        self.bomb = (b.t < BOMB_ACTIVE).then_some(b);
     }
 
     fn hurt(&mut self, i: usize, dmg: f32) {
@@ -232,7 +436,7 @@ impl World {
     /// Enemy bullets against the hitbox: hits, and grazes (once per bullet).
     fn collide_bullets(&mut self) {
         let (px, py) = (self.player.x, self.player.y);
-        let safe = self.invincible || self.hazards.preset().fill > 0;
+        let safe = !self.vulnerable();
         let b = &mut self.hazards.bullets;
         let mut hit = false;
         for i in 0..b.len() {
@@ -249,20 +453,12 @@ impl World {
             }
         }
         if hit {
-            self.die();
+            // struck: the deathbomb window opens
+            self.hits += 1;
+            self.life = Life::Struck { left: DEATHBOMB };
+            self.player.hit_t = BUMP_FLASH;
+            self.events.push(Event::Struck { x: px, y: py });
         }
-    }
-
-    /// The placeholder death: flash, clear the screen, start again from the bottom.
-    fn die(&mut self) {
-        let b = &self.hazards.bullets;
-        self.cancelled.extend((0..b.len()).map(|i| (b.x[i], b.y[i])));
-        self.events.push(Event::Death { x: self.player.x, y: self.player.y });
-        self.hazards.reset();
-        self.deaths += 1;
-        self.player = Player::new();
-        self.player.hit_t = BUMP_FLASH;
-        self.player.bump_cd = BUMP_COOLDOWN;
     }
 
     fn refill_shots(&mut self) {
@@ -386,12 +582,6 @@ mod tests {
         assert!(!w.events.contains(&Event::Bump), "not again straight away");
     }
 
-    #[test]
-    fn the_bomb_button_is_heard() {
-        let mut w = World::new(1, Tuning::default());
-        w.tick(Controls { bomb: true, ..Default::default() });
-        assert!(w.events.contains(&Event::BombStub));
-    }
 
     #[test]
     fn shots_leave_the_screen_and_are_freed() {

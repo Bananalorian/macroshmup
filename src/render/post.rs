@@ -242,6 +242,8 @@ pub struct Fx {
     /// Shake strength, 0..1.
     pub shake: f32,
     pub flash: Flash,
+    /// The RGB surge: aberration held at least this high for this many frames.
+    surge: (f32, u32),
     frame: u64,
 }
 
@@ -262,6 +264,12 @@ impl Fx {
 
     pub fn aberrate(&mut self, px: f32) {
         self.ca = self.ca.max(px);
+    }
+
+    /// Hold the aberration at `px` for `frames` frames before it fades (the bomb's RGB surge).
+    pub fn surge(&mut self, px: f32, frames: u32) {
+        self.surge = (px, frames);
+        self.aberrate(px);
     }
 
     /// Shake the screen. Never while enemy bullets are live (they'd be harder to
@@ -286,6 +294,10 @@ impl Fx {
         }
         self.shocks.retain(|s| s.age < s.life);
         self.ca *= CA_DECAY;
+        if self.surge.1 > 0 {
+            self.surge.1 -= 1;
+            self.ca = self.ca.max(self.surge.0);
+        }
         if self.ca < 0.05 {
             self.ca = 0.0;
         }
@@ -372,6 +384,20 @@ mod tests {
             fx.tick();
         }
         assert_eq!(fx.ca, 0.0, "it rests at zero");
+    }
+
+    #[test]
+    fn the_surge_holds_then_fades() {
+        let mut fx = Fx::new();
+        fx.surge(4.0, 10);
+        for _ in 0..10 {
+            fx.tick();
+            assert!(fx.ca >= 4.0);
+        }
+        for _ in 0..30 {
+            fx.tick();
+        }
+        assert_eq!(fx.ca, 0.0);
     }
 
     #[test]

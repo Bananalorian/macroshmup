@@ -157,7 +157,7 @@ pub fn export_fx(r: &mut Renderer) {
             // the Pilgrim just below, so the aberration is felt
             explode(&mut r.fx, &mut r.parts, cx, cy, *size, (cx, cy + 60.0), false, 100);
             for _ in 0..m {
-                r.parts.tick();
+                r.parts.tick((cx, cy + 60.0));
                 r.fx.tick();
             }
             r.begin(&lay);

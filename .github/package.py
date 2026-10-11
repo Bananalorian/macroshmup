@@ -8,7 +8,7 @@ readme = """PILGRIM
 Somewhere beyond the event horizon. A small ship, a long way from home.
 
 Keyboard: arrows or WASD move, Z fire, Shift focus (fire + focus = the beam),
-X bomb, Esc pause and tuning, M sound, F11 or Alt+Enter fullscreen.
+X bomb (even 8 frames after a hit), Esc pause, M sound, F11 or Alt+Enter fullscreen.
 Controller: D-pad or left stick move, A fire, RB/RT focus, B bomb, Start pause.
 The pattern sandbox: ] and [ (or LB) change the pattern; the pause menu has more.
 

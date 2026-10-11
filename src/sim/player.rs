@@ -162,6 +162,16 @@ impl Player {
         self.bump_cd = self.bump_cd.saturating_sub(1);
     }
 
+    /// Put the ship somewhere directly (the respawn fly-in), keeping the trail and pods sensible.
+    pub fn place(&mut self, x: f32, y: f32) {
+        self.dx = x - self.x;
+        self.dy = y - self.y;
+        self.x = x;
+        self.y = y;
+        self.history.rotate_right(1);
+        self.history[0] = (x, y);
+    }
+
     /// Where the pods' guns are this frame.
     pub fn pod_guns(&self) -> [(f32, f32); 2] {
         [(self.x + self.pods[0].0, self.y + self.pods[0].1), (self.x + self.pods[1].0, self.y + self.pods[1].1)]

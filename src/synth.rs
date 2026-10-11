@@ -320,6 +320,81 @@ pub fn boss_blast(seed: u32) -> Vec<f32> {
     b
 }
 
+/// The bomb: Shinjuku's grenade in its heavy variant, over a deep downward sweep
+/// and a rushing whoosh as the ring spreads.
+pub fn bomb(seed: u32) -> Vec<f32> {
+    let boom = explosion(seed, true);
+    let mut b = vec![0.0; boom.len() + (0.6 * SR) as usize];
+    let mut r = Rng::new(seed + 1);
+    let mut bp = Bq::default();
+    let mut ph = 0.0f32;
+    for (i, s) in b.iter_mut().enumerate() {
+        let t = i as f32 / SR;
+        ph += (90.0 * (-t * 2.2).exp() + 26.0) / SR;
+        let sub = (TAU * ph).sin() * (-t * 1.6).exp() * 0.9;
+        let whoosh = bp.bandpass(r.noise(), 300.0 + 2600.0 * (-t * 3.0).exp(), 1.2) * (-t * 2.5).exp() * attack(t, 0.03) * 0.8;
+        *s = sub + whoosh + boom.get(i).copied().unwrap_or(0.0) * 1.1;
+    }
+    let mut b = reverb(&b, 0.45, 2.0, 0.72);
+    drive(&mut b, 1.5);
+    normalize(&mut b, 0.95);
+    b
+}
+
+/// Struck: a hard thud and two quick alarm blips (bomb now!).
+pub fn struck(seed: u32) -> Vec<f32> {
+    let thud = hit(seed);
+    let mut b = buf(0.32);
+    let mut lp = Lp::default();
+    for (i, s) in b.iter_mut().enumerate() {
+        let t = i as f32 / SR;
+        let blip = if t < 0.06 || (0.09..0.15).contains(&t) { sq(1320.0 * t, 0.5) * 0.35 } else { 0.0 };
+        *s = lp.run(blip, 4000.0) + thud.get(i).copied().unwrap_or(0.0);
+    }
+    normalize(&mut b, 0.85);
+    b
+}
+
+/// The next ship flies in: three soft rising notes.
+pub fn respawn_chime() -> Vec<f32> {
+    let mut b = buf(0.6);
+    for (k, f) in [523.25f32, 659.25, 783.99].iter().enumerate() {
+        let t0 = k as f32 * 0.09;
+        for (i, s) in b.iter_mut().enumerate() {
+            let t = i as f32 / SR - t0;
+            if t > 0.0 {
+                *s += (TAU * f * t).sin() * (-t * 6.0).exp() * attack(t, 0.01) * 0.4;
+            }
+        }
+    }
+    let b = reverb(&b, 0.35, 1.2, 0.6);
+    let mut b = b;
+    normalize(&mut b, 0.6);
+    b
+}
+
+/// Game over: a slow falling phrase over a low drone.
+pub fn game_over() -> Vec<f32> {
+    let mut b = buf(2.4);
+    let mut lp = Lp::default();
+    for (k, f) in [392.0f32, 349.23, 311.13, 261.63].iter().enumerate() {
+        let t0 = k as f32 * 0.32;
+        for (i, s) in b.iter_mut().enumerate() {
+            let t = i as f32 / SR - t0;
+            if t > 0.0 {
+                *s += sq(f * t, 0.3) * (-t * 2.5).exp() * attack(t, 0.01) * 0.25;
+            }
+        }
+    }
+    for (i, s) in b.iter_mut().enumerate() {
+        let t = i as f32 / SR;
+        *s = lp.run(*s, 1800.0) + (TAU * 65.41 * t).sin() * (1.0 - t / 2.4).max(0.0) * 0.25;
+    }
+    let mut b = reverb(&b, 0.4, 1.6, 0.7);
+    normalize(&mut b, 0.7);
+    b
+}
+
 /// A graze: a tiny bright tick, quiet enough to hear dozens of.
 pub fn graze(seed: u32) -> Vec<f32> {
     let mut b = buf(0.045);
@@ -364,6 +439,10 @@ pub enum Id {
     BlastMedium,
     BlastLarge,
     BlastBoss,
+    Bomb,
+    Struck,
+    Respawn,
+    GameOver,
 }
 
 /// Every sound as (id, wav bytes). Variants share an id.
@@ -382,6 +461,10 @@ pub fn bank() -> Vec<(Id, Vec<u8>)> {
     }
     v.push((Id::BlastLarge, mono(explosion(950, true))));
     v.push((Id::BlastBoss, mono(boss_blast(970))));
+    v.push((Id::Bomb, mono(bomb(980))));
+    v.push((Id::Struck, mono(struck(990))));
+    v.push((Id::Respawn, mono(respawn_chime())));
+    v.push((Id::GameOver, mono(game_over())));
     v.push((Id::Bump, mono(hit(300))));
     v.push((Id::NotYet, mono(not_yet())));
     v.push((Id::Select, mono(select())));
@@ -408,7 +491,7 @@ mod tests {
 
     #[test]
     fn nothing_clips() {
-        for b in [pilgrim_shot(1, 900.0), beam_hum(), not_yet(), tick(2), explosion(3, true), graze(4), death(5), pop(6), boss_blast(7)] {
+        for b in [pilgrim_shot(1, 900.0), beam_hum(), not_yet(), tick(2), explosion(3, true), graze(4), death(5), pop(6), boss_blast(7), bomb(8), struck(9), respawn_chime(), game_over()] {
             assert!(b.iter().all(|s| s.is_finite() && s.abs() <= 1.0));
         }
     }

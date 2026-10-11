@@ -133,10 +133,10 @@ fn new_bullets_bloom_harmlessly_for_four_frames() {
     // ages 1, 2, 3 after these ticks (age 0 was its first frame)
     for _ in 0..3 {
         w.tick(Controls::default());
-        assert_eq!(w.deaths, 0);
+        assert_eq!(w.hits, 0);
     }
     w.tick(Controls::default());
-    assert_eq!(w.deaths, 1, "live from its fifth frame");
+    assert_eq!(w.hits, 1, "live from its fifth frame");
 }
 
 #[test]
@@ -148,30 +148,7 @@ fn a_graze_counts_once_per_bullet() {
         w.tick(Controls::default());
     }
     assert_eq!(w.grazes, 1);
-    assert_eq!(w.deaths, 0, "close isn't touching");
-}
-
-#[test]
-fn a_hit_flashes_clears_the_screen_and_resets() {
-    let mut w = world(SANDBOX.iter().position(|p| p.name == "RINGS").unwrap(), 3);
-    for _ in 0..200 {
-        w.tick(Controls::default());
-        w.events.clear();
-    }
-    let crowd = w.hazards.bullets.len();
-    w.player.x = 40.0;
-    parked_bullet(&mut w, 0.0, Kind::Large, 30);
-    w.tick(Controls::default());
-    assert_eq!(w.deaths, 1);
-    assert!(w.events.iter().any(|e| matches!(e, super::Event::Death { .. })));
-    assert!(w.cancelled.len() >= crowd, "every bullet is cancelled");
-    assert_eq!(w.hazards.bullets.len(), 0);
-    assert_eq!((w.player.x, w.player.y), (START_X, START_Y), "back at the start");
-    assert!(w.player.hit_t > 0, "the hull flashes");
-    for _ in 0..DEATH_PAUSE {
-        w.tick(Controls::default());
-    }
-    assert_eq!(w.hazards.bullets.len(), 0, "the guns hold off for a moment");
+    assert_eq!(w.hits, 0, "close isn't touching");
 }
 
 #[test]
@@ -180,12 +157,12 @@ fn invincibility_and_stress_scenes_never_kill() {
     w.invincible = true;
     parked_bullet(&mut w, 0.0, Kind::Large, 30);
     w.tick(Controls::default());
-    assert_eq!(w.deaths, 0);
+    assert_eq!(w.hits, 0);
     let mut w = world(SANDBOX.iter().position(|p| p.fill > 0).unwrap(), 1);
     for _ in 0..300 {
         w.tick(Controls::default());
     }
-    assert_eq!(w.deaths, 0);
+    assert_eq!(w.hits, 0);
 }
 
 #[test]
@@ -198,7 +175,7 @@ fn standing_still_gets_you_hit() {
             w.tick(Controls::default());
             w.events.clear();
         }
-        hit += (w.deaths > 0) as usize;
+        hit += (w.hits > 0) as usize;
     }
     assert!(hit * 3 >= patterns().len() * 2, "only {hit} of {} patterns ever hit a sitting target", patterns().len());
 }
@@ -210,7 +187,7 @@ fn the_bot_survives_each_pattern_for_60_seconds_on_most_seeds() {
     let results: Vec<(usize, u32)> = std::thread::scope(|s| {
         let handles: Vec<_> = ps
             .iter()
-            .map(|&p| s.spawn(move || (p, (0..seeds).filter(|&k| bot::trial(p, 100 + k, 60 * TICK_HZ).0 == 0).count() as u32)))
+            .map(|&p| s.spawn(move || (p, (0..seeds).filter(|&k| bot::trial(p, 100 + k, 60 * TICK_HZ, false).0 == 0).count() as u32)))
             .collect();
         handles.into_iter().map(|h| h.join().unwrap()).collect()
     });

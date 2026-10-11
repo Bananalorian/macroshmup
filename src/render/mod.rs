@@ -154,6 +154,15 @@ impl Renderer {
         gl_use_default_material();
     }
 
+    /// Draw enough quads (off-screen, then cleared) to make macroquad create every
+    /// batch buffer a busy frame will need, before play starts.
+    pub fn prewarm(&self) {
+        let quads = crate::tune::PREWARM_DRAW_CALLS * crate::tune::DRAW_CALL_INDICES / 6;
+        for i in 0..quads {
+            self.atlas.fill((i % 8) as i32, 0, 1, 1, Color::new(0.0, 0.0, 0.0, 0.0));
+        }
+    }
+
     /// Switch particle drawing to the additive blend (and back).
     pub fn additive(&self, on: bool) {
         if on {

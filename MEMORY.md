@@ -3,6 +3,47 @@
 Session notes for Claude Code: what shipped, tuning that changed, known issues, what's next.
 Newest first.
 
+## v0.5.0 The special weapon (Sprint 4) - 2026-10-11
+
+**Jason's calls (after v0.4):** the black hole was meant as mood reference only, but he
+loves it: keep it, it may become a gimmick later. Super happy with the look. "Always think
+particle effects" for every new feature. PILGRIM is going to Steam as a full game (beyond
+the Stage 1 slice).
+
+**Shipped**
+- Sim (`sim/mod.rs`): `Life` Alive / Struck{left} / Dead{t} / Respawning{t} / GameOver;
+  lives 3, bombs 3; `invuln` (+ `invuln_blink` for respawns); `BombBlast` ring radius
+  `BOMB_REACH * (t+1)/BOMB_GROW`, cancels bullets inside (`cancel_shards` = teal shards),
+  hurts each target once (big ones capped at 40%), active 70 frames; `dip` (24 ticks run at
+  half speed in main). Order in tick: bomb input -> advance_life -> move -> hazards -> bomb.
+  Hit -> Struck{8}; bomb inside the window saves; else death at hit+8; cancel at hit+30;
+  respawn at hit+40 (fly-in 36 frames, no control); invuln 210 from respawn, 180 from bomb.
+- Events: Bomb, BombSwept (shake), NoBomb, Struck, Death, Cancel, Respawn, GameOver.
+  `hits` counts strikes, `deaths` final deaths. `debug_strike()` for PG_DIE.
+- `sim/lives.rs`: the Sprint 4 tests. Bot: deathbombs, bombs when every path collides
+  within 2 frames; `trial(.., bombs)` (fairness and PG_SIM run without bombs, lives = MAX).
+- Render: ship by life state (red ring when struck, teal blink on respawn invuln, teal
+  shimmer on bomb invuln), bomb ring (clipped to the field). Particles: Pixel (shatter =
+  `ShipArt::pixels`, every pixel of the ship), Homing teal shards (tick takes the target),
+  Smoke, glow, colored rings. Discs/stipple pre-drawn in the atlas (1 blit each).
+- HUD: life and bomb icons (atlas 7x7), game-over panel (RETRY / QUIT TO TITLE, taps).
+- Sounds: bomb, struck, respawn chime, game over; NotYet = no bombs.
+- Perf fix: macroquad creates new GPU buffers mid-frame when a frame needs more batches than
+  ever (~17 ms stall). Now `draw_call_vertex_capacity` 16384 / index 24576 and the loading
+  frame `prewarm()`s 40 batches. `default_filter_mode` is Nearest. 154 tests.
+- docs/screenshots/bomb-vs-grenade.png: Shinjuku built from the scratch clone (screenshot
+  path patched to ./shots there) with SJ_STATION=0 SJ_AUTO=1; blast around frame 179.
+
+**Tuning**: DEATHBOMB 8, DEATH_CANCEL 30, RESPAWN_AT 40, RESPAWN_FLY 36, RESPAWN_INVULN 210,
+BOMB_INVULN 180, BOMB_GROW 24, BOMB_REACH 460, BOMB_ACTIVE 70, BOMB_DAMAGE 600 (cap 0.4),
+BOMB_DIP 24, BOMB_SURGE 4.5 px x 20 frames, DEATH_SURGE 2.0 x 6, SHAKE_BOMB 1.0.
+
+**Verified**: bomb in quiet scene cpu worst 0.73 ms (was 17); in stress 2000 ~4 ms, 60 fps;
+web bomb 60 fps, no errors; PG_SIM=200 no bombs still 100% survival on all patterns.
+
+**Next: Sprint 5, Stage 1** (v0.6.0): enemy framework, roster, stage script, the mid-boss.
+Remember: particles for every enemy spawn/death/telegraph; black hole as a possible gimmick.
+
 ## v0.4.0 Light & particles (Sprint 3) - 2026-10-11
 
 **Jason's calls (after v0.3):** loves the patterns; keep all tuning options; hitbox dot stays

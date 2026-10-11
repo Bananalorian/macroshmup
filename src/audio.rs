@@ -17,6 +17,10 @@ fn mix(id: Id) -> (f32, f64) {
         Id::BlastMedium => (VOL_BLAST[1], 0.05),
         Id::BlastLarge => (VOL_BLAST[2], 0.15),
         Id::BlastBoss => (VOL_BLAST[3], 0.5),
+        Id::Bomb => (VOL_BOMB, 0.3),
+        Id::Struck => (VOL_STRUCK, 0.2),
+        Id::Respawn => (VOL_RESPAWN, 0.5),
+        Id::GameOver => (VOL_GAME_OVER, 1.0),
         Id::Bump => (0.3, 0.2),
         Id::NotYet => (VOL_UI, 0.15),
         Id::Select => (VOL_UI, 0.04),
@@ -97,9 +101,14 @@ impl Audio {
                 // blasts are played by the explosion kit, which knows their size
                 Event::Break { .. } => {}
                 Event::Bump => self.play(Id::Bump, 1.0),
-                Event::BombStub => self.play(Id::NotYet, 1.0),
                 Event::Graze { .. } => self.play(Id::Graze, 1.0),
+                Event::Bomb { .. } => self.play(Id::Bomb, 1.0),
+                Event::NoBomb => self.play(Id::NotYet, 1.0),
+                Event::Struck { .. } => self.play(Id::Struck, 1.0),
                 Event::Death { .. } => self.play(Id::Death, 1.0),
+                Event::Respawn => self.play(Id::Respawn, 1.0),
+                Event::GameOver => self.play(Id::GameOver, 1.0),
+                Event::BombSwept | Event::Cancel => {}
             }
         }
         self.beam_target = if w.player.beaming { 1.0 } else { 0.0 };

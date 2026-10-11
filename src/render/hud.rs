@@ -5,7 +5,8 @@ use super::Renderer;
 use super::art::Atlas;
 use super::font::{self, text_width};
 use super::layout::{IRect, Layout, Orient};
-use super::palette::{ASH, CREAM, DUSK, SLATE, STRIP, VOID, tone};
+use super::palette::{ASH, CREAM, DUSK, SLATE, STRIP, VOID, WHITE_A, tone};
+use macroquad::math::Rect;
 use crate::input::{Button, Mode, touch_buttons};
 use crate::menu::{self, ITEMS};
 use crate::storage::Settings;
@@ -162,6 +163,11 @@ pub struct HudView<'a> {
     pub menu: Option<usize>,
     pub toast: Option<(&'a str, u32)>,
     pub bomb_flash: u32,
+    /// Ships left (including the one flying) and bombs.
+    pub lives: u8,
+    pub bombs: u8,
+    /// The game-over menu's selected row, once the last ship is gone.
+    pub over: Option<usize>,
     /// The sandbox: pattern number, bullets on screen, hits, grazes.
     pub pattern: usize,
     pub bullets: usize,
@@ -229,23 +235,27 @@ pub fn stage(r: &Renderer, lay: &Layout, v: &HudView) {
             small(a, "TYPE-07", l0, 22, ASH);
             hrule(a, l0, l1, 34);
             small(a, "STAGE 1  //  SANDBOX", l0, 42, SLATE);
+            small(a, "LIVES", l0, 56, ASH);
+            icons(a, a.r.life_icon, v.lives, l1, 56);
+            small(a, "BOMBS", l0, 66, ASH);
+            icons(a, a.r.bomb_icon, v.bombs, l1, 66);
             let n = SANDBOX.len();
-            small(a, "PATTERN", l0, 58, ASH);
-            text_r(a, &format!("{}/{}", v.pattern % n + 1, n), l1, 58, SLATE);
-            small(a, SANDBOX[v.pattern % n].name, l0, 70, CREAM);
-            small(a, "BULLETS", l0, 84, SLATE);
-            text_r(a, &v.bullets.to_string(), l1, 84, ASH);
-            small(a, "HITS", l0, 94, SLATE);
-            text_r(a, &v.hits.to_string(), l1, 94, ASH);
-            small(a, "GRAZE", l0, 104, SLATE);
-            text_r(a, &v.grazes.to_string(), l1, 104, ASH);
+            small(a, "PATTERN", l0, 82, ASH);
+            text_r(a, &format!("{}/{}", v.pattern % n + 1, n), l1, 82, SLATE);
+            small(a, SANDBOX[v.pattern % n].name, l0, 94, CREAM);
+            small(a, "BULLETS", l0, 106, SLATE);
+            text_r(a, &v.bullets.to_string(), l1, 106, ASH);
+            small(a, "HITS", l0, 116, SLATE);
+            text_r(a, &v.hits.to_string(), l1, 116, ASH);
+            small(a, "GRAZE", l0, 126, SLATE);
+            text_r(a, &v.grazes.to_string(), l1, 126, ASH);
             let flags = sandbox_flags(&v.settings.view);
             if !flags.is_empty() {
-                small(a, &flags, l0, 116, CREAM);
+                small(a, &flags, l0, 138, CREAM);
             }
-            small(a, "TUNING", l0, 132, ASH);
+            small(a, "TUNING", l0, 152, ASH);
             for (i, (k, val)) in tuning_lines(v.settings).iter().enumerate() {
-                let y = 144 + i as i32 * 10;
+                let y = 164 + i as i32 * 10;
                 small(a, k, l0, y, SLATE);
                 text_r(a, val, l1, y, CREAM);
             }
@@ -253,7 +263,7 @@ pub fn stage(r: &Renderer, lay: &Layout, v: &HudView) {
                 Mode::Keys => "1-6 TO CHANGE",
                 _ => "PAUSE TO CHANGE",
             };
-            small(a, hint, l0, 176, SLATE);
+            small(a, hint, l0, 196, SLATE);
             let rows = controls(v.mode);
             let y0 = lay.ch - 42 - rows.len() as i32 * 10;
             for (i, (k, act)) in rows.iter().enumerate() {
@@ -279,6 +289,8 @@ pub fn stage(r: &Renderer, lay: &Layout, v: &HudView) {
             a.fill(0, 0, lay.cw, f.y, VOID);
             a.fill(0, f.bottom(), lay.cw, lay.ch - f.bottom(), VOID);
             small(a, "PILGRIM", 8, 8, CREAM);
+            icons_left(a, a.r.life_icon, v.lives, 64, 8);
+            icons_left(a, a.r.bomb_icon, v.bombs, 64 + 3 * 9 + 8, 8);
             text_r(a, &version_stamp(), lay.cw - 32, 8, ASH);
             hrule(a, 0, lay.cw, f.y - 1);
             hrule(a, 0, lay.cw, f.bottom());
@@ -301,8 +313,63 @@ pub fn stage(r: &Renderer, lay: &Layout, v: &HudView) {
             text_c(a, msg, f.x + f.w / 2, f.y + 40, 1, TRACK, CREAM);
         }
     }
-    if let Some(sel) = v.menu {
+    if let Some(sel) = v.over {
+        game_over(a, lay, v, sel);
+    } else if let Some(sel) = v.menu {
         pause_menu(a, lay, v, sel);
+    }
+}
+
+/// `n` icons ending at `right` (the side panel's right edge).
+fn icons(a: &Atlas, icon: Rect, n: u8, right: i32, y: i32) {
+    for i in 0..n as i32 {
+        a.blit(icon, right - 7 - i * 9, y, 1, WHITE_A);
+    }
+}
+
+/// `n` icons starting at `x`.
+fn icons_left(a: &Atlas, icon: Rect, n: u8, x: i32, y: i32) {
+    for i in 0..n.min(3) as i32 {
+        a.blit(icon, x + i * 9, y, 1, WHITE_A);
+    }
+}
+
+/// The game-over menu's rows.
+pub const OVER_ITEMS: [&str; 2] = ["RETRY", "QUIT TO TITLE"];
+
+/// The game-over panel's geometry: (panel, first row's y, row height).
+pub fn over_box(lay: &Layout) -> (IRect, i32, i32) {
+    let f = lay.field;
+    let panel = IRect::new(f.x + 30, f.y + f.h / 2 - 50, f.w - 60, 100);
+    (panel, panel.y + 52, 16)
+}
+
+/// Which game-over row a tap at canvas `(x, y)` lands on.
+pub fn over_tap(lay: &Layout, x: f32, y: f32) -> Option<usize> {
+    let (p, row0, row_h) = over_box(lay);
+    let (x, y) = (x as i32, y as i32);
+    if x < p.x || x >= p.right() || y < row0 - 4 {
+        return None;
+    }
+    let i = ((y - row0 + 4) / row_h) as usize;
+    (i < OVER_ITEMS.len()).then_some(i)
+}
+
+fn game_over(a: &Atlas, lay: &Layout, v: &HudView, sel: usize) {
+    let (p, row0, row_h) = over_box(lay);
+    a.fill(p.x, p.y, p.w, p.h, Color { a: 0.92, ..VOID });
+    hrule(a, p.x, p.right(), p.y);
+    hrule(a, p.x, p.right(), p.bottom() - 1);
+    text_c(a, "GAME OVER", p.x + p.w / 2, p.y + 12, 2, 3, CREAM);
+    text_c(a, &format!("HITS {}  GRAZE {}", v.hits, v.grazes), p.x + p.w / 2, p.y + 34, 1, 1, SLATE);
+    for (i, label) in OVER_ITEMS.iter().enumerate() {
+        let y = row0 + i as i32 * row_h;
+        let on = i == sel;
+        if on {
+            a.fill(p.x + 4, y - 3, p.w - 8, row_h - 3, Color { a: 0.5, ..DUSK });
+            text(a, ">", p.x + 10, y, 1, 1, CREAM);
+        }
+        text(a, label, p.x + 22, y, 1, 1, if on { CREAM } else { ASH });
     }
 }
 
@@ -439,6 +506,19 @@ mod tests {
         all.extend(ITEMS.iter().map(|i| menu::value(&s, *i)));
         for t in all {
             assert!(ok(&t), "{t:?} has a character the font can't draw");
+        }
+    }
+
+    #[test]
+    fn the_game_over_menu_fits_and_taps_land() {
+        for (w, h) in [(1280, 720), (390, 844)] {
+            let lay = Layout::fit(w, h);
+            let (p, row0, row_h) = over_box(&lay);
+            assert!(p.x >= lay.field.x && p.right() <= lay.field.right() && p.bottom() <= lay.field.bottom());
+            for i in 0..OVER_ITEMS.len() {
+                assert_eq!(over_tap(&lay, (p.x + 30) as f32, (row0 + i as i32 * row_h + 2) as f32), Some(i));
+            }
+            assert!(text_width("GAME OVER", 2, 3) <= p.w);
         }
     }
 

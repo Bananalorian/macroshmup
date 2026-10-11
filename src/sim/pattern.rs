@@ -4,7 +4,7 @@
 
 use super::bullets::{Behavior, Bullets, Kind, Spawn};
 use super::rng::Rng;
-use crate::tune::{BULLET_MARGIN, BULLET_MAX_AGE, DEATH_PAUSE, FIELD_H, FIELD_W, SAFE_SPAWN, SANDBOX};
+use crate::tune::{BULLET_MARGIN, BULLET_MAX_AGE, FIELD_H, FIELD_W, SAFE_SPAWN, SANDBOX};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Shape {
@@ -76,8 +76,6 @@ pub struct Hazards {
     pub emitters: Vec<Emitter>,
     pub bullets: Bullets,
     pub rng: Rng,
-    /// Frames left before the guns start again (after a death).
-    pub hold: u32,
     spawns: Vec<Spawn>,
 }
 
@@ -88,7 +86,7 @@ fn deg(a: f32) -> (f32, f32) {
 
 impl Hazards {
     pub fn new(preset: usize, seed: u64) -> Hazards {
-        let mut h = Hazards { preset: 0, emitters: Vec::new(), bullets: Bullets::new(), rng: Rng::new(seed ^ 0xB0_11E7), hold: 0, spawns: Vec::with_capacity(256) };
+        let mut h = Hazards { preset: 0, emitters: Vec::new(), bullets: Bullets::new(), rng: Rng::new(seed ^ 0xB0_11E7), spawns: Vec::with_capacity(256) };
         h.load(preset);
         h
     }
@@ -101,7 +99,6 @@ impl Hazards {
     pub fn load(&mut self, i: usize) {
         self.preset = i % SANDBOX.len();
         self.bullets.clear();
-        self.hold = 0;
         self.emitters = SANDBOX[self.preset]
             .guns
             .iter()
@@ -109,13 +106,17 @@ impl Hazards {
             .collect();
     }
 
-    /// After a death: clear the bullets, restart the guns after a pause.
-    pub fn reset(&mut self) {
-        self.bullets.clear();
-        self.hold = DEATH_PAUSE;
-        for e in &mut self.emitters {
-            e.t = 0;
-            e.shots = 0;
+    /// Cancel every bullet whose core is within `r` of `(x, y)`, noting where each was.
+    pub fn cancel_within(&mut self, x: f32, y: f32, r: f32, out: &mut Vec<(f32, f32)>) {
+        let b = &mut self.bullets;
+        let mut i = 0;
+        while i < b.len() {
+            if (b.x[i] - x).hypot(b.y[i] - y) <= r {
+                out.push((b.x[i], b.y[i]));
+                b.swap_remove(i);
+            } else {
+                i += 1;
+            }
         }
     }
 
@@ -147,12 +148,8 @@ impl Hazards {
             Self::fire(&mut self.spawns, *s, player);
         }
 
-        if self.hold > 0 {
-            self.hold -= 1;
-        } else {
-            for e in &mut self.emitters {
-                e.fire_frame(player, mounts, &mut self.rng, &mut self.spawns);
-            }
+        for e in &mut self.emitters {
+            e.fire_frame(player, mounts, &mut self.rng, &mut self.spawns);
         }
         for s in self.spawns.drain(..) {
             self.bullets.push(s);

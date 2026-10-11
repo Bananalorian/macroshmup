@@ -7,7 +7,7 @@ use super::art::Atlas;
 use super::layout::Layout;
 use super::palette::{ASH, CREAM, DUSK, SIGNAL, SLATE, TEAL};
 use super::ship::{self, Pose};
-use crate::sim::World;
+use crate::sim::{BombBlast, Life, World};
 use crate::sim::geom::Rect as SimRect;
 use crate::sim::shots::ShotKind;
 use crate::tune::{AFTERIMAGE_MIN, AURA_R, BEAM_W, BG_DIM_AT, BG_DIM_MIN, BG_MAX_VALUE, GRAIN, HITBOX_R, HOLE_R, HOLE_X, HOLE_Y, STAGE_FRAMES};
@@ -90,6 +90,7 @@ pub fn draw(r: &Renderer, lay: &Layout, w: &World, hitboxes: bool) {
 
     let p = &w.player;
     let (px, py) = (ox + snap(p.x), oy + snap(p.y));
+    let shown = matches!(w.life, Life::Alive | Life::Struck { .. } | Life::Respawning { .. });
     if let Some(b) = w.beam {
         draw_beam(a, ox, oy, b.x, b.top, p.y - 11.0, w.frame);
         draw_aura(a, px, py, w.frame);
@@ -97,7 +98,7 @@ pub fn draw(r: &Renderer, lay: &Layout, w: &World, hitboxes: bool) {
 
     // afterimages at full speed
     let moving = (p.dx * p.dx + p.dy * p.dy).sqrt();
-    if !p.focused() && moving >= w.tuning.speed * AFTERIMAGE_MIN {
+    if shown && !p.focused() && moving >= w.tuning.speed * AFTERIMAGE_MIN {
         let at = [2, 4, 6].map(|k| (ox + snap(p.history[k].0), oy + snap(p.history[k].1)));
         ship::draw_afterimages(a, p.bank, &at);
     }
@@ -111,7 +112,13 @@ pub fn draw(r: &Renderer, lay: &Layout, w: &World, hitboxes: bool) {
         hit_t: p.hit_t,
         frame: w.frame,
     };
-    ship::draw(a, px, py, &pose);
+    if shown {
+        ship::draw(a, px, py, &pose);
+        draw_shields(a, w, px, py);
+    }
+    if let Some(b) = w.bomb {
+        draw_bomb_ring(a, ox, oy, b.x, b.y, b.t.saturating_sub(1), w.frame);
+    }
 
     r.parts.draw(a, ox, oy, false);
     r.additive(true);
@@ -125,7 +132,9 @@ pub fn draw(r: &Renderer, lay: &Layout, w: &World, hitboxes: bool) {
     }
     // enemy bullets above everything but the HUD (and the hitbox dot, which is HUD)
     super::bullets::draw_bullets(a, w, ox, oy);
-    ship::draw_hitbox(a, px, py, p.blend(&w.tuning), w.frame);
+    if w.alive() {
+        ship::draw_hitbox(a, px, py, p.blend(&w.tuning), w.frame);
+    }
 
     if hitboxes {
         let red = Color::new(1.0, 0.2, 0.2, 0.7);
@@ -156,6 +165,56 @@ pub fn draw(r: &Renderer, lay: &Layout, w: &World, hitboxes: bool) {
         box_(w.body(), Color::new(1.0, 1.0, 1.0, 0.35));
         let r = HITBOX_R as i32;
         a.fill(px - r, py - r, 2 * r + 1, 2 * r + 1, red);
+    }
+}
+
+/// What the Pilgrim's state looks like: a red warning ring while struck (bomb now!),
+/// a teal blink while respawn-invincible, a teal shimmer while bomb-invincible.
+fn draw_shields(a: &Atlas, w: &World, x: i32, y: i32) {
+    let f = w.frame;
+    let ring = |r: f32, n: i32, c: Color, spin: f32| {
+        for k in 0..n {
+            let ang = k as f32 / n as f32 * std::f32::consts::TAU + f as f32 * spin;
+            a.fill(x + (ang.cos() * r).round() as i32, y + (ang.sin() * r).round() as i32, 1, 1, c);
+        }
+    };
+    match w.life {
+        Life::Struck { left } => {
+            let r = 10.0 + (8 - left.min(8)) as f32 * 2.0;
+            ring(r, 32, Color { a: if f % 4 < 2 { 0.9 } else { 0.4 }, ..SIGNAL }, 0.0);
+        }
+        _ if w.invuln > 0 && w.invuln_blink => {
+            if (f / 3) % 2 == 0 {
+                let hull = &a.r.ship.body[2];
+                a.blit(hull.sil, x - hull.ax, y - hull.ay, 1, Color { a: 0.55, ..TEAL });
+            }
+        }
+        _ if w.invuln > 0 => ring(20.0 + (f % 8) as f32 * 0.25, 24, Color { a: 0.3, ..TEAL }, 0.05),
+        _ => {}
+    }
+}
+
+/// The bomb's cancel ring: a teal band sweeping out across the screen, a cream edge
+/// inside it, fading once it's covered everything.
+fn draw_bomb_ring(a: &Atlas, ox: i32, oy: i32, bx: f32, by: f32, t: u32, frame: u64) {
+    use crate::tune::{BOMB_ACTIVE, BOMB_GROW};
+    let r = BombBlast::radius(t);
+    let fade = if t < BOMB_GROW { 1.0 } else { 1.0 - (t - BOMB_GROW) as f32 / (BOMB_ACTIVE - BOMB_GROW) as f32 };
+    let n = ((r * std::f32::consts::TAU) / 1.5).clamp(24.0, 1400.0) as i32;
+    for k in 0..n {
+        let ang = k as f32 / n as f32 * std::f32::consts::TAU;
+        let (c, s) = (ang.cos(), ang.sin());
+        for (dr, col, alpha) in [(0.0, TEAL, 0.85), (-2.0, TEAL, 0.45), (-4.0, CREAM, 0.3)] {
+            if dr < -1.0 && (k + frame as i32) % 2 != 0 {
+                continue; // dithered inner edge
+            }
+            let rr = r + dr;
+            let (px, py) = (bx + c * rr, by + s * rr);
+            if px < 0.0 || py < 0.0 || px >= crate::tune::FIELD_W as f32 || py >= crate::tune::FIELD_H as f32 {
+                continue; // off the playfield
+            }
+            a.fill(ox + px.round() as i32, oy + py.round() as i32, 1, 1, Color { a: alpha * fade, ..col });
+        }
     }
 }
 

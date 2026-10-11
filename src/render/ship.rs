@@ -169,6 +169,43 @@ pub struct ShipArt {
     pub bolt: [Rect; 4],
     pub pod_shot: [Rect; 2],
     pub dot: Rect,
+    /// Every pixel of the ship at rest (hull and both pods, lights lit), relative
+    /// to the hitbox: the death shatters it into exactly these.
+    pub pixels: Vec<(i8, i8, Color)>,
+}
+
+/// A grid character's color with its light lit (for the shatter).
+fn lit(c: char) -> Option<Color> {
+    match c {
+        'L' | 'W' | 'P' => Some(SIGNAL),
+        'M' | 'N' => Some(TEAL),
+        c => pal(c),
+    }
+}
+
+/// Every pixel of the resting ship, relative to the hitbox.
+fn ship_pixels() -> Vec<(i8, i8, Color)> {
+    let mut v = vec![];
+    let (ax, ay) = BODY_ANCHOR;
+    for (y, row) in body_rows().iter().enumerate() {
+        for (x, &c) in row.iter().enumerate() {
+            if let Some(col) = lit(c) {
+                v.push(((x as i32 - ax) as i8, (y as i32 - ay) as i8, col));
+            }
+        }
+    }
+    let px = crate::tune::POD_X as i32;
+    for (y, row) in POD.iter().enumerate() {
+        for (x, c) in row.chars().enumerate() {
+            if let Some(col) = lit(c) {
+                let dx = x as i32 - POD_ANCHOR.0;
+                let dy = y as i32 - POD_ANCHOR.1;
+                v.push(((-px + dx) as i8, dy as i8, col));
+                v.push(((px - dx) as i8, dy as i8, col));
+            }
+        }
+    }
+    v
 }
 
 impl ShipArt {
@@ -277,6 +314,7 @@ pub fn build(p: &mut Packer) -> ShipArt {
         bolt: BOLT.map(|g| small(p, g)),
         pod_shot: POD_SHOT.map(|g| small(p, g)),
         dot: small(p, &DOT),
+        pixels: ship_pixels(),
     }
 }
 
@@ -465,6 +503,17 @@ mod tests {
                 assert!(luma(col) <= 0.85, "{c} is too bright");
             }
         }
+    }
+
+    #[test]
+    fn the_shatter_uses_every_pixel_of_the_ship() {
+        let lit_count = |g: &[&str]| g.iter().flat_map(|r| r.chars()).filter(|c| *c != '.').count();
+        let body = body_rows().iter().flatten().filter(|c| **c != '.').count();
+        let px = ship_pixels();
+        assert_eq!(px.len(), body + 2 * lit_count(&POD));
+        assert!(px.iter().any(|p| p.2 == TEAL) && px.iter().any(|p| p.2 == SIGNAL), "its lights are lit");
+        let (lo, hi) = (px.iter().map(|p| p.0).min().unwrap(), px.iter().map(|p| p.0).max().unwrap());
+        assert_eq!(lo, -hi, "symmetric about the hitbox");
     }
 
     #[test]

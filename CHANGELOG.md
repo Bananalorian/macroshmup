@@ -3,6 +3,53 @@
 Every version is one build sprint. Newest first. Versions are tagged in git, and
 each tag publishes a GitHub Release with downloads.
 
+## [0.5.0] - 2026-10-11 - The special weapon
+
+Sprint 4: the Shinjuku grenade becomes the bomb, with lives, death and recovery.
+
+### Added
+- **The bomb** (X, B or the BOMB button): Last Train to Shinjuku's grenade blast
+  scaled up to fill the screen. A boss-sized explosion with smoke, a hot glow, a
+  screen-wide shock ring, a flash and a heavy boom, then:
+  - a teal cancel ring that sweeps the whole screen in 24 frames, turning every
+    enemy bullet it crosses into teal shards that fly to you;
+  - heavy damage to everything it passes over (big targets take at most 40% of
+    their health, so a bomb is never a one-shot);
+  - an RGB surge, a brief slow-motion dip, full rumble, and 180 frames of
+    invincibility (with a teal shimmer). The screen shakes once the ring has
+    swept it clean.
+- **The deathbomb:** when a bullet hits you, a red ring flashes round the ship and
+  you have 8 frames to bomb and survive.
+- **Death:** the Pilgrim shatters into its own pixels (every pixel of the sprite
+  becomes a particle) with a large blast and an RGB split. Every bullet on screen
+  pops 30 frames after the hit. The next ship flies up from the bottom, blinking
+  teal and invincible for 210 frames, with bombs refilled to 3.
+- **Lives:** 3 ships, shown with bombs in the side panel (and the phone's top
+  strip). After the last one: GAME OVER, with RETRY or QUIT TO TITLE.
+- Sounds: the bomb (the grenade's heavy boom over a deep sweep and a rush of
+  air), the hit alarm, a rising chime as the next ship arrives, a falling phrase
+  for game over, and a click when you're out of bombs. Rumble for all of them.
+- The bot bombs too: inside the deathbomb window, or when every path is about to
+  be hit. (The fairness checks still run it without bombs.)
+- Debug: `PG_BOMB=<frame>`, `PG_DIE=<frame>`, and the worst CPU frame in `PG_PERF`
+  summaries.
+
+### Fixed
+- **A one-frame hitch on the first big explosion.** macroquad made new GPU buffers
+  mid-frame whenever a frame needed more draw batches than ever before (a bomb in
+  a quiet scene did). Batches are now 4x bigger and the loading frame creates
+  enough of them up front: the bomb's worst frame went from 17 ms to under 1 ms.
+
+### Checked
+- Tests prove: the bomb cancels every bullet inside its ring as it spreads; a bomb
+  on frame 8 after a hit saves you and frame 9 doesn't; bomb invincibility is
+  exactly 180 frames and respawn invincibility exactly 210; you can't die during
+  it; bullets cancel 30 frames after a hit; three deaths end the game.
+- [Side by side with Shinjuku's grenade](docs/screenshots/bomb-vs-grenade.png):
+  the same blast, scaled up.
+- A bomb inside the 2,000-bullet stress scene: 60 fps, worst CPU frame 4 ms on
+  desktop; 60 fps in a browser.
+
 ## [0.4.0] - 2026-10-11 - Light & particles
 
 Sprint 3: the look of the reference art: shaders, particles, the RGB split.

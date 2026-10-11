@@ -124,13 +124,46 @@ pub const BULLET_MARGIN: f32 = 16.0;
 pub const BULLET_MAX_AGE: u16 = 900;
 /// Grazing: a bullet's core passing within this many px of the hitbox (once per bullet).
 pub const GRAZE_R: f32 = 14.0;
-/// The placeholder death: frames the patterns hold off after a hit.
-pub const DEATH_PAUSE: u32 = 60;
 /// Red muzzle flash (telegraph) frames on an emitter after it fires.
 pub const MUZZLE_FRAMES: u32 = 4;
 /// At most 3 full-screen flashes a second.
 pub const FLASH_GAP: u64 = 20;
 pub const FLASH_FRAMES: u32 = 8;
+
+// ------------------------------------------------------------------ lives, death and the bomb
+
+/// Ships per credit (including the one you're flying) and bombs per life.
+pub const LIVES: u8 = 3;
+pub const BOMBS: u8 = 3;
+/// The deathbomb: bombing within this many frames of a hit still saves you.
+pub const DEATHBOMB: u32 = 8;
+/// After a hit: the screen's bullets cancel this many frames later, and the
+/// next ship starts flying in this many frames later.
+pub const DEATH_CANCEL: u32 = 30;
+pub const RESPAWN_AT: u32 = 40;
+/// The new ship flies up from below the screen for this many frames (no control
+/// yet), and can't be hit for this many frames from the moment it appears.
+pub const RESPAWN_FLY: u32 = 36;
+pub const RESPAWN_INVULN: u32 = 210;
+/// The bomb: frames of invincibility; the cancel ring reaches `BOMB_REACH` px in
+/// `BOMB_GROW` frames (enough to cover the playfield from anywhere) and keeps
+/// cancelling for `BOMB_ACTIVE` frames.
+pub const BOMB_INVULN: u32 = 180;
+pub const BOMB_GROW: u32 = 24;
+pub const BOMB_REACH: f32 = 460.0;
+pub const BOMB_ACTIVE: u32 = 70;
+/// Damage to everything the ring passes over; big targets (bosses) take at most
+/// this share of their health from one bomb, so it's never a one-shot.
+pub const BOMB_DAMAGE: f32 = 600.0;
+pub const BOMB_BOSS_CAP: f32 = 0.4;
+/// The brief slow-motion dip: this many ticks run at half speed.
+pub const BOMB_DIP: u32 = 24;
+/// The RGB surge: aberration held at this many px for this many frames, then fading.
+pub const BOMB_SURGE: (f32, u32) = (4.5, 20);
+/// The death's RGB split: gentler than the bomb's, so the shattering hull reads.
+pub const DEATH_SURGE: (f32, u32) = (2.0, 6);
+/// Shake when the bomb's ring has swept the screen clean.
+pub const SHAKE_BOMB: f32 = 1.0;
 
 // ------------------------------------------------------------------ light and particles
 
@@ -151,6 +184,13 @@ pub const SHAKE_DECAY: f32 = 0.85;
 pub const SHAKE_LOW: f32 = 0.5;
 /// Shake for the placeholder death (after the screen's been cancelled).
 pub const SHAKE_DEATH: f32 = 0.9;
+/// macroquad batches draws into buffers of this many vertices and indices (4096
+/// quads), and creates a new GPU buffer whenever a frame needs more batches than
+/// ever before, which stalls about a frame. So batches are big, and the loading
+/// frame draws enough to create this many up front.
+pub const DRAW_CALL_VERTICES: usize = 16384;
+pub const DRAW_CALL_INDICES: usize = 24576;
+pub const PREWARM_DRAW_CALLS: usize = 40;
 /// The post pass: bloom strength, vignette, film grain.
 pub const BLOOM: f32 = 0.14;
 pub const VIGNETTE: f32 = 0.24;
@@ -330,6 +370,9 @@ pub const RUMBLE_BUMP: (f32, f32, u32) = (0.25, 0.4, 90);
 pub const RUMBLE_BOMB: (f32, f32, u32) = (1.0, 0.8, 450);
 pub const RUMBLE_CONNECT: (f32, f32, u32) = (0.3, 0.3, 160);
 pub const RUMBLE_DEATH: (f32, f32, u32) = (0.9, 0.8, 350);
+pub const RUMBLE_STRUCK: (f32, f32, u32) = (0.6, 0.6, 140);
+pub const RUMBLE_RESPAWN: (f32, f32, u32) = (0.15, 0.25, 160);
+pub const RUMBLE_GAME_OVER: (f32, f32, u32) = (0.5, 0.3, 900);
 pub const RUMBLE_GRAZE: (f32, f32, u32) = (0.0, 0.12, 35);
 /// Continuous rumble is re-sent every this many frames.
 pub const RUMBLE_REPEAT: u64 = 4;
@@ -351,6 +394,10 @@ pub const VOL_UI: f32 = 0.35;
 pub const VOL_GRAZE: f32 = 0.07;
 pub const GRAZE_SOUND_GAP: f64 = 0.05;
 pub const VOL_DEATH: f32 = 0.55;
+pub const VOL_BOMB: f32 = 0.9;
+pub const VOL_STRUCK: f32 = 0.5;
+pub const VOL_RESPAWN: f32 = 0.35;
+pub const VOL_GAME_OVER: f32 = 0.55;
 /// How fast the beam hum fades in and out (volume per second).
 pub const BEAM_FADE: f32 = 6.0;
 
