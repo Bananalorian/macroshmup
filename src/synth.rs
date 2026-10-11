@@ -444,6 +444,289 @@ pub fn death(seed: u32) -> Vec<f32> {
     b
 }
 
+// ---------------------------------------------------------------- the boss
+
+/// Pitch of a note `s` semitones from A4.
+fn hz(s: f32) -> f32 {
+    440.0 * 2f32.powf(s / 12.0)
+}
+
+/// Add `voice` into the loop `buf` from sample `at`, wrapping round its end (so a
+/// note ringing past the loop's end comes back in at its start: a seamless loop).
+fn mix_in(buf: &mut [f32], at: usize, voice: &[f32], gain: f32) {
+    let n = buf.len();
+    for (i, s) in voice.iter().enumerate() {
+        buf[(at + i) % n] += s * gain;
+    }
+}
+
+/// A plucked bass note: a saw whose filter snaps shut.
+fn bass_note(f: f32, dur: f32) -> Vec<f32> {
+    let mut b = buf(dur + 0.08);
+    let mut lp = Bq::default();
+    let mut ph = 0.0f32;
+    for (i, s) in b.iter_mut().enumerate() {
+        let t = i as f32 / SR;
+        ph += f / SR;
+        let cut = 180.0 + 1100.0 * (-t * 18.0).exp();
+        let env = attack(t, 0.004) * (0.55 + 0.45 * (-t * 9.0).exp()) * (1.0 - ((t - dur) / 0.08).clamp(0.0, 1.0));
+        *s = lp.lowpass(saw(ph) + 0.5 * saw(ph * 1.003), cut, 1.4) * env;
+    }
+    b
+}
+
+fn kick() -> Vec<f32> {
+    let mut b = buf(0.38);
+    let mut ph = 0.0f32;
+    for (i, s) in b.iter_mut().enumerate() {
+        let t = i as f32 / SR;
+        ph += (44.0 + 90.0 * (-t * 30.0).exp()) / SR;
+        // a soft click on the beater, then the body
+        *s = (TAU * ph).sin() * (-t * 8.0).exp() + 0.18 * (t / 0.001).min(1.0) * (-t * 900.0).exp();
+    }
+    b
+}
+
+fn snare(seed: u32) -> Vec<f32> {
+    let mut b = buf(0.22);
+    let mut r = Rng::new(seed);
+    let mut bp = Bq::default();
+    for (i, s) in b.iter_mut().enumerate() {
+        let t = i as f32 / SR;
+        *s = bp.bandpass(r.noise(), 1900.0, 0.8) * (-t * 18.0).exp() * 1.6 + (TAU * 185.0 * t).sin() * (-t * 30.0).exp() * 0.5;
+    }
+    b
+}
+
+fn hat(seed: u32, open: bool) -> Vec<f32> {
+    let mut b = buf(if open { 0.28 } else { 0.05 });
+    let mut r = Rng::new(seed);
+    let mut hp = Hp::default();
+    let decay = if open { 9.0 } else { 70.0 };
+    for (i, s) in b.iter_mut().enumerate() {
+        let t = i as f32 / SR;
+        *s = hp.run(r.noise(), 7000.0) * (-t * decay).exp();
+    }
+    b
+}
+
+/// A cathedral organ chord: drawbar harmonics on every note, two ranks a hair apart,
+/// swelling in and dying away.
+fn organ(notes: &[f32], dur: f32) -> Vec<f32> {
+    let mut b = buf(dur + 0.4);
+    let bars = [(1.0f32, 1.0f32), (2.0, 0.5), (3.0, 0.28), (4.0, 0.24), (6.0, 0.1)];
+    for (i, s) in b.iter_mut().enumerate() {
+        let t = i as f32 / SR;
+        let env = attack(t, 0.3) * (1.0 - ((t - dur) / 0.4).clamp(0.0, 1.0));
+        let mut v = 0.0;
+        for &f in notes {
+            for (h, w) in bars {
+                v += (TAU * f * h * t).sin() * w + (TAU * f * h * 1.0016 * t).sin() * w * 0.6;
+            }
+        }
+        *s = v * env;
+    }
+    b
+}
+
+/// The dark arpeggio's note: a thin square, filtered, quick to fade.
+fn lead_note(f: f32, dur: f32) -> Vec<f32> {
+    let mut b = buf(dur + 0.12);
+    let mut lp = Lp::default();
+    for (i, s) in b.iter_mut().enumerate() {
+        let t = i as f32 / SR;
+        let env = attack(t, 0.006) * (-t * 4.5).exp() * (1.0 - ((t - dur) / 0.12).clamp(0.0, 1.0));
+        *s = lp.run(sq(f * t, 0.25), 2400.0) * env;
+    }
+    b
+}
+
+/// The boss's theme: 16 bars at 150 beats a minute, a seamless loop. The bass throbs
+/// on E and the F a semitone above (the shark's two notes), over drums; a cathedral
+/// organ holds the chords (E minor, F, E minor, D minor), and in the second half a
+/// dark arpeggio climbs over it.
+pub fn boss_theme() -> Vec<f32> {
+    let beat = 60.0 / 150.0;
+    let eighth = beat * 0.5;
+    let bars = 16;
+    let n = (bars as f32 * 4.0 * beat * SR) as usize;
+    let at = |b: usize, eighths: f32| ((b as f32 * 8.0 + eighths) * eighth * SR) as usize;
+    let (mut lo, mut drums, mut organ_bus, mut lead) = (vec![0.0; n], vec![0.0; n], vec![0.0; n], vec![0.0; n]);
+    // (bass root in semitones from A4, organ chord) every two bars
+    let e2 = -29.0;
+    let plan: [(f32, [f32; 3]); 4] = [(e2, [-17.0, -14.0, -10.0]), (e2 + 1.0, [-16.0, -12.0, -9.0]), (e2, [-17.0, -14.0, -10.0]), (e2 - 2.0, [-19.0, -16.0, -12.0])];
+    let k = kick();
+    for b in 0..bars {
+        let (root, chord) = plan[(b / 2) % 4];
+        // the throb: seven on the root, the semitone above on the seventh eighth
+        for e in 0..8 {
+            let s = if e == 6 { root + 1.0 } else { root };
+            let accent = if e == 0 || e == 6 { 1.0 } else { 0.7 };
+            mix_in(&mut lo, at(b, e as f32), &bass_note(hz(s), eighth * 0.85), 0.42 * accent);
+        }
+        // kick on one and three (and the and of four every other bar), snare on two and four
+        for kb in [0.0, 4.0] {
+            mix_in(&mut drums, at(b, kb), &k, 0.85);
+        }
+        if b % 2 == 1 {
+            mix_in(&mut drums, at(b, 7.0), &k, 0.6);
+        }
+        for sb in [2.0, 6.0] {
+            mix_in(&mut drums, at(b, sb), &snare(700 + b as u32), 0.42);
+        }
+        for e in 0..8 {
+            let open = e == 7 && b % 4 == 3;
+            mix_in(&mut drums, at(b, e as f32), &hat(800 + (b * 8 + e) as u32, open), if e % 2 == 0 { 0.16 } else { 0.1 });
+        }
+        if b % 2 == 0 {
+            let notes: Vec<f32> = chord.iter().map(|&s| hz(s)).collect();
+            mix_in(&mut organ_bus, at(b, 0.0), &organ(&notes, beat * 8.0 - 0.2), 0.05);
+        }
+        // the second half: the arpeggio, the chord's notes climbing an octave up
+        if b >= 8 {
+            for e in 0..8 {
+                let s = chord[e % 3] + 12.0 + if e >= 3 && e < 6 { 12.0 } else { 0.0 };
+                mix_in(&mut lead, at(b, e as f32), &lead_note(hz(s), eighth * 0.7), 0.13);
+            }
+        }
+    }
+    let mut mix: Vec<f32> = (0..n).map(|i| lo[i] + drums[i] + organ_bus[i] + lead[i]).collect();
+    // reverb over two passes of the loop, keeping the second, so its tail wraps too
+    let twice: Vec<f32> = mix.iter().chain(mix.iter()).copied().collect();
+    let wet = reverb(&twice, 0.22, 1.5, 0.6);
+    mix.copy_from_slice(&wet[n..]);
+    drive(&mut mix, 1.2);
+    normalize(&mut mix, 0.7);
+    mix
+}
+
+/// JAWSTHIC on its way: the shark's two notes, E and F, throbbing faster and louder
+/// under a low drone as its fin cuts through the disk.
+pub fn approach() -> Vec<f32> {
+    let len = 4.4;
+    let mut b = buf(len);
+    let mut t0 = 0.0f32;
+    let mut k = 0;
+    while t0 < len - 0.3 {
+        let gap = 0.62 * (1.0 - t0 / len).powf(1.4) + 0.11;
+        let note = bass_note(hz(-29.0 + (k % 2) as f32), gap.min(0.32));
+        let loud = 0.35 + 0.65 * (t0 / len);
+        mix_in(&mut b, (t0 * SR) as usize, &note, loud);
+        t0 += gap;
+        k += 1;
+    }
+    for (i, s) in b.iter_mut().enumerate() {
+        let t = i as f32 / SR;
+        *s += (TAU * 41.2 * t).sin() * 0.25 * (t / len);
+    }
+    let mut b = reverb(&b, 0.3, 1.6, 0.6);
+    normalize(&mut b, 0.8);
+    b
+}
+
+/// Its roar: a low growl torn by a stutter, a sub thump under it.
+pub fn roar(seed: u32) -> Vec<f32> {
+    let len = 1.7;
+    let mut b = buf(len);
+    let mut r = Rng::new(seed);
+    let (mut bp, mut lp) = (Bq::default(), Lp::default());
+    let mut ph = 0.0f32;
+    for (i, s) in b.iter_mut().enumerate() {
+        let t = i as f32 / SR;
+        let growl = 1.0 + 0.35 * (TAU * 31.0 * t).sin() + 0.25 * r.noise();
+        ph += (52.0 + 30.0 * (1.0 - (t / len))) * growl / SR;
+        let body = saw(ph) + 0.6 * sq(ph * 0.5, 0.4);
+        let cut = 300.0 + 1500.0 * (t / 0.25).min(1.0) * (-((t - 0.25).max(0.0)) * 1.4).exp();
+        let stutter = if ((t * 22.0) as u32) % 5 == 4 { 0.3 } else { 1.0 };
+        let env = attack(t, 0.05) * (1.0 - (t / len).powi(2));
+        *s = (bp.bandpass(body, cut, 0.9) * 2.0 + lp.run(r.noise(), 900.0) * 0.4) * env * stutter + (TAU * 38.0 * t).sin() * (-t * 3.0).exp() * 0.8;
+    }
+    let mut b = reverb(&b, 0.35, 1.8, 0.65);
+    drive(&mut b, 2.2);
+    normalize(&mut b, 0.9);
+    b
+}
+
+/// The laser's warning: a whine rising as it charges.
+pub fn laser_charge() -> Vec<f32> {
+    let len = 0.75;
+    let mut b = buf(len);
+    let mut ph = 0.0f32;
+    let mut lp = Lp::default();
+    for (i, s) in b.iter_mut().enumerate() {
+        let t = i as f32 / SR;
+        let k = t / len;
+        ph += (280.0 + 1300.0 * k * k) / SR;
+        *s = lp.run(sq(ph, 0.5) * 0.5 + saw(ph * 1.5) * 0.3, 3000.0) * attack(t, 0.05) * (0.3 + 0.7 * k);
+    }
+    normalize(&mut b, 0.6);
+    b
+}
+
+/// The beam: a buzzing roar of light, a second long, fading as it sweeps clear.
+pub fn laser_beam(seed: u32) -> Vec<f32> {
+    let len = 1.05;
+    let mut b = buf(len);
+    let mut r = Rng::new(seed);
+    let (mut lp, mut bp) = (Bq::default(), Bq::default());
+    let (mut p1, mut p2) = (0.0f32, 0.0f32);
+    for (i, s) in b.iter_mut().enumerate() {
+        let t = i as f32 / SR;
+        p1 += 110.0 / SR;
+        p2 += 111.5 / SR;
+        let buzz = lp.lowpass(saw(p1) + saw(p2) + sq(p1 * 2.0, 0.3) * 0.5, 1800.0, 1.0);
+        let hiss = bp.bandpass(r.noise(), 4200.0, 1.5) * 0.4;
+        let env = attack(t, 0.01) * (1.0 - ((t - 0.85) / 0.2).clamp(0.0, 1.0)) * (0.9 + 0.1 * (TAU * 18.0 * t).sin());
+        *s = (buzz + hiss) * env;
+    }
+    drive(&mut b, 1.6);
+    normalize(&mut b, 0.7);
+    b
+}
+
+/// A glitch: a burst of chopped, bit-crushed blips.
+pub fn glitch(seed: u32) -> Vec<f32> {
+    let len = 0.3;
+    let mut b = buf(len);
+    let mut r = Rng::new(seed);
+    let mut f = r.range(300.0, 1600.0);
+    let mut hold = 0.0f32;
+    for (i, s) in b.iter_mut().enumerate() {
+        let t = i as f32 / SR;
+        if i % 700 == 0 {
+            f = r.range(200.0, 2400.0);
+        }
+        // crushed to a few levels, sample-and-held
+        if i % 6 == 0 {
+            let v = sq(f * t, 0.5) * 0.6 + r.noise() * 0.4;
+            hold = (v * 4.0).round() / 4.0;
+        }
+        let gate = if ((t * 40.0) as u32) % 3 == 1 { 0.0 } else { 1.0 };
+        *s = hold * gate * (1.0 - t / len);
+    }
+    normalize(&mut b, 0.55);
+    b
+}
+
+/// The hole takes it: a long whoosh falling away, a tone sinking with it.
+pub fn swallowed(seed: u32) -> Vec<f32> {
+    let len = 2.6;
+    let mut b = buf(len);
+    let mut r = Rng::new(seed);
+    let mut bp = Bq::default();
+    let mut ph = 0.0f32;
+    for (i, s) in b.iter_mut().enumerate() {
+        let t = i as f32 / SR;
+        let k = t / len;
+        ph += (220.0 * (1.0 - k).powi(2) + 30.0) / SR;
+        let whoosh = bp.bandpass(r.noise(), 2400.0 * (1.0 - k) + 120.0, 1.1);
+        *s = (whoosh * 1.2 + (TAU * ph).sin() * 0.5) * attack(t, 0.15) * (1.0 - k);
+    }
+    let mut b = reverb(&b, 0.4, 2.0, 0.7);
+    normalize(&mut b, 0.8);
+    b
+}
+
 // ---------------------------------------------------------------- the whole bank
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
@@ -465,6 +748,14 @@ pub enum Id {
     Respawn,
     GameOver,
     Warning,
+    /// The boss's theme (a loop, played as music).
+    BossTheme,
+    Approach,
+    Roar,
+    LaserCharge,
+    LaserBeam,
+    Glitch,
+    Swallowed,
 }
 
 /// Every sound as (id, wav bytes). Variants share an id.
@@ -496,6 +787,15 @@ pub fn bank() -> Vec<(Id, Vec<u8>)> {
     }
     v.push((Id::Death, mono(death(500))));
     v.push((Id::Warning, mono(warning())));
+    v.push((Id::BossTheme, mono(boss_theme())));
+    v.push((Id::Approach, mono(approach())));
+    v.push((Id::Roar, mono(roar(1100))));
+    v.push((Id::LaserCharge, mono(laser_charge())));
+    v.push((Id::LaserBeam, mono(laser_beam(1200))));
+    for k in 0..3 {
+        v.push((Id::Glitch, mono(glitch(1300 + k))));
+    }
+    v.push((Id::Swallowed, mono(swallowed(1400))));
     v
 }
 
@@ -514,7 +814,7 @@ mod tests {
 
     #[test]
     fn nothing_clips() {
-        for b in [pilgrim_shot(1, 900.0), beam_hum(), not_yet(), tick(2), explosion(3, true), graze(4), death(5), pop(6), boss_blast(7), bomb(8), struck(9), respawn_chime(), game_over(), warning()] {
+        for b in [pilgrim_shot(1, 900.0), beam_hum(), not_yet(), tick(2), explosion(3, true), graze(4), death(5), pop(6), boss_blast(7), bomb(8), struck(9), respawn_chime(), game_over(), warning(), boss_theme(), approach(), roar(1), laser_charge(), laser_beam(2), glitch(3), swallowed(4)] {
             assert!(b.iter().all(|s| s.is_finite() && s.abs() <= 1.0));
         }
     }
@@ -524,6 +824,19 @@ mod tests {
         let b = beam_hum();
         let (first, last) = (b[0], b[b.len() - 1]);
         assert!((first - last).abs() < 0.08, "seam jump {}", (first - last).abs());
+    }
+
+    /// The theme loops: 16 bars at 150 a minute, and where it comes round sounds like
+    /// any other downbeat (bar 9's starts on the same kick and bass hit).
+    #[test]
+    fn the_boss_theme_loops_without_a_click() {
+        let b = boss_theme();
+        let n = b.len();
+        assert_eq!(n, (16.0 * 4.0 * 0.4 * SR) as usize);
+        let seam = (b[0] - b[n - 1]).abs();
+        let mid = n / 2;
+        let downbeat = (b[mid] - b[mid - 1]).abs();
+        assert!(seam <= downbeat * 2.0 + 0.05, "seam jump {seam}, a downbeat's {downbeat}");
     }
 
     #[test]

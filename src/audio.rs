@@ -28,6 +28,13 @@ fn mix(id: Id) -> (f32, f64) {
         Id::Graze => (VOL_GRAZE, GRAZE_SOUND_GAP),
         Id::Death => (VOL_DEATH, 0.3),
         Id::Warning => (VOL_WARNING, 2.0),
+        Id::BossTheme => (VOL_MUSIC, 0.0),
+        Id::Approach => (VOL_APPROACH, 4.0),
+        Id::Roar => (VOL_ROAR, 1.0),
+        Id::LaserCharge => (VOL_LASER, 0.3),
+        Id::LaserBeam => (VOL_LASER, 0.3),
+        Id::Glitch => (VOL_GLITCH, 0.12),
+        Id::Swallowed => (VOL_SWALLOWED, 2.0),
     }
 }
 
@@ -54,6 +61,10 @@ pub struct Audio {
     beam: f32,
     beam_target: f32,
     beam_playing: bool,
+    /// The boss's theme: how loud it is now, where it's heading, and whether it's playing.
+    music: f32,
+    music_target: f32,
+    music_playing: bool,
     pub muted: bool,
 }
 
@@ -73,6 +84,9 @@ impl Audio {
             beam: 0.0,
             beam_target: 0.0,
             beam_playing: false,
+            music: 0.0,
+            music_target: 0.0,
+            music_playing: false,
             muted: false,
         }
     }
@@ -113,6 +127,20 @@ impl Audio {
                 Event::StageEnd => self.play(Id::Respawn, 1.0),
                 // kills, broken turrets and cracks are blasts too
                 Event::BombSwept | Event::Cancel | Event::Kill { .. } | Event::PartBreak { .. } | Event::Crack { .. } | Event::Section(_) => {}
+                // the boss: its approach, then its theme from the breach till it goes down
+                Event::BossArrive => self.play(Id::Approach, 1.0),
+                Event::BossBreach { .. } => self.music_target = 1.0,
+                Event::BossRoar { .. } => self.play(Id::Roar, 1.0),
+                Event::LaserWarn => self.play(Id::LaserCharge, 1.0),
+                Event::LaserFire => self.play(Id::LaserBeam, 1.0),
+                Event::BossTurn | Event::BossBreak { .. } => self.play(Id::Glitch, 1.0),
+                Event::BossDown { .. } => self.music_target = 0.0,
+                Event::BossFall => {
+                    self.music_target = 0.0;
+                    self.play(Id::Swallowed, 1.0);
+                }
+                // fins breaking and the death's blasts are blasts too
+                Event::FinBreak { .. } | Event::BossPhase(_) | Event::BossBlast { .. } | Event::BossGone => {}
             }
         }
         self.beam_target = if w.player.beaming { 1.0 } else { 0.0 };
@@ -130,8 +158,28 @@ impl Audio {
         self.play(id, 1.0);
     }
 
+    /// Fade the boss's theme toward where it should be (silent while paused).
+    fn update_music(&mut self, dt: f32, paused: bool) {
+        let target = if self.muted || paused { 0.0 } else { self.music_target };
+        let step = MUSIC_FADE * dt;
+        self.music = if self.music < target { (self.music + step).min(target) } else { (self.music - step).max(target) };
+        let Some(s) = self.bank.get(&Id::BossTheme).and_then(|l| l.first()) else { return };
+        if self.music > 0.001 {
+            if self.music_playing {
+                set_sound_volume(s, self.music * VOL_MUSIC);
+            } else if self.music_target > 0.0 {
+                play_sound(s, PlaySoundParams { looped: true, volume: self.music * VOL_MUSIC });
+                self.music_playing = true;
+            }
+        } else if self.music_playing && self.music_target == 0.0 {
+            stop_sound(s);
+            self.music_playing = false;
+        }
+    }
+
     /// Fade the beam hum toward where it should be. Call every display frame.
     pub fn update(&mut self, dt: f32, paused: bool) {
+        self.update_music(dt, paused);
         let target = if self.muted || paused { 0.0 } else { self.beam_target };
         let step = BEAM_FADE * dt;
         self.beam = if self.beam < target { (self.beam + step).min(target) } else { (self.beam - step).max(target) };
@@ -150,10 +198,18 @@ impl Audio {
         }
     }
 
-    /// Leaving the stage: the hum stops at once.
+    /// Start (or fade out) the boss's theme: boss practice starts mid-fight, past the
+    /// breach that would have started it.
+    pub fn music(&mut self, on: bool) {
+        self.music_target = if on { 1.0 } else { 0.0 };
+    }
+
+    /// Leaving the stage: the hum and the music stop at once.
     pub fn silence(&mut self) {
         self.beam_target = 0.0;
         self.beam = 0.0;
+        self.music_target = 0.0;
+        self.music = 0.0;
         self.update(0.0, true);
     }
 }

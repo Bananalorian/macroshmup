@@ -14,6 +14,7 @@ use crate::render::post::Fx;
 use crate::render::scene;
 use crate::render::ship::{self, Pose};
 use crate::render::{PostParams, Renderer};
+use crate::sim::World;
 use crate::tune::{BUMP_FLASH, HOLE_X, HOLE_Y, POD_X, POD_X_FOCUS, STAGE_FRAMES};
 use macroquad::prelude::*;
 
@@ -173,94 +174,88 @@ fn save_sheet(a: &Atlas, draw: fn(&Atlas), path: &str) {
 }
 
 
-// ---------------------------------------------------------------- the boss mock-up (PG_MOCKUP=1)
+// ---------------------------------------------------------------- the boss's sheet (PG_MOCKUP=1)
 
-/// The Cathedral proposal: in play (over the black hole at the end of the stage, with
-/// a few of its patterns and the Pilgrim), and at rest, charging, and in phase 2.
-/// Saves `./shots/cathedral_mockup.png`, 2x.
-pub fn export_mockup(r: &mut Renderer) {
-    use crate::render::cathedral;
-    use crate::sim::bullets::{Hue, Kind};
-    use std::f32::consts::TAU;
-    let cat = Texture2D::from_image(&cathedral::image());
-    cat.set_filter(FilterMode::Nearest);
-    let tur = Texture2D::from_image(&cathedral::turret());
-    tur.set_filter(FilterMode::Nearest);
-    let glass = cathedral::glass();
-    let (cw, ch) = cathedral::SIZE;
-    let draw_cat = |a: &Atlas, cx: i32, cy: i32, charge: f32, turrets: bool| {
-        draw_texture(&cat, (cx - cw / 2) as f32, (cy - ch / 2) as f32, WHITE);
-        if charge > 0.0 {
-            for &(x, y) in &glass {
-                a.fill(cx + x, cy + y, 1, 1, Color { a: 0.35 + 0.6 * charge, ..SIGNAL });
-            }
-            let (rx, ry) = cathedral::ROSE;
-            let rr = (3.0 + 4.0 * charge) as usize;
-            a.blit(a.r.discs[rr - 1], cx + rx as i32 - rr as i32 - 1, cy + ry as i32 - rr as i32 - 1, 1, Color { a: 0.9, ..SIGNAL });
-        }
-        if turrets {
-            for (tx, ty) in cathedral::TURRETS {
-                draw_texture(&tur, (cx + tx as i32 - 6) as f32, (cy + ty as i32 - 13) as f32, WHITE);
-                a.fill(cx + tx as i32 - 1, cy + ty as i32, 3, 3, Color { a: 0.6, ..SIGNAL });
-            }
-        }
-    };
-    let (w, h) = (16 + 270 + 24 + 240 + 16, 40 + 3 * 166 + 10);
-    let mut sheet = Image::gen_image_color(w as u16, h as u16, VOID);
-    label(&mut sheet, "THE CATHEDRAL  //  SPRINT 6 PROPOSAL  //  MOCK-UP", 16, 12, CREAM);
-    // in play: the playfield at the end of the stage
-    {
-        let lay = cell(270, 360);
-        r.parts = Particles::new();
-        r.fx = Fx::new();
-        r.begin(&lay);
-        r.stars.draw(&r.atlas, lay.field, STAGE_FRAMES, 1.0);
-        r.hole(lay.field, HOLE_X, HOLE_Y, scene::hole_radius(STAGE_FRAMES), scene::hole_bright(1.0), 5.0, 0.0);
-        let a = &r.atlas;
-        draw_cat(a, 135, 96, 0.8, true);
-        // a few of its patterns: a teal ring, violet spirals from the wing turrets, an amber fan
-        let bullet = |x: f32, y: f32, kind: Kind, hue: Hue, dx: f32, dy: f32| {
-            let src = a.r.bullets.frames[hue as usize][kind as usize][0][crate::render::bullets::turn(dx, dy)];
-            a.blit(src, (x - src.w * 0.5).round() as i32, (y - src.h * 0.5).round() as i32, 1, WHITE);
-        };
-        for k in 0..20 {
-            let ang = k as f32 * TAU / 20.0 + 0.1;
-            bullet(135.0 + ang.cos() * 74.0, 82.0 + ang.sin() * 74.0 + 40.0, Kind::Orb, Hue::Teal, 0.0, 1.0);
-        }
-        for side in [-1.0f32, 1.0] {
-            for k in 0..14 {
-                let t = k as f32 * 0.42;
-                let ang = t * side + if side > 0.0 { 1.3 } else { 1.8 };
-                let rr = 10.0 + k as f32 * 9.0;
-                bullet(135.0 + 78.0 * side + ang.cos() * rr, 136.0 + ang.sin() * rr, Kind::Rice, Hue::Violet, ang.cos(), ang.sin());
-            }
-        }
-        for k in 0..5 {
-            let ang = (90.0 + (k as f32 - 2.0) * 10.0f32).to_radians();
-            for j in 0..3 {
-                let d = 70.0 + j as f32 * 22.0;
-                bullet(135.0 + ang.cos() * d, 158.0 + ang.sin() * d, Kind::Needle, Hue::Red, ang.cos(), ang.sin());
-            }
-        }
-        let pose = Pose { pods: [(-POD_X, 0.0), (POD_X, 0.0)], frame: 4, ..Default::default() };
-        ship::draw(a, 150, 312, &pose);
-        r.post(&lay, &PostParams { field: lay.field, time: 5.0 });
-        let img = r.read_post(&lay);
-        paste(&mut sheet, &img, 16, 32);
-        label(&mut sheet, "IN PLAY: AT THE EVENT HORIZON, CHARGING", 16, (32 + 360 + 6) as u32, ASH);
+/// A run of the boss fight for the sheet: phase `phase` from its start, played by
+/// the bot for `frames` frames, then `tweak`ed into the state to show.
+fn boss_world(phase: u8, frames: u32, tweak: impl Fn(&mut World)) -> World {
+    let mut w = World::boss_at(7, Default::default(), phase);
+    w.invincible = true;
+    let mut bot = crate::sim::bot::Bot::new();
+    for _ in 0..frames {
+        let c = bot.decide(&w);
+        w.tick(c);
+        w.events.clear();
     }
-    // its states, at full size
-    for (i, (name, charge, turrets)) in [("AT REST", 0.0, false), ("CHARGING: GLASS AND CORE BLAZE", 1.0, false), ("PHASE 2: WING TURRETS", 0.5, true)].iter().enumerate() {
-        let lay = cell(240, 150);
+    tweak(&mut w);
+    w
+}
+
+/// JAWSTHIC for review, through the game's own drawing and post pass: in play, and
+/// at rest, charging, in each phase's look, glitching, facing either way. Saves
+/// `./shots/jawsthic_sheet.png`, 2x.
+pub fn export_mockup(r: &mut Renderer) {
+    use crate::sim::boss::Act;
+    let (w, h) = (16 + 270 + 24 + 2 * 250 + 16, 40 + 3 * 172 + 8);
+    let mut sheet = Image::gen_image_color(w as u16, h as u16, VOID);
+    label(&mut sheet, "JAWSTHIC  //  STAGE 1 BOSS  //  BUILT IN CODE", 16, 12, CREAM);
+    // in play: phase 1, the bot dodging
+    let lay = cell(270, 360);
+    let play = |world: &World, r: &mut Renderer| {
         r.parts = Particles::new();
         r.fx = Fx::new();
         r.begin(&lay);
-        draw_cat(&r.atlas, 120, 76, *charge, *turrets);
-        r.post(&lay, &PostParams { field: IRect::new(0, 0, 0, 0), time: 0.0 });
-        let img = r.read_post(&lay);
-        let y = 32 + i as u32 * 166;
-        label(&mut sheet, name, 16 + 270 + 30, y, CREAM);
-        paste(&mut sheet, &img, 16 + 270 + 24, y + 12);
+        scene::draw(r, &lay, world, false, &[]);
+        r.post(&lay, &PostParams { field: lay.field, time: world.frame as f32 / 60.0 });
+        r.read_post(&lay)
+    };
+    let img = play(&boss_world(1, 230, |_| {}), r);
+    paste(&mut sheet, &img, 16, 32);
+    label(&mut sheet, "IN PLAY: PHASE 1, TEETH", 16, (32 + 360 + 6) as u32, ASH);
+    // its looks, each a crop of the playfield's top
+    let states: [(&str, World); 6] = [
+        ("AT REST", boss_world(1, 2, |w| {
+            let b = w.boss.as_mut().unwrap();
+            (b.jaw, b.swim) = (0.0, 0.7);
+            w.hazards.bullets.clear();
+        })),
+        ("JAWS OPEN, A WINDOW CHARGING", boss_world(1, 69, |w| {
+            w.boss.as_mut().unwrap().jaw = 1.0;
+            w.hazards.bullets.clear();
+        })),
+        ("PHASE 2: THE FIN TURRETS", boss_world(2, 90, |w| {
+            w.hazards.bullets.clear();
+            w.boss.as_mut().unwrap().flash = 0;
+        })),
+        ("PHASE 3: THE LASER", boss_world(3, 150 + 70, |w| {
+            w.hazards.bullets.clear();
+        })),
+        ("PHASE 4: CRACKED, GLITCHING", boss_world(4, 30, |w| {
+            let b = w.boss.as_mut().unwrap();
+            b.turn = 20;
+            w.hazards.bullets.clear();
+        })),
+        ("FACING RIGHT, ITS TAIL FIN BROKEN", boss_world(2, 4, |w| {
+            let b = w.boss.as_mut().unwrap();
+            (b.facing, b.x) = (1.0, crate::tune::JAWS_HOME.0);
+            b.fins[1].hp = 0.0;
+            b.jaw = 0.3;
+            w.hazards.bullets.clear();
+        })),
+    ];
+    for (i, (name, world)) in states.iter().enumerate() {
+        let img = play(world, r);
+        let (col, row) = (i % 2, i / 2);
+        let (x, y) = (16 + 270 + 24 + col * 250, 32 + row * 172);
+        label(&mut sheet, name, x as u32, y as u32, CREAM);
+        let mut crop = Image::gen_image_color(240, 150, VOID);
+        for cy in 0..150u32 {
+            for cx in 0..240u32 {
+                crop.set_pixel(cx, cy, img.get_pixel(cx + 15, cy + 6));
+            }
+        }
+        paste(&mut sheet, &crop, x as u32, y as u32 + 12);
+        let _ = world.boss.as_ref().map(|b| b.act == Act::Fight);
     }
     let s = 2;
     let mut big = Image::gen_image_color((w as u32 * s) as u16, (h as u32 * s) as u16, VOID);
@@ -270,8 +265,8 @@ pub fn export_mockup(r: &mut Renderer) {
         }
     }
     let _ = std::fs::create_dir_all("shots");
-    big.export_png("shots/cathedral_mockup.png");
-    println!("saved shots/cathedral_mockup.png");
+    big.export_png("shots/jawsthic_sheet.png");
+    println!("saved shots/jawsthic_sheet.png");
 }
 
 // ---------------------------------------------------------------- the effects sheet (PG_FXSHEET=1)

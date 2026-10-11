@@ -190,7 +190,7 @@ src/
   tune.rs            every tunable number in one place
   sim/               pure, deterministic, tested headlessly
     mod.rs world.rs player.rs bullets.rs pattern.rs enemy.rs
-    stage1.rs boss1.rs score.rs rng.rs bot.rs
+    stage1.rs boss.rs score.rs rng.rs bot.rs
   render/
     mod.rs post.rs bg.rs particles.rs art.rs font.rs hud.rs
   audio.rs synth.rs  ported from Shinjuku
@@ -252,7 +252,7 @@ F6 skip to the next section · F7 next sandbox pattern · F8 performance overlay
 1. **Music:** **synthesized in code, like Shinjuku**, or your own tracks dropped into the repo (from Suno or anywhere).
 2. **Contrast as a mechanic** (Ikaruga-style polarity): **no, contrast stays visual.** A yes would reshape Sprints 2, 4 and 6.
 3. **Power-ups:** **none; full power from the start.**
-4. **Boss:** **proposal: the Cathedral** (Sprint 6), or your own concept.
+4. **Boss:** **JAWSTHIC**, your concept (Sprint 6, v0.7.0). The Cathedral proposal is retired.
 5. **Shot controls:** **a separate Focus button** (Touhou-style), with a CAVE-style "hold Fire to beam" option.
 6. **Continues:** **none (arcade retry)**, plus Boss Practice once you've reached the boss.
 
@@ -416,16 +416,16 @@ You check: play it. Where is it boring? Where is it unfair?
 ### Sprint 6 — The boss · v0.7.0
 **Goal:** a four-phase boss worth the trip, and a death worth watching.
 
-*Proposal:* **the Cathedral**, a gothic hulk guarding the event horizon ([mock-up](docs/screenshots/cathedral-mockup.png), v0.6.5). An engraved monochrome hull with red stained-glass seams and a red core that glow brighter as it charges each attack. The Pilgrim keeps teal. Approve this or give your own concept before the sprint starts.
+**The boss: JAWSTHIC** (Jason's concept, approved before the sprint, drawn 100% in code from [his reference](docs/reference/jawsthic.jpg)). A great white carved from moon rock, a gothic cathedral for a body: lancet windows with red and teal light, a dorsal fin with an arched window, a segmented stone tail, a red diamond eye, and jaws that drop open on a red crosshair. Glitch smears trail its tail. It swims side-on across the top of the screen and glitches round to face the other way ([the boss sheet](docs/screenshots/jawsthic-sheet.png)). The Cathedral proposal ([mock-up](docs/screenshots/cathedral-mockup.png), v0.6.5) is retired.
 
 Build
 - The boss framework: several parts with their own hurtboxes and HP, a segmented health bar, a phase timer, a phase-break cancel (bullets turn to shards), a short pause between phases. A timeout ends the phase with no bonus.
-- **Intro:** WARNING, the boss rises out of the disk, the music switches, and it can't be hurt until it's in position.
+- **Intro:** WARNING, then its fin cuts through the disk like a shark's through water, it breaches and roars, the music switches, and it can't be hurt until it's in position.
 - **Phases** (each mixes aimed, static and random fire, each built around lanes)
-  1. Aimed 5-way fans over slow static rings. 30 s.
-  2. Breakable wing turrets with red cores spin opposing spirals while the core fires aimed needle bursts. Breaking a wing removes its spiral. 40 s.
-  3. A shifting curtain of rice bullets with random sprinkles, plus telegraphed laser sweeps (a red warning line for 45 frames, then the beam for 60). 40 s.
-  4. Desperation, at 15% HP: bullets curve toward the black hole, every curved bullet with a trail, a rotating flower with aimed bursts. 35 s. If time runs out, it falls into the hole and you get no kill bonus.
+  1. TEETH: aimed 5-way fans from its jaws over slow static rings from its windows. 30 s.
+  2. FINS: its pectoral fin and tail fin, turrets with red cores, spin opposing spirals while its jaws fire aimed needle bursts. Breaking a fin removes its spiral (and a quarter of the phase); with both gone, its windows open fire. 40 s. (The turrets hang below and behind the body, so shots can reach them.)
+  3. GLITCH: a shifting curtain of rice, each row slipping sideways, a lane drifting through it, with random sprinkles off its tail, plus telegraphed laser sweeps from its jaws (a red warning line for 45 frames, then the beam for 60, sweeping toward your nearer wall). 40 s.
+  4. EVENT HORIZON, at 15% HP: a rotating flower and spiral arms that bend toward the black hole, every curved bullet with a trail, and aimed bursts. 35 s. If time runs out, it falls into the hole and you get no kill bonus.
 - **Death:** 8–12 chained blasts across the hull with shock rings, slow motion at 0.25, an RGB surge, a final white-out and a full-screen cancel, then the stage clear tally.
 - Boss practice: `PG_SCENE=boss:<phase>`.
 
@@ -434,7 +434,7 @@ Done when
 - With full power and no bombs, each phase takes 20–35 s to kill.
 - Screenshots of the death sequence at 6 moments, holding 60 fps throughout.
 
-You check: approve the boss concept before this sprint starts.
+You check: play the boss (`PG_SCENE=boss`, or the whole stage). Is it worth the trip? Which phase is dull, unfair or too easy? And give the music a listen.
 
 ---
 

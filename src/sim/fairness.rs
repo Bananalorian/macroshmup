@@ -64,7 +64,7 @@ fn no_bullet_spawns_within_24_px_of_the_player() {
 }
 
 /// The widest free gap across one horizontal band of the playfield.
-fn widest_gap(w: &World, y0: f32, y1: f32) -> f32 {
+pub(super) fn widest_gap(w: &World, y0: f32, y1: f32) -> f32 {
     let b = &w.hazards.bullets;
     let mut spans: Vec<(f32, f32)> = (0..b.len())
         .filter(|&i| {

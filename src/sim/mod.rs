@@ -2,6 +2,9 @@
 //! or touches macroquad, so `cargo test` can play the game headlessly in CI.
 //! The same seed with the same inputs always gives the same run.
 
+pub mod boss;
+#[cfg(test)]
+mod boss_tests;
 pub mod bot;
 pub mod bullets;
 pub mod dummy;
@@ -20,6 +23,7 @@ pub mod stage1;
 mod stage_tests;
 
 use crate::tune::*;
+use boss::{BOSS_ID, Boss};
 use dummy::Dummy;
 use enemy::{EnemyKind, Foes, Hurt};
 use geom::Rect;
@@ -70,13 +74,40 @@ pub enum Event {
     Warning,
     /// The end of the stage.
     StageEnd,
+    /// JAWSTHIC is coming: its fin is about to cut through the disk.
+    BossArrive,
+    /// JAWSTHIC breached the disk at `(x, y)` (the splash).
+    BossBreach { x: f32, y: f32 },
+    /// It roared, in position: the fight is about to begin.
+    BossRoar { x: f32, y: f32 },
+    /// Phase `n` (1-4) began.
+    BossPhase(u8),
+    /// One of phase 2's fin turrets broke off (`fin` 0 the dorsal, 1 the pectoral).
+    FinBreak { x: f32, y: f32, fin: u8 },
+    /// A phase ended: its share of health gone, or (`timeout`) its time. Its bullets cancel.
+    BossBreak { x: f32, y: f32, timeout: bool },
+    /// It glitched round to face the other way.
+    BossTurn,
+    /// A laser's warning line appeared, and the beam fired.
+    LaserWarn,
+    LaserFire,
+    /// Destroyed at `(x, y)`: every bullet cancels and the chained blasts begin.
+    BossDown { x: f32, y: f32 },
+    /// One of the death's blasts; `last` is the big one.
+    BossBlast { x: f32, y: f32, last: bool },
+    /// Phase 4 timed out: the black hole takes it (no kill).
+    BossFall,
+    /// It's gone (destroyed or swallowed): the stage ends.
+    BossGone,
 }
 
-/// Something shots can hit: a target dummy, or part `p` of enemy `i` (0 is its body).
+/// Something shots can hit: a target dummy, part `p` of enemy `i` (0 is its body), or
+/// part `p` of the boss (0 its body, 1 and 2 its fins' turrets).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Target {
     Dummy(usize),
     Foe(usize, usize),
+    Boss(usize),
 }
 
 /// Where the Pilgrim is in its life.
@@ -172,6 +203,10 @@ pub struct World {
     pub foes: Foes,
     /// Stage 1's script and clock (none in the sandbox).
     pub stage: Option<Stage>,
+    /// JAWSTHIC, once it's arrived.
+    pub boss: Option<Boss>,
+    /// Ticks left of the boss's death in slow motion (the caller runs them at quarter speed).
+    pub slow: u32,
     /// Everything shots can hit this frame, weak points before bodies.
     boxes: Vec<(Target, Rect)>,
     hits_now: Vec<Target>,
@@ -207,6 +242,8 @@ impl World {
             cancel_shards: false,
             foes: Foes::new(seed),
             stage: None,
+            boss: None,
+            slow: 0,
             boxes: Vec::with_capacity(64),
             hits_now: Vec::with_capacity(64),
         }
@@ -231,13 +268,36 @@ impl World {
         w
     }
 
+    /// Boss practice (PG_SCENE=boss:<phase>): Stage 1 at the boss, in phase `phase`,
+    /// or from its intro (0).
+    pub fn boss_at(seed: u64, tuning: Tuning, phase: u8) -> World {
+        let mut w = World::stage_at(seed, tuning, JAWS_AT);
+        if phase > 0 {
+            let spin = w.foes.rng.range(0.0, 360.0);
+            w.boss = Some(Boss::at_phase(spin, phase));
+            if let Some(s) = &mut w.stage {
+                s.boss_called = true;
+                s.skip_to(stage1::frames(SECTIONS[7].0));
+                w.frame = s.t as u64;
+            }
+        }
+        w
+    }
+
     /// The stage clock (frames since it began), or the run's frame in the sandbox.
     pub fn clock(&self) -> u64 {
         self.stage.as_ref().map_or(self.frame, |s| s.t as u64)
     }
 
-    /// Debug (F6): straight to the next section, clearing the screen.
+    /// Debug (F6): straight to the next section, clearing the screen; during the
+    /// boss, straight to its next phase.
     pub fn skip_section(&mut self) {
+        if let Some(b) = self.boss.as_mut().filter(|b| b.act == boss::Act::Fight) {
+            let from = self.events.len();
+            b.hurt(0, JAWS_HP, &mut self.events);
+            self.boss_aftermath(from);
+            return;
+        }
         let Some(s) = &mut self.stage else { return };
         if let Some(next) = SECTIONS.get(s.section + 1) {
             s.skip_to(stage1::frames(next.0));
@@ -287,6 +347,7 @@ impl World {
     pub fn tick(&mut self, c: Controls) {
         self.frame += 1;
         let f = self.frame;
+        let first_event = self.events.len();
         self.cancelled.clear();
         self.cancel_shards = false;
 
@@ -314,9 +375,15 @@ impl World {
         for d in &mut self.dummies {
             d.tick(f);
         }
-        // the stage's timeline: who arrives this frame
+        // the stage's timeline: who arrives this frame, and the boss after the WARNING
         if let Some(s) = &mut self.stage {
             s.tick(&mut self.foes, &mut self.events);
+            if !s.boss_called && s.t >= stage1::frames(JAWS_AT) {
+                s.boss_called = true;
+                let spin = self.foes.rng.range(0.0, 360.0);
+                self.boss = Some(Boss::new(spin));
+                self.events.push(Event::BossArrive);
+            }
         }
         let me = (self.player.x, self.player.y);
         let mut m = [(0.0, 0.0, false); 8];
@@ -324,6 +391,9 @@ impl World {
         self.hazards.step(me, &m[..n]);
         let fire_ok = self.stage.as_ref().is_none_or(|s| s.fire_ok());
         self.foes.step(&mut self.hazards, me, fire_ok, &mut self.events);
+        if let Some(b) = &mut self.boss {
+            b.step(&mut self.hazards, me, &mut self.events);
+        }
         self.build_boxes();
         self.step_bomb();
 
@@ -355,8 +425,43 @@ impl World {
             self.collide_bullets();
         }
         self.refill_shots();
+        self.boss_aftermath(first_event);
         self.invuln = self.invuln.saturating_sub(1);
         self.dip = self.dip.saturating_sub(1);
+        self.slow = self.slow.saturating_sub(1);
+    }
+
+    /// What the boss's moments this tick do to the rest of the game: a broken phase
+    /// takes its bullets with it (as shards), its death cancels every bullet and runs
+    /// in slow motion, and once it's gone the stage is over.
+    fn boss_aftermath(&mut self, from: usize) {
+        for k in from..self.events.len() {
+            let mut out = std::mem::take(&mut self.cancelled);
+            let before = out.len();
+            match self.events[k] {
+                Event::BossBreak { .. } | Event::BossFall => self.hazards.cancel_owner(BOSS_ID, &mut out),
+                Event::BossDown { .. } => {
+                    self.hazards.cancel_within(0.0, 0.0, f32::MAX, &mut out);
+                    self.slow = JAWS_SLOWMO;
+                }
+                Event::BossGone => {
+                    if let Some(s) = self.stage.as_mut().filter(|s| !s.over) {
+                        s.over = true;
+                        self.events.push(Event::StageEnd);
+                    }
+                }
+                _ => {}
+            }
+            self.cancel_shards |= out.len() > before;
+            self.cancelled = out;
+        }
+    }
+
+    /// The boss is fighting a phase you just died or bombed in: no capture for it.
+    fn spoil_capture(&mut self) {
+        if let Some(b) = self.boss.as_mut().filter(|b| b.act == boss::Act::Fight) {
+            b.clean[b.phase as usize - 1] = false;
+        }
     }
 
     /// The deathbomb window, the death, the cancel, the respawn.
@@ -405,6 +510,7 @@ impl World {
 
     fn final_death(&mut self) {
         self.deaths += 1;
+        self.spoil_capture();
         if let Some(s) = &mut self.stage {
             s.deaths[s.section] += 1;
         }
@@ -424,6 +530,10 @@ impl World {
                 q.bombed = false;
             }
         }
+        if let Some(b) = &mut self.boss {
+            b.bombed = [false; 3];
+        }
+        self.spoil_capture();
         self.invuln = self.invuln.max(BOMB_INVULN);
         self.invuln_blink = false;
         self.dip = BOMB_DIP;
@@ -454,6 +564,12 @@ impl World {
                     self.foes.list[i].parts[p].bombed = true;
                     self.hits_now.push(t);
                 }
+                Target::Boss(p) => {
+                    if let Some(boss) = self.boss.as_mut().filter(|boss| !boss.bombed[p]) {
+                        boss.bombed[p] = true;
+                        self.hits_now.push(t);
+                    }
+                }
                 _ => {}
             }
         }
@@ -483,6 +599,11 @@ impl World {
                 self.boxes.push((Target::Dummy(k), d.rect()));
             }
         }
+        if let Some(b) = &self.boss {
+            for p in b.targets() {
+                self.boxes.push((Target::Boss(p), b.rect(p)));
+            }
+        }
         for (i, e) in self.foes.list.iter().enumerate() {
             if !e.hittable() {
                 continue;
@@ -503,6 +624,15 @@ impl World {
                     let big = d.kind == dummy::DummyKind::Big;
                     self.events.push(Event::Break { x: d.x, y: d.y, big });
                     self.boxes.retain(|b| b.0 != t);
+                }
+            }
+            Target::Boss(p) => {
+                let Some(b) = &mut self.boss else { return };
+                match b.hurt(p, dmg, &mut self.events) {
+                    // a turret broke off: just it; the phase broke: the whole boss, till the next
+                    Hurt::Broke if p > 0 => self.boxes.retain(|x| x.0 != t),
+                    Hurt::Broke | Hurt::Died => self.boxes.retain(|x| !matches!(x.0, Target::Boss(_))),
+                    Hurt::Hit | Hurt::Nothing => {}
                 }
             }
             Target::Foe(i, _) if !self.foes.list[i].alive() => {}
@@ -618,9 +748,10 @@ impl World {
                 self.events.push(Event::Graze { x: b.x[i], y: b.y[i] });
             }
         }
-        // crashing into an enemy's body is as bad as a bullet
+        // crashing into an enemy's body is as bad as a bullet, and so is the boss's laser
         if !safe {
             hit |= self.foes.list.iter().any(|e| e.alive() && e.body().dist(px, py) < HITBOX_R);
+            hit |= self.boss.as_ref().is_some_and(|b| b.crashes(px, py, HITBOX_R) || b.laser.is_some_and(|l| l.touches(px, py, HITBOX_R)));
         }
         if hit {
             // struck: the deathbomb window opens

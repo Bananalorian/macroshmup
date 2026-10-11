@@ -4,6 +4,9 @@
 
 use crate::tune::{BULLET_CAP, BULLET_HIT, BULLET_SIZE};
 
+/// A pulled bullet this close to what pulls it is swallowed.
+const SWALLOW: f32 = 4.0;
+
 /// Draw order goes by this order too: big and slow at the bottom, small and fast on top.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Kind {
@@ -65,7 +68,8 @@ pub enum Behavior {
     Curve { turn: f32, frames: u16 },
     /// At `at` frames old, bursts into a ring of `n` bullets of `kind` at `speed`.
     Split { at: u16, n: u8, kind: Kind, speed: f32 },
-    /// Pulled toward `(x, y)` by `pull` px/frame², never faster than `max`.
+    /// Pulled toward `(x, y)` by `pull` px/frame², never faster than `max`; it's
+    /// swallowed when it gets there.
     Pull { x: f32, y: f32, pull: f32, max: f32 },
 }
 
@@ -174,8 +178,8 @@ impl Bullets {
         self.hue.swap_remove(i);
     }
 
-    /// Advance bullet `i` one frame. Returns true if it split (and should be removed);
-    /// its children go into `out`.
+    /// Advance bullet `i` one frame. Returns true if it's gone (it split, its children
+    /// going into `out`, or what pulls it swallowed it).
     pub fn step(&mut self, i: usize, player: (f32, f32), out: &mut Vec<Spawn>) -> bool {
         let age = self.age[i];
         let (mut vx, mut vy) = (self.vx[i], self.vy[i]);
@@ -219,6 +223,9 @@ impl Bullets {
             Behavior::Pull { x, y, pull, max } => {
                 let (ax, ay) = (x - self.x[i], y - self.y[i]);
                 let d = ax.hypot(ay).max(1.0);
+                if d < SWALLOW {
+                    return true;
+                }
                 vx += ax / d * pull;
                 vy += ay / d * pull;
                 let v = vx.hypot(vy);
@@ -332,6 +339,10 @@ mod tests {
         run(&mut b, 40, (0.0, 0.0));
         assert!(b.vy[0] < -1.0, "heading up toward the point");
         assert!(b.vx[0].hypot(b.vy[0]) <= 2.0 + 1e-4);
+        // one falling straight in is swallowed when it gets there (one going round orbits)
+        let mut b = one(Kind::Small, Behavior::Pull { x: 100.0, y: 0.0, pull: 0.1, max: 2.0 }, 0.0, -0.5);
+        run(&mut b, 120, (0.0, 0.0));
+        assert_eq!(b.len(), 0);
     }
 
     #[test]

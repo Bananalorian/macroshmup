@@ -1,18 +1,19 @@
 //! Debug hooks. Environment variables work in native builds only (the browser has
 //! none); the debug keys work in debug builds only.
 //!
-//!   PG_SCENE=title | stage:<seconds> | midboss | shots:<n> | sandbox:<pattern> | stress   jump straight there
+//!   PG_SCENE=title | stage:<seconds> | midboss | boss[:<phase>] | shots:<n> | sandbox:<pattern> | stress   jump straight there
 //!   PG_SHOTS=60,300                    save those frames to ./shots/ and quit
 //!   PG_AUTO=1                          the dodging bot plays
 //!   PG_SIM=<n>                         n seeded bot runs of Stage 1, headless, with a report
 //!   PG_SIM=patterns:<n>                n seeded bot runs of every sandbox pattern
+//!   PG_SIM=boss:<n>                    n seeded bot runs of each of the boss's phases, no bombs
 //!   PG_SEED=<n>                        fixed gameplay seed
 //!   PG_GRAY=1                          grayscale screenshots (the value check)
 //!   PG_SIZE=1280x720                   window size, for screenshots
 //!   PG_PERF=1                          start with the performance overlay on
 //!   PG_SHEET=1                         save the ship's animation sheet and quit
 //!   PG_FXSHEET=1                       save the explosions and black hole sheet and quit
-//!   PG_MOCKUP=1                        save the boss proposal's mock-up and quit
+//!   PG_MOCKUP=1                        save the boss's review sheet and quit
 //!   PG_WAV=1                           dump every synthesized sound to ./shots/sfx/
 //!   PG_FRESH=1                         ignore and don't touch the save file
 //!   PG_MENU=1                          open the pause menu (for screenshots)
@@ -20,6 +21,7 @@
 //!   PG_INVINCIBLE=1                    bullets can't hurt you (as in the pause menu)
 //!   PG_BOMB=<frame>                    press bomb on that frame
 //!   PG_DIE=<frame>                     put a bullet on the ship on that frame
+//!   PG_KILL=<frame>                    break the boss's phase on that screen frame (F6 does it too)
 //!
 //! F1 hitboxes, F2 grayscale, F3 quarter speed, F4 frame step (Enter resumes),
 //! F5 invincible, F6 next stage section, F7 next pattern, F8 performance overlay,
@@ -41,14 +43,14 @@ pub enum SceneReq {
     Title,
     /// Stage 1, starting this many seconds in.
     Stage(f32),
+    /// Boss practice: JAWSTHIC from its intro (0) or straight into phase 1-4.
+    Boss(u8),
     /// The sandbox with this many extra player shots kept alive (performance check).
     Shots(usize),
     /// The sandbox with pattern `i` running.
     Sandbox(usize),
 }
 
-/// Scenes from the plan that later sprints will build.
-const LATER: [&str; 1] = ["boss"];
 
 /// A sandbox pattern by number or by name (`3`, `spiral`, `slow-pause-aim`).
 fn find_pattern(arg: &str) -> Option<usize> {
@@ -65,6 +67,10 @@ pub fn parse_scene(s: &str) -> Result<SceneReq, String> {
     match name {
         "title" => Ok(SceneReq::Title),
         "midboss" => Ok(SceneReq::Stage(crate::tune::SECTIONS[4].0)),
+        "boss" => match arg {
+            None => Ok(SceneReq::Boss(0)),
+            Some(a) => a.parse::<u8>().ok().filter(|p| *p <= 4).map(SceneReq::Boss).ok_or_else(|| format!("PG_SCENE=boss:<phase> wants a phase 0-4 (0 is its intro), got {a:?}")),
+        },
         "stage" => match arg {
             None => Ok(SceneReq::Stage(0.0)),
             Some(a) => a
@@ -83,8 +89,7 @@ pub fn parse_scene(s: &str) -> Result<SceneReq, String> {
             .ok_or_else(|| "PG_SCENE=shots:<n> wants a count up to 5000".to_string()),
         "sandbox" => find_pattern(arg.unwrap_or("1")).map(SceneReq::Sandbox).ok_or_else(|| format!("no sandbox pattern {arg:?}")),
         "stress" => Ok(SceneReq::Sandbox(SANDBOX.iter().position(|p| p.fill >= 4000).unwrap_or(0))),
-        n if LATER.contains(&n) => Err(format!("PG_SCENE={n} arrives in a later sprint")),
-        _ => Err(format!("unknown PG_SCENE {s:?} (try title, stage:<seconds>, midboss, shots:<n>, sandbox:<pattern> or stress)")),
+        _ => Err(format!("unknown PG_SCENE {s:?} (try title, stage:<seconds>, midboss, boss:<phase>, shots:<n>, sandbox:<pattern> or stress)")),
     }
 }
 
@@ -116,6 +121,7 @@ pub struct Hooks {
     pub invincible: bool,
     pub bomb_at: Option<u64>,
     pub die_at: Option<u64>,
+    pub kill_at: Option<u64>,
     #[cfg_attr(target_arch = "wasm32", allow(dead_code))] // the sound dump is native-only
     pub wav: bool,
     pub menu: bool,
@@ -158,6 +164,7 @@ pub fn hooks() -> Hooks {
         invincible: env("PG_INVINCIBLE").is_some(),
         bomb_at: env("PG_BOMB").and_then(|s| s.trim().parse().ok()),
         die_at: env("PG_DIE").and_then(|s| s.trim().parse().ok()),
+        kill_at: env("PG_KILL").and_then(|s| s.trim().parse().ok()),
         boom: env("PG_BOOM").and_then(|s| s.trim().parse().ok()).filter(|&n: &usize| n < 4),
         wav: env("PG_WAV").is_some(),
         menu: env("PG_MENU").is_some(),
@@ -192,16 +199,53 @@ fn parallel<T: Send>(n: u32, job: impl Fn(u32) -> T + Sync) -> Vec<T> {
 /// window opens.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn sim_report(arg: &str) {
-    let (patterns, n) = match arg.trim().split_once(':') {
-        Some((what, n)) => (what.eq_ignore_ascii_case("patterns"), n),
-        None => (false, arg),
+    let (what, n) = match arg.trim().split_once(':') {
+        Some((what, n)) => (what.to_ascii_lowercase(), n),
+        None => (String::new(), arg),
     };
     let seeds = n.trim().parse().unwrap_or(200);
-    if patterns {
-        pattern_report(seeds);
-    } else {
-        stage_report(seeds);
+    match what.as_str() {
+        "patterns" => pattern_report(seeds),
+        "boss" => boss_report(seeds),
+        _ => stage_report(seeds),
     }
+}
+
+/// Each of the boss's phases from its start, played by the bot without bombs and
+/// with endless lives: how often it gets through without a death, and how long the
+/// phase takes to break (the sprint's bar: 80% survive, 20-35 s).
+#[cfg(not(target_arch = "wasm32"))]
+fn boss_report(seeds: u32) {
+    use crate::sim::bot;
+    use crate::tune::{BOSS_NAME, JAWS_PHASES, JAWS_PHASE_NAMES};
+    let start = std::time::Instant::now();
+    let threads = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4);
+    println!("PG_SIM: {seeds} seeds of each {BOSS_NAME} phase, the bot without bombs, {threads} threads");
+    println!("{:<16} {:>9} {:>11} {:>9} {:>17} {:>9} {:>7} {:>6}", "PHASE", "SURVIVED", "DEATHS/RUN", "BROKEN", "KILL (MED, RANGE)", "TIMEOUTS", "GRAZES", "PEAK");
+    for p in 1..=4u8 {
+        let runs = parallel(seeds, |k| bot::phase_trial(1000 + k as u64, p, false));
+        let n = runs.len().max(1) as f32;
+        let mut kills: Vec<u32> = runs.iter().filter_map(|r| r.kill).collect();
+        kills.sort();
+        let secs = |f: u32| f as f32 / 60.0;
+        let kill = match (kills.first(), kills.get(kills.len() / 2), kills.last()) {
+            (Some(a), Some(m), Some(z)) => format!("{:.1} s ({:.1}-{:.1})", secs(*m), secs(*a), secs(*z)),
+            _ => "never".into(),
+        };
+        println!(
+            "{:<16} {:>8.0}% {:>11.2} {:>8.0}% {:>17} {:>8.0}% {:>7.0} {:>6}",
+            format!("{} {}", p, JAWS_PHASE_NAMES[p as usize - 1]),
+            runs.iter().filter(|r| r.deaths == 0).count() as f32 * 100.0 / n,
+            runs.iter().map(|r| r.deaths).sum::<u32>() as f32 / n,
+            kills.len() as f32 * 100.0 / n,
+            kill,
+            (runs.len() - kills.len()) as f32 * 100.0 / n,
+            runs.iter().map(|r| r.grazes).sum::<u32>() as f32 / n,
+            runs.iter().map(|r| r.peak).max().unwrap_or(0),
+        );
+        let _ = JAWS_PHASES;
+    }
+    println!("done in {:.1} s", start.elapsed().as_secs_f32());
 }
 
 /// Stage 1, played by the bot with 3 lives and its bombs: clears, deaths per section,
@@ -259,6 +303,19 @@ fn stage_report(seeds: u32) {
         println!("DERELICT: destroyed in {:.0}% of runs, median {:.1} s, fastest {:.1} s; it left in the rest", pct(kills.len()), *med as f32 / 60.0, *fast as f32 / 60.0);
     } else {
         println!("DERELICT: never destroyed");
+    }
+    use crate::tune::{BOSS_NAME, JAWS_PHASE_NAMES};
+    println!("{BOSS_NAME}: destroyed in {:.0}% of runs", pct(runs.iter().filter(|r| r.boss_killed).count()));
+    println!("{:<16} {:>8} {:>18} {:>11}", "PHASE", "BROKEN", "TIME (MED, RANGE)", "DEATHS/RUN");
+    for p in 0..4 {
+        let mut t: Vec<u32> = runs.iter().filter_map(|r| r.phase_time[p]).collect();
+        t.sort();
+        let time = match (t.first(), t.get(t.len() / 2), t.last()) {
+            (Some(a), Some(m), Some(z)) => format!("{:.1} s ({:.1}-{:.1})", *m as f32 / 60.0, *a as f32 / 60.0, *z as f32 / 60.0),
+            _ => "never".into(),
+        };
+        let deaths: u32 = runs.iter().map(|r| r.phase_deaths[p]).sum();
+        println!("{:<16} {:>7.0}% {:>18} {:>11.2}", format!("{} {}", p + 1, JAWS_PHASE_NAMES[p]), pct(t.len()), time, deaths as f32 / n);
     }
     println!("done in {:.1} s", start.elapsed().as_secs_f32());
 }
@@ -497,7 +554,9 @@ mod tests {
         assert!(parse_scene("shots:many").is_err());
         assert!(parse_scene("stage:-3").is_err());
         assert!(parse_scene("stage:soon").is_err());
-        assert!(parse_scene("boss:2").unwrap_err().contains("later sprint"));
+        assert_eq!(parse_scene("boss"), Ok(SceneReq::Boss(0)));
+        assert_eq!(parse_scene("boss:2"), Ok(SceneReq::Boss(2)));
+        assert!(parse_scene("boss:5").is_err());
         assert_eq!(parse_scene("sandbox:3"), Ok(SceneReq::Sandbox(3)));
         assert_eq!(parse_scene("sandbox:spiral"), Ok(SceneReq::Sandbox(SANDBOX.iter().position(|p| p.name == "SPIRAL").unwrap())));
         assert_eq!(parse_scene("sandbox:slow-pause-aim"), Ok(SceneReq::Sandbox(SANDBOX.iter().position(|p| p.name == "SLOW, PAUSE, AIM").unwrap())));

@@ -10,7 +10,7 @@
 //!   1:25  the derelict hull rises out of the disk (the mid-boss)
 //!   1:55  heavies one at a time through swarms: the peak
 //!   2:30  calm, WARNING
-//!   2:40  the end of the stage (the boss arrives in v0.7)
+//!   2:32  JAWSTHIC rises out of the disk; the stage ends when it's gone
 
 use super::Event;
 use super::enemy::{EnemyKind, Foes, Path, Spline};
@@ -288,6 +288,9 @@ pub fn unfair(queue: &[Arrival]) -> Option<String> {
     None
 }
 
+/// How many sections the stage has.
+pub const N: usize = SECTIONS.len();
+
 /// Where the stage is: its clock, who's still to come, and the tally.
 #[derive(Clone)]
 pub struct Stage {
@@ -297,21 +300,23 @@ pub struct Stage {
     next: usize,
     pub section: usize,
     /// When each section actually began, and deaths in each.
-    pub began: [Option<u32>; 7],
-    pub deaths: [u32; 7],
+    pub began: [Option<u32>; N],
+    pub deaths: [u32; N],
     pub spawned: u32,
     pub killed: u32,
-    /// Reached the end.
+    /// The boss has been called up (it comes once).
+    pub boss_called: bool,
+    /// Reached the end: the boss is gone.
     pub over: bool,
 }
 
 impl Stage {
     pub fn new() -> Stage {
-        let mut began = [None; 7];
+        let mut began = [None; N];
         began[0] = Some(0);
         let queue = arrivals();
         debug_assert_eq!(unfair(&queue), None);
-        Stage { t: 0, queue, next: 0, section: 0, began, deaths: [0; 7], spawned: 0, killed: 0, over: false }
+        Stage { t: 0, queue, next: 0, section: 0, began, deaths: [0; N], spawned: 0, killed: 0, boss_called: false, over: false }
     }
 
     /// Enemies may fire (not in the opening seconds).
@@ -336,7 +341,7 @@ impl Stage {
         }
     }
 
-    /// One frame of the timeline: arrivals due now, a new section, the warning, the end.
+    /// One frame of the timeline: arrivals due now, a new section, the warning.
     pub fn tick(&mut self, foes: &mut Foes, events: &mut Vec<Event>) {
         self.t += 1;
         while let Some(a) = self.queue.get(self.next).filter(|a| a.frame <= self.t) {
@@ -351,13 +356,9 @@ impl Stage {
             self.section = s;
             self.began[s] = Some(self.t);
             events.push(Event::Section(s as u8));
-            if s == SECTIONS.len() - 1 {
+            if s == WARNING_SECTION {
                 events.push(Event::Warning);
             }
-        }
-        if !self.over && self.t >= frames(STAGE_END) {
-            self.over = true;
-            events.push(Event::StageEnd);
         }
     }
 }
@@ -403,13 +404,14 @@ mod tests {
     #[test]
     fn the_script_follows_the_timeline() {
         assert!(SCRIPT.windows(2).all(|w| w[0].0 <= w[1].0), "in time order");
-        assert_eq!(SECTIONS.len(), 7);
+        assert_eq!(SECTIONS.len(), 8);
+        assert!(SECTIONS[WARNING_SECTION].0 < JAWS_AT && JAWS_AT < SECTIONS[7].0, "the boss rises during the WARNING");
         // nothing that shoots before the first-fire time, nothing at all in the last calm
         for &(at, cue) in SCRIPT {
             if at < FIRST_FIRE {
                 assert!(matches!(cue, Drones { fire: false, .. } | Couriers { fire: false, .. }), "{at}: {cue:?}");
             }
-            assert!(at < SECTIONS[6].0, "{at}: the WARNING section is calm");
+            assert!(at < SECTIONS[WARNING_SECTION].0, "{at}: the WARNING section is calm");
         }
         // the breather fires nothing; the derelict has its section to itself
         for &(at, cue) in SCRIPT.iter().filter(|(at, _)| (SECTIONS[3].0..SECTIONS[5].0).contains(at)) {
@@ -427,17 +429,18 @@ mod tests {
     }
 
     #[test]
-    fn the_stage_runs_its_clock_spawns_on_cue_and_ends() {
+    fn the_stage_runs_its_clock_and_spawns_on_cue() {
         let mut s = Stage::new();
         let mut foes = Foes::default();
         let mut ev = vec![];
         let total = arrivals().len() as u32;
-        for _ in 0..frames(STAGE_END) {
+        for _ in 0..frames(SECTIONS[7].0) {
             s.tick(&mut foes, &mut ev);
             foes.list.clear();
         }
         assert_eq!(s.spawned, total);
-        assert!(s.over && ev.contains(&Event::StageEnd) && ev.contains(&Event::Warning));
+        assert!(ev.contains(&Event::Warning));
+        assert!(!s.over, "the stage only ends with the boss");
         let starts: Vec<u32> = s.began.iter().map(|b| b.unwrap()).collect();
         let planned: Vec<u32> = SECTIONS.iter().map(|x| frames(x.0)).collect();
         assert_eq!(starts, planned);

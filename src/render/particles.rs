@@ -6,6 +6,10 @@
 
 use super::art::Atlas;
 use super::palette::{ASH, CREAM, SIGNAL, SLATE, TEAL};
+
+/// The boss's stone, for its glitch smears (inside the enemies' value budget).
+const BONE_HI: Color = Color::new(0.769, 0.741, 0.659, 0.9);
+const BONE_MID: Color = Color::new(0.616, 0.588, 0.51, 0.85);
 use crate::sim::rng::Rng;
 use crate::tune::{Blast, PARTICLE_CAP};
 use macroquad::color::Color;
@@ -36,6 +40,11 @@ enum Kind {
     Homing,
     /// Dark smoke, swelling and thinning (the bomb, like Shinjuku's grenade).
     Smoke,
+    /// A glitch smear: a short streak of the boss's stone, or red or teal, sliding
+    /// back off it and flickering out (`extra` is its length).
+    Smear,
+    /// A thread of glitch dripping off the boss's belly (`extra` is its length).
+    Drip,
 }
 
 impl Kind {
@@ -285,6 +294,53 @@ impl Particles {
         }
     }
 
+    /// A glitch smear coming off the boss at `(x, y)`, sliding the way it's leaving
+    /// (`back`: -1 left, 1 right); `hot` makes more of them red and teal.
+    pub fn smear(&mut self, x: f32, y: f32, back: f32, hot: bool) {
+        let len = self.rng.range(2.0, 10.0).round();
+        let roll = self.rng.f32();
+        let color = if roll < if hot { 0.22 } else { 0.1 } {
+            SIGNAL
+        } else if roll < if hot { 0.4 } else { 0.18 } {
+            TEAL
+        } else if roll < 0.7 {
+            BONE_HI
+        } else {
+            BONE_MID
+        };
+        let speed = self.rng.range(0.3, 2.4);
+        let life = self.rng.range(6.0, 22.0);
+        self.spawn(Kind::Smear, x, y, if back < 0.0 { std::f32::consts::PI } else { 0.0 }, speed, life, color, 0.95);
+        if let Some(p) = self.list.last_mut().filter(|p| p.kind == Kind::Smear) {
+            p.extra = len;
+        }
+    }
+
+    /// A thread of glitch dripping off the boss's belly.
+    pub fn drip(&mut self, x: f32, y: f32) {
+        let color = if self.rng.chance(0.25) { SIGNAL } else { BONE_MID };
+        let life = self.rng.range(24.0, 50.0);
+        let speed = self.rng.range(0.15, 0.5);
+        self.spawn(Kind::Drip, x, y, std::f32::consts::FRAC_PI_2, speed, life, Color { a: 0.8, ..color }, 1.0);
+        if let Some(p) = self.list.last_mut().filter(|p| p.kind == Kind::Drip) {
+            p.extra = self.rng.range(2.0, 6.0).round();
+        }
+    }
+
+    /// The disk churned up where something breaks its surface: cream dust thrown up
+    /// and out along the line.
+    pub fn splash(&mut self, x: f32, y: f32, width: f32, n: u16) {
+        for _ in 0..n {
+            let dx = self.rng.range(-width * 0.5, width * 0.5);
+            let a = -std::f32::consts::FRAC_PI_2 + self.rng.range(-0.9, 0.9);
+            let s = self.rng.range(0.4, 2.2);
+            let life = self.rng.range(20.0, 50.0);
+            let kind = if self.rng.chance(0.6) { Kind::Dust } else { Kind::Shard };
+            let c = if kind == Kind::Dust { CREAM } else { ASH };
+            self.spawn(kind, x + dx, y, a, s, life, c, 0.95);
+        }
+    }
+
     /// The stress scenes: keep at least `n` particles alive across a `w` x `h` field.
     pub fn fill(&mut self, n: usize, w: f32, h: f32) {
         while self.list.len() < n.min(PARTICLE_CAP) {
@@ -380,6 +436,14 @@ impl Particles {
                     disc(a, &a.r.discs, x, y, r, Color { a: 0.55 * k, ..SIGNAL });
                     disc(a, &a.r.discs, x, y, r * 0.45, Color { a: 0.55 * k, ..CREAM });
                 }
+                Kind::Smear => {
+                    // flickers in and out as it slides away
+                    if (p.life / 2) % 3 != 0 {
+                        let w = p.extra as i32;
+                        a.fill(x - w / 2, y, w, 1, fade(p.color, (k * 1.5).min(1.0)));
+                    }
+                }
+                Kind::Drip => a.fill(x, y, 1, p.extra as i32, fade(p.color, k)),
             }
         }
     }

@@ -17,10 +17,12 @@ fn beam() -> Controls {
     Controls { fire: true, focus: true, ..Default::default() }
 }
 
-/// A stage world with nothing scheduled: just the enemies a test adds.
+/// A stage world with nothing scheduled: just the enemies a test adds (and no boss).
 fn empty() -> World {
     let mut w = World::stage(1, Default::default());
-    w.stage.as_mut().unwrap().skip_to(frames(SECTIONS[6].0));
+    let s = w.stage.as_mut().unwrap();
+    s.skip_to(frames(SECTIONS[WARNING_SECTION].0));
+    s.boss_called = true;
     w
 }
 

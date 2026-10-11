@@ -11,7 +11,7 @@ use crate::input::{Button, Mode, touch_buttons};
 use crate::menu::{self, ITEMS};
 use crate::storage::Settings;
 use crate::storage::View;
-use crate::tune::{BLINK_FRAMES, SANDBOX, SECTIONS, STAGE_NAME, TICK_HZ, TITLE_CARD, TITLE_SCALE, TITLE_TRACK, TRACK};
+use crate::tune::{BLINK_FRAMES, BOSS_NAME, JAWS_PHASES, JAWS_PHASE_NAMES, SANDBOX, SECTIONS, STAGE_NAME, TICK_HZ, TITLE_CARD, TITLE_SCALE, TITLE_TRACK, TRACK};
 
 /// The sandbox switches that change how the game plays, as one line.
 fn sandbox_flags(v: &View) -> String {
@@ -226,6 +226,22 @@ pub struct StageView {
     pub boss: Option<(f32, [f32; 3])>,
     /// Frames since the WARNING sounded.
     pub warned: Option<u32>,
+    /// JAWSTHIC's bar while it's here.
+    pub jaws: Option<JawsView>,
+    /// How the boss fight ended: destroyed (or lost to the hole), phases broken, and
+    /// phases got through without a death or a bomb.
+    pub jaws_end: Option<(bool, u8, u8)>,
+}
+
+/// JAWSTHIC's health bar: each phase's segment (0..1 full), the phase it's in (0 in
+/// the intro), seconds left in it, and how far the bar has filled (it fills as the
+/// boss arrives).
+#[derive(Clone, Copy, Debug, Default)]
+pub struct JawsView {
+    pub bar: [f32; 4],
+    pub phase: u8,
+    pub left: f32,
+    pub fill: f32,
 }
 
 /// m:ss
@@ -445,6 +461,9 @@ fn stage_overlays(a: &Atlas, lay: &Layout, s: &StageView) {
             a.fill(tx, y + 8, 6, 2, if *k > 0.0 { SIGNAL } else { DUSK });
         }
     }
+    if let Some(j) = s.jaws {
+        jaws_bar(a, lay, &j, s.t);
+    }
     // WARNING: red bands crawling across, the word blinking
     if let Some(w) = s.warned.filter(|w| *w < 8 * TICK_HZ) {
         let w = w as i32;
@@ -463,6 +482,42 @@ fn stage_overlays(a: &Atlas, lay: &Layout, s: &StageView) {
         }
         if w % 40 < 28 {
             text_c(a, "WARNING", cx, y + 15, 2, 4, SIGNAL);
+        }
+    }
+}
+
+/// JAWSTHIC's bar along the top of the playfield: its name, the bar cut into its
+/// phases' shares (the current one cream, those to come ash, those gone empty), the
+/// phase's name under it, and the seconds left, red in the last ten.
+fn jaws_bar(a: &Atlas, lay: &Layout, j: &JawsView, t: u32) {
+    let f = lay.field;
+    let (x0, x1, y) = (f.x + 10, f.right() - 10, f.y + 6);
+    small(a, BOSS_NAME, x0, y, ASH);
+    let bx = x0 + text_width(BOSS_NAME, 1, TRACK) + 6;
+    let bar_end = x1 - text_width("00", 1, TRACK) - 6;
+    let total = (bar_end - bx) as f32;
+    let shown = j.fill * total;
+    let mut sx = bx as f32;
+    for (i, &(share, ..)) in JAWS_PHASES.iter().enumerate() {
+        let w = share * total;
+        let (left, width) = (sx.round() as i32, (w.round() as i32 - 2).max(1));
+        a.fill(left, y + 2, width, 3, DUSK);
+        let reach = ((shown - (sx - bx as f32)) / w).clamp(0.0, 1.0);
+        let lit = ((width as f32) * (j.bar[i] * reach)).round() as i32;
+        let current = j.phase as usize == i + 1;
+        let c = if current { CREAM } else { ASH };
+        a.fill(left, y + 2, lit, 3, c);
+        if current {
+            a.fill(left, y + 6, width, 1, Color { a: 0.6, ..CREAM });
+        }
+        sx += w;
+    }
+    if j.phase > 0 {
+        small(a, JAWS_PHASE_NAMES[j.phase as usize - 1], bx, y + 10, SLATE);
+        let secs = j.left.ceil() as i32;
+        let urgent = j.left <= 10.0;
+        if !urgent || t % 30 < 22 {
+            text_r(a, &format!("{secs:02}"), x1, y, if urgent { SIGNAL } else { CREAM });
         }
     }
 }
@@ -496,10 +551,17 @@ fn stage_end(a: &Atlas, lay: &Layout, v: &HudView, sel: usize) {
     hrule(a, p.x, p.right(), p.y);
     hrule(a, p.x, p.right(), p.bottom() - 1);
     text_c(a, STAGE_NAME, cx, p.y + 10, 2, 3, CREAM);
-    text_c(a, "THE BOSS ARRIVES IN V0.7", cx, p.y + 32, 1, 1, ASH);
+    let verdict = match s.jaws_end {
+        Some((true, ..)) => format!("{BOSS_NAME} DESTROYED"),
+        Some((false, ..)) => format!("{BOSS_NAME} LOST TO THE HOLE"),
+        None => "STAGE CLEAR".to_string(),
+    };
+    text_c(a, &verdict, cx, p.y + 32, 1, 1, if s.jaws_end.is_some_and(|e| e.0) { CREAM } else { ASH });
     let pct = s.killed * 100 / s.spawned.max(1);
+    let (broken, clean) = s.jaws_end.map_or((0, 0), |e| (e.1, e.2));
     let lines = [
         ("KILLS", format!("{}/{}  {}%", s.killed, s.spawned, pct)),
+        ("PHASES BROKEN", format!("{broken}/4  CLEAN {clean}")),
         ("MISSES", v.hits.to_string()),
         ("BOMBS USED", s.bombs_used.to_string()),
         ("GRAZE", v.grazes.to_string()),
@@ -708,7 +770,9 @@ mod tests {
         all.extend(SANDBOX.iter().map(|p| p.name.to_string()));
         all.extend(SECTIONS.iter().map(|s| s.1.to_string()));
         all.extend(TITLE_ITEMS.iter().map(|s| s.to_string()));
-        all.extend(["DERELICT", "WARNING", "THE BOSS ARRIVES IN V0.7", "BOMBS USED", "MISSES", STAGE_NAME].map(String::from));
+        all.extend(["DERELICT", "WARNING", "BOMBS USED", "MISSES", "PHASES BROKEN", "CLEAN", "STAGE CLEAR", BOSS_NAME, STAGE_NAME].map(String::from));
+        all.extend(JAWS_PHASE_NAMES.iter().map(|s| s.to_string()));
+        all.extend([format!("{BOSS_NAME} DESTROYED"), format!("{BOSS_NAME} LOST TO THE HOLE")]);
         all.extend(ITEMS.iter().map(|i| i.label().to_string()));
         let s = crate::storage::Settings::default();
         all.extend(ITEMS.iter().map(|i| menu::value(&s, *i)));

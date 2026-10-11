@@ -9,7 +9,7 @@ use macroquad::prelude::*;
 const W: u16 = 512;
 const H: u16 = 512;
 
-/// Packs images into the atlas in rows, with a pixel of space around each.
+/// Packs images into an atlas in rows, with a pixel of space around each.
 pub struct Packer {
     pub img: Image,
     x: u16,
@@ -19,16 +19,21 @@ pub struct Packer {
 
 impl Packer {
     pub fn new() -> Packer {
-        Packer { img: Image::gen_image_color(W, H, Color::new(0.0, 0.0, 0.0, 0.0)), x: 1, y: 1, row_h: 0 }
+        Packer::sized(W, H)
+    }
+
+    /// An empty atlas `w` x `h` (the boss has its own).
+    pub fn sized(w: u16, h: u16) -> Packer {
+        Packer { img: Image::gen_image_color(w, h, Color::new(0.0, 0.0, 0.0, 0.0)), x: 1, y: 1, row_h: 0 }
     }
 
     pub fn add(&mut self, src: &Image) -> Rect {
-        if self.x + src.width + 1 > W {
+        if self.x + src.width + 1 > self.img.width {
             self.x = 1;
             self.y += self.row_h + 1;
             self.row_h = 0;
         }
-        assert!(self.y + src.height < H, "the atlas is full");
+        assert!(self.y + src.height < self.img.height, "the atlas is full");
         for y in 0..src.height as u32 {
             for x in 0..src.width as u32 {
                 let c = src.get_pixel(x, y);

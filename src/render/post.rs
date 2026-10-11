@@ -244,6 +244,8 @@ pub struct Fx {
     pub flash: Flash,
     /// The RGB surge: aberration held at least this high for this many frames.
     surge: (f32, u32),
+    /// The boss's white-out: frames in, frames long, and how far it goes (0..1).
+    whiteout: (u32, u32, f32),
     frame: u64,
 }
 
@@ -301,11 +303,38 @@ impl Fx {
         if self.ca < 0.05 {
             self.ca = 0.0;
         }
+        if self.whiteout.1 > 0 {
+            self.whiteout.0 += 1;
+            if self.whiteout.0 >= self.whiteout.1 {
+                self.whiteout = (0, 0, 0.0);
+            }
+        }
         self.shake *= SHAKE_DECAY;
         if self.shake < 0.05 {
             self.shake = 0.0;
         }
         self.flash.tick();
+    }
+
+    /// A white-out over `frames` frames, up to `peak` (one slow swell and fade, not a
+    /// strobe): the boss's last blast.
+    pub fn whiteout(&mut self, frames: u32, peak: f32) {
+        self.whiteout = (0, frames.max(13), peak);
+    }
+
+    /// How white the screen is now, 0..1: in over 6 frames, held 6, out over the rest.
+    pub fn white(&self) -> f32 {
+        let (t, n, peak) = self.whiteout;
+        let k = if n == 0 || t >= n {
+            0.0
+        } else if t < 6 {
+            t as f32 / 6.0
+        } else if t < 12 {
+            1.0
+        } else {
+            1.0 - (t - 12) as f32 / (n - 12) as f32
+        };
+        k * peak
     }
 
     /// Stop shaking at once (enemy bullets appeared).
@@ -398,6 +427,23 @@ mod tests {
             fx.tick();
         }
         assert_eq!(fx.ca, 0.0);
+    }
+
+    #[test]
+    fn the_white_out_swells_holds_and_fades_once() {
+        let mut fx = Fx::new();
+        fx.whiteout(60, 0.9);
+        let levels: Vec<f32> = (0..70)
+            .map(|_| {
+                fx.tick();
+                fx.white()
+            })
+            .collect();
+        let top = levels.iter().cloned().fold(0.0, f32::max);
+        assert!((top - 0.9).abs() < 1e-4, "it reaches its peak");
+        let rises = levels.windows(2).filter(|w| w[1] > w[0] + 1e-4).count();
+        assert!(rises <= 6, "one swell, not a strobe");
+        assert_eq!(*levels.last().unwrap(), 0.0, "and it's gone");
     }
 
     #[test]

@@ -2,6 +2,7 @@
 //! fixed 60 Hz simulation, distances in low-res canvas pixels, speeds in px per
 //! frame, angles in degrees (0 is right, 90 is straight down the screen).
 
+use crate::sim::boss::{BossGun, Muzzle, bgun, enraged};
 use crate::sim::bullets::{Behavior, Hue, Kind};
 use crate::sim::enemy::{Arm, arm};
 use crate::sim::pattern::{Gun, Mount, Preset, Shape};
@@ -343,7 +344,7 @@ pub const SANDBOX: &[Preset] = &[
 
 pub const STAGE_NAME: &str = "OUTER DISK";
 /// The timeline, in seconds: (start, name). Each section's enemies arrive on cue.
-pub const SECTIONS: [(f32, &str); 7] = [
+pub const SECTIONS: [(f32, &str); 8] = [
     (0.0, "FLY-IN"),
     (10.0, "GUNSHIPS"),
     (40.0, "BUOYS"),
@@ -351,9 +352,11 @@ pub const SECTIONS: [(f32, &str); 7] = [
     (85.0, "DERELICT"),
     (115.0, "HEAVIES"),
     (150.0, "WARNING"),
+    (157.5, "JAWSTHIC"),
 ];
-/// The stage ends (for now: the boss arrives in v0.7) this many seconds in.
-pub const STAGE_END: f32 = 160.0;
+/// The section that sounds the WARNING (the boss's section follows it). The stage
+/// ends when the boss is gone.
+pub const WARNING_SECTION: usize = 6;
 /// Kill the derelict early and the next section comes forward, landing at most this
 /// many seconds ahead of the timeline.
 pub const SECTION_EARLY: f32 = 4.0;
@@ -475,6 +478,123 @@ pub const HULL_GUNS: &[Arm] = &[
     arm(0, 2, gun(Mount::Owner { dx: 0.0, dy: 26.0 }, Shape::Stream { burst: 5, gap: 4 }, Kind::Needle, 3.1, 90, 50, STRAIGHT).hue(Hue::Red)),
 ];
 
+// ------------------------------------------------------------------ the boss: JAWSTHIC
+// A great white carved from moon rock (Jason's concept, Sprint 6). Distances are px
+// from its body's pivot as if it faced right (it mirrors to face left).
+
+pub const BOSS_NAME: &str = "JAWSTHIC";
+/// It arrives this many seconds into the stage, after the WARNING. The intro (the fin
+/// cutting through the disk, the breach, the roar) runs to these frames: the fin's
+/// pass, under the surface, the breach's peak, the fight. It can't be hurt till then.
+pub const JAWS_AT: f32 = 152.0;
+pub const JAWS_INTRO: [u32; 4] = [170, 215, 268, 330];
+/// The fight's health. Each phase: (its share of the bar, seconds before it times
+/// out, damage taken per point of shot damage, the turn period in frames, 0 never).
+/// The shares make the bar; the damage keeps each phase 20-35 s with full power.
+pub const JAWS_HP: f32 = 12000.0;
+pub const JAWS_PHASES: [(f32, u32, f32, u32); 4] = [(0.25, 30, 0.65, 840), (0.30, 40, 1.0, 0), (0.30, 40, 1.0, 600), (0.15, 35, 0.42, 420)];
+pub const JAWS_PHASE_NAMES: [&str; 4] = ["TEETH", "FINS", "GLITCH", "EVENT HORIZON"];
+/// Between phases: frames of calm while it shakes the break off (no fire, no damage).
+pub const JAWS_BREAK: u32 = 120;
+/// Phase 2's weak points, the pectoral fin and the tail fin turrets: health each, and
+/// the share of the phase's health breaking one tears away.
+pub const JAWS_FIN_HP: f32 = 900.0;
+pub const JAWS_FIN_BLOW: f32 = 0.25;
+/// Where it swims: its height, and its home across the screen facing right and left
+/// (the whole fish stays on the screen); how far it sways and bobs (px, period).
+pub const JAWS_Y: f32 = 82.0;
+pub const JAWS_HOME: (f32, f32) = (150.0, 120.0);
+pub const JAWS_SWAY: (f32, u32) = (12.0, 480);
+pub const JAWS_BOB: (f32, u32) = (5.0, 300);
+/// How quickly it closes on where it wants to be (share of the gap per frame).
+pub const JAWS_FOLLOW: f32 = 0.05;
+/// A turn (it glitches round to face the other way): frames, and how far its pivot
+/// shifts so the whole fish stays about where it was.
+pub const JAWS_TURN: u32 = 28;
+pub const JAWS_TURN_SHIFT: f32 = 34.0;
+/// The jaw opens this many frames before a mouth gun fires (the telegraph), and how
+/// fast it swings (share of the way per frame).
+pub const JAWS_JAW_LEAD: u32 = 22;
+pub const JAWS_JAW_SPEED: f32 = 0.2;
+/// The tail: its swim (wave radians per frame, idle and while turning), and how far
+/// each joint bends, root to the tail fin (radians).
+pub const JAWS_SWIM: (f32, f32) = (0.075, 0.24);
+pub const JAWS_BEND: [f32; 6] = [0.05, 0.07, 0.09, 0.11, 0.13, 0.17];
+/// The rig, facing right.
+pub const JAWS_HINGE: (f32, f32) = (27.0, 8.5);
+pub const JAWS_TAIL_ROOT: (f32, f32) = (-30.0, -3.0);
+/// The tail's plates, front to back: (length, height).
+pub const JAWS_TAIL: [(f32, f32); 5] = [(11.0, 23.0), (10.5, 20.0), (10.0, 17.0), (9.5, 14.5), (9.0, 12.5)];
+pub const JAWS_DORSAL_AT: (f32, f32) = (0.0, -28.0);
+pub const JAWS_PECTORAL_AT: (f32, f32) = (17.0, 18.0);
+pub const JAWS_WINDOWS: [f32; 4] = [-22.0, -12.0, -2.0, 8.0];
+pub const JAWS_EYE: (f32, f32) = (50.0, -11.0);
+/// Its guns' muzzles: the jaws, the windows (at this height), the pectoral fin's joint
+/// (a turret's red core), the belly; and the dorsal fin's window (just a light).
+pub const JAWS_MOUTH: (f32, f32) = (50.0, 5.0);
+/// How far the mouth's center drops as the jaw opens wide (px).
+pub const JAWS_MOUTH_DROP: f32 = 6.0;
+pub const JAWS_WINDOW_Y: f32 = -4.0;
+pub const JAWS_DORSAL_CORE: (f32, f32) = (-5.5, -41.0);
+pub const JAWS_BELLY: (f32, f32) = (8.0, 24.0);
+/// Hurtboxes (center x, center y, w, h): the body and the pectoral turret; the tail
+/// fin's (how far back along its plate its middle is, w, h) swings with the tail.
+pub const JAWS_BODY: (f32, f32, f32, f32) = (16.0, -2.0, 100.0, 46.0);
+pub const JAWS_PECTORAL: (f32, f32, f32, f32) = (4.0, 30.0, 30.0, 26.0);
+pub const JAWS_TAIL_FIN: (f32, f32, f32) = (12.0, 26.0, 46.0);
+/// Phase 3's laser: frames of warning, frames of beam, how far it sweeps (degrees),
+/// how wide it's drawn (px; it hits on a little over half of that), how often it
+/// comes and when the first one does (frames into the phase).
+pub const JAWS_LASER: (u32, u32, f32, f32) = (45, 60, 55.0, 9.0);
+pub const JAWS_LASER_EVERY: (u32, u32) = (330, 150);
+/// The death: frames from the kill to the tally (the first `JAWS_SLOWMO` run at quarter
+/// speed), and the frames the blasts go off on, walking up from the tail fin, the
+/// last the big one and its white-out.
+pub const JAWS_DEATH: u32 = 235;
+pub const JAWS_SLOWMO: u32 = 48;
+pub const JAWS_BLASTS: [u32; 11] = [0, 8, 15, 22, 30, 40, 52, 66, 82, 100, 140];
+/// Timed out in phase 4: frames for the hole to swallow it.
+pub const JAWS_FALL: u32 = 150;
+
+const O: Mount = Mount::Owner { dx: 0.0, dy: 0.0 };
+/// Phase 4's bullets bend toward the black hole (and it swallows any that reach it).
+const HOLE_PULL: Behavior = Behavior::Pull { x: HOLE_X, y: HOLE_Y, pull: 0.006, max: 2.4 };
+
+/// Phase 1, TEETH: aimed 5-way fans from the jaws over slow static rings from the
+/// windows, one window after another.
+pub const JAWS_P1: &[BossGun] = &[
+    bgun(Muzzle::Mouth, gun(O, Shape::Fan { n: 5, spread: 48.0, aimed: true }, Kind::Rice, 2.5, 40, 50, STRAIGHT).hue(Hue::Red)),
+    bgun(Muzzle::Window(0), gun(O, Shape::Ring { n: 18, turn: 7.0 }, Kind::Orb, 1.1, 168, 30, STRAIGHT).hue(Hue::Teal)),
+    bgun(Muzzle::Window(1), gun(O, Shape::Ring { n: 18, turn: -7.0 }, Kind::Orb, 1.1, 168, 72, STRAIGHT).hue(Hue::Blue)),
+    bgun(Muzzle::Window(2), gun(O, Shape::Ring { n: 18, turn: 7.0 }, Kind::Orb, 1.1, 168, 114, STRAIGHT).hue(Hue::Teal)),
+    bgun(Muzzle::Window(3), gun(O, Shape::Ring { n: 18, turn: -7.0 }, Kind::Orb, 1.1, 168, 156, STRAIGHT).hue(Hue::Blue)),
+];
+/// Phase 2, FINS: the pectoral fin and the tail fin spin opposing spirals while the
+/// jaws fire aimed needle bursts. Breaking a fin silences its spiral.
+pub const JAWS_P2: &[BossGun] = &[
+    bgun(Muzzle::Pectoral, gun(O, Shape::Spiral { arms: 3, spin: 7.0, flip: 0 }, Kind::Rice, 1.6, 6, 40, STRAIGHT).hue(Hue::Violet)),
+    bgun(Muzzle::Tail, gun(O, Shape::Spiral { arms: 3, spin: -7.0, flip: 0 }, Kind::Rice, 1.6, 6, 43, STRAIGHT).hue(Hue::Blue)),
+    bgun(Muzzle::Mouth, gun(O, Shape::Stream { burst: 5, gap: 4 }, Kind::Needle, 3.0, 84, 70, STRAIGHT).hue(Hue::Red)),
+    // its fins gone, its windows open up
+    enraged(Muzzle::Window(0), gun(O, Shape::Ring { n: 20, turn: 9.0 }, Kind::Orb, 1.3, 120, 0, STRAIGHT).hue(Hue::Teal)),
+    enraged(Muzzle::Window(3), gun(O, Shape::Ring { n: 20, turn: -9.0 }, Kind::Orb, 1.3, 120, 60, STRAIGHT).hue(Hue::Teal)),
+];
+/// Phase 3, GLITCH: a curtain of rice like a corrupted screen, each row slipping
+/// sideways, a lane drifting through it; random sprinkles off the tail; and the laser
+/// sweeps (they pause the curtain).
+pub const JAWS_P3: &[BossGun] = &[
+    bgun(Muzzle::Belly, gun(O, Shape::Curtain { n: 17, spacing: 15.0, gap: 3, period: 22, jitter: 6.0 }, Kind::Rice, 1.45, 20, 30, STRAIGHT).hue(Hue::Teal)),
+    bgun(Muzzle::Tail, gun(O, Shape::Cone { n: 2, spread: 140.0, jitter: 0.3 }, Kind::Small, 1.5, 11, 40, STRAIGHT).hue(Hue::Violet)),
+];
+/// Phase 4, EVENT HORIZON: everything it throws bends toward the black hole: a turning
+/// flower from its jaws, spiral arms off its tail; and aimed needle bursts, straight.
+pub const JAWS_P4: &[BossGun] = &[
+    bgun(Muzzle::Mouth, gun(O, Shape::Flower { n: 24, petals: 5, turn: 9.0 }, Kind::Small, 1.9, 56, 40, HOLE_PULL).hue(Hue::Amber)),
+    bgun(Muzzle::Tail, gun(O, Shape::Spiral { arms: 2, spin: 11.0, flip: 0 }, Kind::Rice, 1.6, 8, 60, HOLE_PULL).hue(Hue::Violet)),
+    bgun(Muzzle::Mouth, gun(O, Shape::Stream { burst: 4, gap: 5 }, Kind::Needle, 3.2, 72, 60, STRAIGHT).hue(Hue::Red)),
+];
+pub const JAWS_GUNS: [&[BossGun]; 4] = [JAWS_P1, JAWS_P2, JAWS_P3, JAWS_P4];
+
 // ------------------------------------------------------------------ the bot
 // A dodger: tries 9 directions at two speeds, looking this many frames ahead.
 
@@ -521,6 +641,15 @@ pub const VOL_STRUCK: f32 = 0.5;
 pub const VOL_RESPAWN: f32 = 0.35;
 pub const VOL_GAME_OVER: f32 = 0.55;
 pub const VOL_WARNING: f32 = 0.5;
+/// The boss: its theme (music), its approach, its roar, the laser, glitches, the hole
+/// swallowing it; and how fast the music fades in and out (volume per second).
+pub const VOL_MUSIC: f32 = 0.32;
+pub const VOL_APPROACH: f32 = 0.55;
+pub const VOL_ROAR: f32 = 0.7;
+pub const VOL_LASER: f32 = 0.38;
+pub const VOL_GLITCH: f32 = 0.22;
+pub const VOL_SWALLOWED: f32 = 0.7;
+pub const MUSIC_FADE: f32 = 0.8;
 /// How fast the beam hum fades in and out (volume per second).
 pub const BEAM_FADE: f32 = 6.0;
 

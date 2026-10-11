@@ -4,11 +4,13 @@
 //! drifting under whatever it should be shooting. It powers the fairness checks: if
 //! the bot can't survive a pattern, nobody should have to.
 
+use super::boss::{Act, Boss, Laser};
 use super::bullets::seg_dist;
 use super::enemy::{EnemyKind, Foes};
 use super::geom::Rect;
 use super::pattern::Hazards;
 use super::player::Controls;
+use super::stage1::N;
 use super::{Event, Life, World};
 use crate::tune::*;
 
@@ -47,15 +49,43 @@ impl Bot {
         }
     }
 
-    /// What to line up under: the high-HP enemy, else the nearest one above.
+    /// What to line up under: the boss (its weak points first), else the high-HP
+    /// enemy, else the nearest one above.
     fn target(w: &World) -> Option<f32> {
         let p = &w.player;
+        if let Some(b) = &w.boss {
+            if let Some(part) = b.targets().next() {
+                let r = b.rect(part);
+                return Some((r.x0 + r.x1) * 0.5);
+            }
+        }
         w.foes
             .list
             .iter()
             .filter(|e| e.hittable() && e.y < p.y - 40.0)
             .max_by(|a, b| (a.kind.heavy(), a.y).partial_cmp(&(b.kind.heavy(), b.y)).unwrap())
             .map(|e| e.x)
+    }
+
+    /// A laser as a long capsule: from its jaws out past the screen.
+    fn beam(l: &Laser) -> Ghost {
+        let (s, c) = l.angle().to_radians().sin_cos();
+        let half = 320.0;
+        Ghost { x: l.x + c * half, y: l.y + s * half, dx: c, dy: s, h: half, r: JAWS_LASER.3 * 0.3 }
+    }
+
+    /// How bad `(x, y)` is under a laser: where it has still to sweep is death. While
+    /// it's only a warning line, the way out is back across that line (running ahead
+    /// of a beam ends at the wall), so the deeper into the sweep, the worse.
+    fn sweep_risk(l: &Laser, x: f32, y: f32) -> f32 {
+        let a = (y - l.y).atan2(x - l.x).to_degrees();
+        let (now, to) = (l.angle(), l.to);
+        let ahead = if to > now { a - now } else { now - a };
+        let span = (to - now).abs();
+        if !(-8.0..=span + 3.0).contains(&ahead) {
+            return 0.0;
+        }
+        if l.firing() { 3000.0 } else { 3000.0 + 80.0 * (ahead + 8.0) }
     }
 
     pub fn decide(&mut self, w: &World) -> Controls {
@@ -65,17 +95,25 @@ impl Bot {
         }
         let p = &w.player;
         let reach = BOT_LOOKAHEAD as f32 * w.tuning.speed + 40.0;
-        // run the enemies and their bullets forward with the player standing still
+        // run the enemies, the boss and their bullets forward with the player standing still
         let mut h: Hazards = w.hazards.clone();
         let mut foes: Foes = w.foes.clone();
+        let mut boss: Option<Boss> = w.boss.clone();
+        let laser = w.boss.as_ref().and_then(|b| b.laser);
         let fire_ok = w.stage.as_ref().is_none_or(|s| s.fire_ok());
         let mut m = [(0.0, 0.0, false); 8];
         let n = w.mounts(&mut m);
         for (frame, bodies) in self.ahead.iter_mut().zip(self.bodies.iter_mut()) {
             h.step((p.x, p.y), &m[..n]);
             foes.step(&mut h, (p.x, p.y), fire_ok, &mut self.events);
+            if let Some(b) = &mut boss {
+                b.step(&mut h, (p.x, p.y), &mut self.events);
+            }
             self.events.clear();
             frame.clear();
+            if let Some(l) = boss.as_ref().and_then(|b| b.laser).filter(|l| l.firing()) {
+                frame.push(Self::beam(&l));
+            }
             let b = &h.bullets;
             for i in 0..b.len() {
                 if (b.x[i] - p.x).abs() < reach && (b.y[i] - p.y).abs() < reach && b.age[i] >= BLOOM_FRAMES {
@@ -84,6 +122,9 @@ impl Bot {
             }
             bodies.clear();
             bodies.extend(foes.list.iter().filter(|e| e.alive()).map(|e| e.body()).filter(|r| r.dist(p.x, p.y) < reach));
+            if let Some(b) = boss.as_ref().filter(|b| matches!(b.act, Act::Fight | Act::Break)) {
+                bodies.extend(b.crash_boxes().into_iter().filter(|r| r.dist(p.x, p.y) < reach));
+            }
         }
         // drift under the target, at the usual height
         let target = Self::target(w);
@@ -124,6 +165,10 @@ impl Bot {
                 // and away from the walls, judged on where the path ends
                 let wall = (x - 30.0).min(FIELD_W as f32 - 30.0 - x).min(FIELD_H as f32 - 30.0 - y).min(0.0);
                 score -= wall * wall * 0.3;
+                // out of the way of a laser's sweep
+                if let Some(l) = &laser {
+                    score -= Self::sweep_risk(l, x, y);
+                }
                 let id = si * DIRS.len() + di;
                 if id == self.last {
                     score += BOT_STICKY; // don't dither
@@ -154,8 +199,8 @@ pub struct StageRun {
     pub deaths: u32,
     pub bombs: u32,
     /// Deaths in each section, and when each section began (frames).
-    pub section_deaths: [u32; 7],
-    pub began: [Option<u32>; 7],
+    pub section_deaths: [u32; N],
+    pub began: [Option<u32>; N],
     pub killed: u32,
     pub spawned: u32,
     pub grazes: u32,
@@ -165,6 +210,11 @@ pub struct StageRun {
     pub frames: u64,
     /// Frames from the derelict's arrival to its death (none if it left).
     pub hull_kill: Option<u32>,
+    /// The boss: how long each phase took (frames, none if it timed out or wasn't
+    /// reached), deaths in each, and whether it was destroyed.
+    pub phase_time: [Option<u32>; 4],
+    pub phase_deaths: [u32; 4],
+    pub boss_killed: bool,
 }
 
 /// The bot plays Stage 1 from the top with 3 lives, with or without bombs, shooting
@@ -176,8 +226,9 @@ pub fn stage_trial(seed: u64, bombs: bool, shoot: bool) -> StageRun {
     bot.use_bombs = bombs;
     let mut run = StageRun::default();
     let mut hull_at = None;
-    let limit = super::stage1::frames(STAGE_END) as u64 + 600;
-    while w.frame < limit && w.life != Life::GameOver && !w.stage.as_ref().is_some_and(|s| s.over) {
+    let mut phase_at = 0u32;
+    let mut deaths_at = 0;
+    while w.frame < stage_limit() && w.life != Life::GameOver && !w.stage.as_ref().is_some_and(|s| s.over) {
         let mut c = bot.decide(&w);
         c.fire &= shoot;
         w.tick(c);
@@ -187,6 +238,23 @@ pub fn stage_trial(seed: u64, bombs: bool, shoot: bool) -> StageRun {
                 Event::Bomb { .. } => run.bombs += 1,
                 // (the run's frame, not the stage clock, which jumps ahead when it dies)
                 Event::Kill { kind: EnemyKind::Hull, .. } => run.hull_kill = hull_at.map(|t0| w.frame as u32 - t0),
+                Event::BossPhase(_) => {
+                    phase_at = w.frame as u32;
+                    deaths_at = w.deaths;
+                }
+                Event::BossBreak { .. } | Event::BossDown { .. } => {
+                    if let Some(b) = &w.boss {
+                        let p = b.phase as usize - 1;
+                        if b.outcomes[p] == Some(super::boss::Outcome::Broken) {
+                            run.phase_time[p] = Some(w.frame as u32 - phase_at);
+                        }
+                        run.phase_deaths[p] = w.deaths - deaths_at;
+                    }
+                    run.boss_killed |= matches!(e, Event::BossDown { .. });
+                }
+                Event::BossFall => {
+                    run.phase_deaths[3] = w.deaths - deaths_at;
+                }
                 _ => {}
             }
         }
@@ -204,6 +272,53 @@ pub fn stage_trial(seed: u64, bombs: bool, shoot: bool) -> StageRun {
     run.began = s.began;
     run.killed = s.killed;
     run.spawned = s.spawned;
+    run.grazes = w.grazes;
+    run
+}
+
+/// How long a whole stage can possibly run (frames): to the boss, every phase to its
+/// timeout with the breaks between, its death, and a little more.
+pub fn stage_limit() -> u64 {
+    let phases: u32 = JAWS_PHASES.iter().map(|p| p.1 * TICK_HZ).sum();
+    (super::stage1::frames(JAWS_AT) + JAWS_INTRO[3] + phases + 3 * JAWS_BREAK + JAWS_DEATH.max(JAWS_FALL) + 600) as u64
+}
+
+/// How a bot run of one boss phase went.
+#[derive(Clone, Debug, Default)]
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+pub struct PhaseRun {
+    pub deaths: u32,
+    /// Frames to break it (none if it timed out).
+    pub kill: Option<u32>,
+    pub grazes: u32,
+    pub peak: usize,
+}
+
+/// The bot fights boss phase `phase` (1-4) from its start, with endless lives and
+/// with or without bombs, until it ends.
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+pub fn phase_trial(seed: u64, phase: u8, bombs: bool) -> PhaseRun {
+    let mut w = World::boss_at(seed, Default::default(), phase);
+    w.lives = u8::MAX;
+    let mut bot = Bot::new();
+    bot.use_bombs = bombs;
+    let mut run = PhaseRun::default();
+    let limit = JAWS_PHASES[phase as usize - 1].1 * TICK_HZ + 10;
+    for f in 0..limit {
+        let c = bot.decide(&w);
+        w.tick(c);
+        run.peak = run.peak.max(w.hazards.bullets.len());
+        let ended = w.events.iter().any(|e| matches!(e, Event::BossBreak { .. } | Event::BossDown { .. } | Event::BossFall));
+        w.events.clear();
+        if ended {
+            let b = w.boss.as_ref().unwrap();
+            if b.outcomes[phase as usize - 1] == Some(super::boss::Outcome::Broken) {
+                run.kill = Some(f + 1);
+            }
+            break;
+        }
+    }
+    run.deaths = w.deaths;
     run.grazes = w.grazes;
     run
 }

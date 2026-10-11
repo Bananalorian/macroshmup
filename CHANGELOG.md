@@ -3,6 +3,137 @@
 Every version is one build sprint. Newest first. Versions are tagged in git, and
 each tag publishes a GitHub Release with downloads.
 
+## [0.7.0] - 2026-10-11 - JAWSTHIC
+
+### Added
+- **JAWSTHIC, Stage 1's boss**, your concept, drawn in code from
+  [your reference](docs/reference/jawsthic.jpg): a great white carved from moon rock
+  with a gothic cathedral for a body. Lancet windows down its flank glow red and teal.
+  It has a dorsal fin with an arched window, a pectoral fin on a piped joint, and a
+  segmented stone tail ending in a crescent fin. A red diamond eye sits under a hard
+  brow, and its jaws drop open on a red crosshair. Glitch smears stream off its tail
+  and drip off its belly. It swims side-on across the top of the screen with its tail
+  beating, sways and bobs, and now and then glitches round to face the other way.
+  ([The boss sheet](docs/screenshots/jawsthic-sheet.png) shows it at rest, charging,
+  in each phase, and facing either way.)
+- **Its arrival** ([strip](docs/screenshots/boss-intro.png)). After the WARNING, its
+  dorsal fin cuts through the black hole's disk like a shark's fin through water,
+  throwing up a wake, with the tip of its tail breaking the surface behind. It dives,
+  breaches out of the disk, and roars. Its health bar fills and its music starts. It
+  can't be hurt until it's in position.
+- **Four phases**, each with its share of a segmented health bar and a timer
+  ([strip](docs/screenshots/boss-phases.png)):
+  1. **TEETH**, 30 s: aimed 5-way fans from its jaws (they open before each volley)
+     over slow, static rings from its windows, one window after another.
+  2. **FINS**, 40 s: its pectoral fin and its tail fin are turrets with red cores.
+     They spin opposing spirals while its jaws fire aimed needle bursts.
+     - Breaking a fin silences its spiral and tears a quarter out of the phase's
+       health.
+     - With both fins gone, its windows open fire.
+  3. **GLITCH**, 40 s: a curtain of rice like a corrupted screen, each row slipping
+     sideways, with a lane drifting through it, and random sprinkles off its tail.
+     - Then a laser sweep from its jaws: a red warning line for 45 frames, with dots
+       showing which way it will turn, then the beam for 60 frames.
+     - The beam sweeps through where you were, toward your nearer wall. The way out
+       is back across the warning line, into the open.
+  4. **EVENT HORIZON**, from 15% health, 35 s: a turning flower from its jaws and
+     spiral arms off its tail, all bending toward the black hole, plus aimed needle
+     bursts. The hole swallows any bullet that reaches it, its disk flaring as it
+     feeds. The boss's stone cracks open and burns.
+
+  A phase ends when its share of health is gone or its time runs out. Its bullets
+  cancel into shards, it shakes the break off for two seconds, and the next phase
+  begins. If phase 4 runs out, the black hole swallows the boss and you don't get
+  the kill.
+- **Its death** ([six moments](docs/screenshots/boss-death.png)):
+  1. Every bullet on the screen cancels into shards, and the first moments run at
+     quarter speed under an RGB surge.
+  2. Eleven chained blasts walk up from its tail fin, each blowing off a plate or a
+     fin in its own pixels.
+  3. Its head goes up in a boss-sized blast and the screen whites out.
+  4. The stage-clear tally shows JAWSTHIC DESTROYED (or LOST TO THE HOLE), the
+     phases broken, and how many you got through without a death or a bomb. That
+     count is ready for Sprint 7's capture bonus.
+- **Its music and sounds**, synthesized in code like everything else:
+  - **The theme:** a seamless 16-bar loop at 150 beats a minute in E Phrygian. The
+    bass throbs on E and the F a semitone above (the shark's two notes) over drums,
+    with a cathedral organ under it and a dark arpeggio in the second half. It
+    starts as the boss breaches and fades as it dies.
+  - **The sounds:** its approach (E and F throbbing faster as the fin cuts the
+    disk), a roar, the laser's charge and beam, glitch stutters, and the hole
+    swallowing it.
+- **A painter for big bosses** (`render/carve.rs`):
+  - Parts are drawn at any angle and either facing. Each pixel looks back into the
+    part's own shapes, so edges stay crisp as the tail swings, and the stone's grain
+    stays on the stone.
+  - The light stays at the top left of the screen whatever the angle. The body is
+    lit as a rounded barrel, each plate gets its own bevel, and a rim of light
+    catches the underside so a dark belly still stands off the black.
+  - Tones step through a short bone ramp, dithered only where two meet.
+  - Every frame is carved once at startup, in 66 ms: the jaw's 7 openings, every
+    turn of the tail and fins, both facings, and the broken fins.
+- **Boss practice and tools:**
+  - `PG_SCENE=boss` starts at its arrival; `boss:1` to `boss:4` go straight into
+    that phase.
+  - `PG_SIM=boss:<n>` plays each phase with the bot.
+  - `PG_KILL=<frame>` breaks the current phase on that frame; F6 does the same in
+    debug builds.
+  - `PG_MOCKUP=1` saves the boss sheet.
+- Two new patterns: a **curtain** (a falling row with a drifting lane, each row
+  slipping sideways) and a **flower** (a ring whose speed swells into petals).
+
+### Changed
+- **The stage ends with the boss** instead of at 2:40. Its section, JAWSTHIC,
+  follows the WARNING.
+- The bot now plays against the boss:
+  - it lines up under the weak points;
+  - it keeps clear of the body and the tail;
+  - when a laser warns, it steps back across the warning line instead of running
+    ahead of the beam.
+- A bullet pulled into a point is swallowed when it gets there (the sandbox's PULL
+  too).
+- The Cathedral proposal is retired. Its mock-up stays in the docs.
+
+### Checked
+- **Fairness in every phase**, by the same tests as the sandbox's patterns:
+  - the same seed gives the same fight;
+  - no bullet appears within 24 px of you, even parked right under each gun;
+  - every 4 px band of the bottom half keeps a 12 px gap through each whole phase,
+    on two seeds;
+  - the beam and the boss's body hurt like bullets; the warning line doesn't.
+- **The bot without bombs** (`PG_SIM=boss:200`):
+  - it survives every phase on all 200 seeds;
+  - each phase breaks in a median 24.8 / 23.1 / 26.0 / 24.8 s, between 21.6 and
+    32.0 s in every run, with no timeouts;
+  - CI checks the 80% and 20-35 s bars on 6 seeds a phase.
+- **The whole stage** (`PG_SIM=200`, the bot with 3 lives and bombs): 100% cleared,
+  100% with no misses, 0.05 bombs a run. JAWSTHIC is destroyed in every run, and
+  every section starts on time.
+- **Tests also prove:**
+  - each phase breaks at its share of health, or times out;
+  - when phase 4 times out, the hole takes the boss;
+  - it can't be hurt before the fight;
+  - breaking a fin silences its spiral, costs the phase a quarter of its health,
+    and opens the windows, and shots from below can reach both fins;
+  - the laser warns for 45 frames, then sweeps its 55 degrees;
+  - the death sends 11 blasts, cancels every bullet into shards, runs at quarter
+    speed and ends the stage;
+  - the boss stays on the screen and turns round;
+  - the white-out swells once and fades, never strobing;
+  - the theme loops without a click, and no sound clips;
+  - every frame fits the boss's texture;
+  - its stone is bone white and never as bright as a bullet's core
+    ([the grayscale check](docs/screenshots/boss-gray.png)).
+- **Performance** (`PG_PERF`, 25 s of each phase and of the death): the game's own
+  work is 0.35-0.49 ms a frame on average and 2.0 ms at worst, holding 60 fps.
+  - A few stalls showed up on the first runs after a rebuild, while that work stayed
+    at 1-2 ms. That points outside the game, probably Windows scanning the new exe;
+    repeat runs had none.
+- Native and web builds are warning-free, and all 209 tests pass.
+- **Not checked by ear.** I checked the music and the new sounds as waveforms
+  (structure, levels, the loop's seam) but couldn't listen to them. Please give
+  them a listen.
+
 ## [0.6.5] - 2026-10-11 - XInput
 
 ### Fixed

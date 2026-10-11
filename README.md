@@ -1,6 +1,6 @@
 # PILGRIM
 
-![The derelict, cracked open, its seams burning and its iris open, in Stage 1](docs/screenshots/stage.png)
+![JAWSTHIC, Stage 1's boss: its pectoral fin and tail fin spin opposing spirals over the black hole](docs/screenshots/boss.png)
 
 > SOMEWHERE BEYOND THE EVENT HORIZON. A SMALL SHIP, A LONG WAY FROM HOME.
 
@@ -21,12 +21,22 @@ the font and every sound are built when the game starts. Written in Rust on
 | ![Turret buoys: teal rings and violet spirals among amber fans](docs/screenshots/buoys.png) | |
 | ![The derelict rises out of the disk, its turrets firing](docs/screenshots/derelict.png) | ![The same in grayscale: bullet cores are the brightest pixels](docs/screenshots/derelict-gray.png) |
 | ![The breather: the disk flares, debris drifts, a tiny figure falls](docs/screenshots/breather.png) | ![WARNING](docs/screenshots/warning.png) |
-| ![The end of the stage, for now](docs/screenshots/stage-end.png) | ![The pattern sandbox](docs/screenshots/sandbox.png) |
+| ![The stage-clear tally: JAWSTHIC destroyed](docs/screenshots/stage-end.png) | ![The pattern sandbox](docs/screenshots/sandbox.png) |
+| ![Phase 4, EVENT HORIZON: a flower and spiral arms bending toward the black hole](docs/screenshots/boss-phase4.png) | ![The same fight in grayscale: bullet cores are still the brightest pixels](docs/screenshots/boss-gray.png) |
+| ![The derelict, cracked open, its seams burning and its iris open](docs/screenshots/stage.png) | |
 | ![The bomb: the cancel ring sweeps the screen](docs/screenshots/bomb.png) | ![The Pilgrim shatters into its own pixels](docs/screenshots/death.png) |
 | ![A boss-sized blast: the shock ring bends the black hole](docs/screenshots/blast.png) | ![On a phone](docs/screenshots/phone.png) |
 | ![Layered rings and aimed fans](docs/screenshots/layered.png) | ![The same in grayscale: bullet cores are the brightest pixels](docs/screenshots/layered-gray.png) |
 | ![The title: Stage 1 or the sandbox](docs/screenshots/title.png) | ![The pause menu: sandbox, options and tuning](docs/screenshots/tuning.png) |
 | ![Game over](docs/screenshots/game-over.png) | |
+
+![JAWSTHIC arrives: its fin cuts through the black hole's disk, it breaches, roars, and its bar fills](docs/screenshots/boss-intro.png)
+
+![Its four phases: TEETH, FINS, GLITCH and EVENT HORIZON](docs/screenshots/boss-phases.png)
+
+![Its death: every bullet cancels, blasts walk up from its tail, the screen whites out, then the tally](docs/screenshots/boss-death.png)
+
+![JAWSTHIC's sheet: in play, at rest, charging, in each phase, glitching, facing either way, all built in code](docs/screenshots/jawsthic-sheet.png)
 
 ![The derelict's death: the wreck burns, blasts ripple across it, then it goes up](docs/screenshots/derelict-death.png)
 
@@ -40,14 +50,19 @@ the font and every sound are built when the game starts. Written in Rust on
 
 ## Status
 
-**v0.6, Stage 1:** OUTER DISK, two and a half minutes of bone-white lunar gothic
-enemies (popcorn drones, couriers and ushers, gunships, turret buoys and heavies), a
-breather where the disk flares and a tiny figure falls into the hole, and the
-mid-boss: a derelict with an iris eye that rises out of the disk, its gun pods and
-nose gun breakable weak points. It ends on WARNING; the boss arrives in v0.7.
-Over the bomb, deathbomb and lives from v0.5, the black hole and post effects from
-v0.4, and the bullet engine and pattern sandbox from v0.3 (still on the title:
-13 patterns plus stress scenes, target dummies, a dodging bot).
+**v0.7, the boss:** JAWSTHIC, a great white carved from moon rock with a gothic
+cathedral for a body, from Jason's concept. Its fin cuts through the black hole's
+disk before it breaches. It fights in four phases on a segmented health bar, each
+with a timer: TEETH, FINS, GLITCH and EVENT HORIZON. The phases bring aimed fans,
+breakable fin turrets, a glitching curtain, laser sweeps, and bullets bending into
+the black hole. It dies in a chain of blasts in slow motion and a white-out, to its
+own synthesized theme.
+
+It ends Stage 1, OUTER DISK, from v0.6: two and a half minutes of bone-white lunar
+gothic enemies, a breather where the disk flares, and the derelict mid-boss. Under it
+are the bomb, deathbomb and lives from v0.5, the black hole and post effects from
+v0.4, and the bullet engine and pattern sandbox from v0.3 (still on the title: 13
+patterns plus stress scenes, target dummies, a dodging bot).
 See [SPRINTS.md](SPRINTS.md) for the plan.
 
 ## Controls
@@ -86,27 +101,28 @@ Rust is pinned to 1.91.1 in `rust-toolchain.toml`, the same version CI uses.
 
 | Hook | What it does |
 |---|---|
-| `PG_SCENE=title` / `stage:<seconds>` / `midboss` / `sandbox:<pattern>` / `stress` / `shots:<n>` | jump straight there (`stage:85` starts Stage 1 at 1:25; `sandbox:3` or `sandbox:spiral`; `shots`: keep n player shots alive in the sandbox) |
+| `PG_SCENE=title` / `stage:<seconds>` / `midboss` / `boss` / `boss:<phase>` / `sandbox:<pattern>` / `stress` / `shots:<n>` | jump straight there (`stage:85` starts Stage 1 at 1:25; `boss` starts at the boss's arrival, `boss:2` straight into its phase 2; `sandbox:3` or `sandbox:spiral`; `shots`: keep n player shots alive in the sandbox) |
 | `PG_SHOTS=60,300` | save those frames to `./shots/` and quit |
 | `PG_AUTO=1` | the dodging bot plays (and retries forever) |
-| `PG_SIM=200` | 200 headless seeded bot runs of Stage 1: clears, deaths per section, section timing, the derelict's kill time (`PG_SIM=patterns:200` runs every sandbox pattern) |
+| `PG_SIM=200` | 200 headless seeded bot runs of Stage 1: clears, deaths per section, section timing, the derelict's kill time, each boss phase's time (`PG_SIM=boss:200` plays each boss phase without bombs; `PG_SIM=patterns:200` runs every sandbox pattern) |
 | `PG_SEED=<n>` | fixed seed |
 | `PG_GRAY=1` | grayscale screenshots (value check) |
 | `PG_SIZE=1280x720` | window size |
 | `PG_PERF=1` | the performance overlay, a line every 30 s in the terminal, and a summary when the game closes |
 | `PG_SHEET=1` | save the ship's animation sheet and the enemy sheet to `./shots/` and quit |
 | `PG_FXSHEET=1` | save every explosion size at 4 moments and the black hole at the start and end of the stage |
-| `PG_MOCKUP=1` | save the boss proposal's mock-up (the Cathedral) to `./shots/` |
+| `PG_MOCKUP=1` | save the boss's sheet (in play, at rest, charging, each phase) to `./shots/` |
 | `PG_BOOM=<0-3>` | set off a small, medium, large or boss blast 30 frames in |
 | `PG_INVINCIBLE=1` | bullets can't hurt you |
 | `PG_BOMB=<frame>` / `PG_DIE=<frame>` | bomb, or get hit, on that frame |
+| `PG_KILL=<frame>` | break the boss's current phase on that screen frame |
 | `PG_WAV=1` | dump every sound to `./shots/sfx/` |
 | `PG_MENU=1` | open the pause menu |
 | `PG_FRESH=1` | ignore the save file |
 
 Debug builds: F1 hitboxes · F2 grayscale · F3 quarter speed · F4 frame step (Enter
-resumes) · F5 invincible · F6 next stage section · F7 next pattern · F8 performance
-overlay · F9 save the sprite sheets.
+resumes) · F5 invincible · F6 next stage section (the boss's next phase, during the
+fight) · F7 next pattern · F8 performance overlay · F9 save the sprite sheets.
 
 ## Credits
 

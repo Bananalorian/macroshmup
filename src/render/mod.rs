@@ -8,12 +8,12 @@
 pub mod art;
 pub mod bg;
 pub mod bullets;
-#[cfg(not(target_arch = "wasm32"))]
-pub mod cathedral;
+pub mod carve;
 pub mod explode;
 pub mod font;
 pub mod foes;
 pub mod hud;
+pub mod jawsthic;
 pub mod layout;
 pub mod palette;
 pub mod particles;
@@ -49,6 +49,8 @@ pub struct PostParams {
 
 pub struct Renderer {
     pub atlas: art::Atlas,
+    /// JAWSTHIC's frames, in a texture of their own.
+    pub jaws: jawsthic::JawsArt,
     pub stars: bg::Starfield,
     pub parts: particles::Particles,
     pub fx: Fx,
@@ -109,6 +111,7 @@ impl Renderer {
         let add_mat = material(ADD_FRAG, &[], Some((BlendFactor::Value(BlendValue::SourceAlpha), BlendFactor::One)));
         Renderer {
             atlas: art::Atlas::new(),
+            jaws: jawsthic::JawsArt::new(),
             // enough sky for the biggest canvas (portrait is 270x480, landscape 640x360)
             stars: bg::Starfield::new(640.0 * 480.0),
             parts: particles::Particles::new(),

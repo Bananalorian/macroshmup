@@ -54,6 +54,17 @@ pub fn flare(t: u64) -> f32 {
     }
 }
 
+/// How hard the disk flares as the hole feeds: through the boss's last phase, and
+/// blazing as it swallows the boss.
+pub fn feeding(w: &World) -> f32 {
+    use crate::sim::boss::Act;
+    match w.boss.as_ref().map(|b| (b.act, b.phase, b.t)) {
+        Some((Act::Fight | Act::Break, 4, t)) => 0.7 + 0.2 * (t as f32 * 0.05).sin(),
+        Some((Act::Falling, _, t)) => 0.9 + 1.4 * (t as f32 / crate::tune::JAWS_FALL as f32),
+        _ => 0.0,
+    }
+}
+
 /// The breather's background extras: debris drifting by, the tiny figure falling.
 fn breather(a: &Atlas, ox: i32, oy: i32, t: u32) {
     let (d0, d1) = (frames(DEBRIS_AT.0), frames(DEBRIS_AT.1));
@@ -74,12 +85,15 @@ pub fn draw(r: &Renderer, lay: &Layout, w: &World, hitboxes: bool, wrecks: &[(f3
     let dim = dim_for(w.hazards.bullets.len());
     let clock = w.clock();
     r.stars.draw(a, lay.field, w.frame, dim);
-    r.hole(lay.field, HOLE_X, HOLE_Y, hole_radius(clock), hole_bright(dim), w.frame as f32 / 60.0, flare(clock));
+    r.hole(lay.field, HOLE_X, HOLE_Y, hole_radius(clock), hole_bright(dim), w.frame as f32 / 60.0, flare(clock).max(feeding(w)));
     if let Some(s) = &w.stage {
         breather(a, ox, oy, s.t);
     }
     for &(x, y, k) in wrecks {
         super::foes::draw_wreck(a, ox, oy, x, y, k, w.frame);
+    }
+    if let Some(b) = &w.boss {
+        super::jawsthic::draw(r, b, ox, oy, w.frame);
     }
     super::foes::draw(a, w, ox, oy);
 
@@ -169,7 +183,17 @@ pub fn draw(r: &Renderer, lay: &Layout, w: &World, hitboxes: bool, wrecks: &[(f3
         let f = lay.field;
         a.fill(f.x, f.y, f.w, f.h, Color { a: 0.35 * flash, ..CREAM });
     }
-    // enemy bullets above everything but the HUD (and the hitbox dot, which is HUD)
+    // and the boss's death whites the screen out (every bullet's already gone)
+    let white = r.fx.white();
+    if white > 0.0 {
+        let f = lay.field;
+        a.fill(f.x, f.y, f.w, f.h, Color { a: white, ..CREAM });
+    }
+    // enemy bullets above everything but the HUD (and the hitbox dot, which is HUD),
+    // the boss's laser among them
+    if let Some(l) = w.boss.as_ref().and_then(|b| b.laser) {
+        super::jawsthic::draw_laser(a, &l, ox, oy, w.frame);
+    }
     super::bullets::draw_bullets(a, w, ox, oy);
     if w.alive() {
         ship::draw_hitbox(a, px, py, p.blend(&w.tuning), w.frame);

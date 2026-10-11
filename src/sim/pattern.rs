@@ -18,6 +18,13 @@ pub enum Shape {
     Stream { burst: u8, gap: u8 },
     /// `n` bullets at random within `spread` degrees of straight down, speed varied by ±`jitter`.
     Cone { n: u8, spread: f32, jitter: f32 },
+    /// `n` bullets in a row `spacing` px apart, falling straight down, with `gap` of them
+    /// left out: the gap drifts across the row and back once every `period` shots (a
+    /// curtain with a moving lane through it). Each row slips up to `jitter` px sideways.
+    Curtain { n: u8, spacing: f32, gap: u8, period: u16, jitter: f32 },
+    /// `n` bullets round a circle, faster where its `petals` swell, so the ring blooms
+    /// into a flower; each shot turns it by `turn` degrees.
+    Flower { n: u8, petals: u8, turn: f32 },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -288,6 +295,26 @@ impl Emitter {
                 }
                 true
             }
+            Shape::Curtain { n, spacing, gap, period, jitter } => {
+                let k = self.shots as f32 / period.max(1) as f32 * std::f32::consts::TAU;
+                let from = ((0.5 - 0.5 * k.cos()) * n.saturating_sub(gap) as f32).round() as u8;
+                let slip = if jitter > 0.0 { rng.range(-jitter, jitter) } else { 0.0 };
+                for i in (0..n).filter(|i| !(from..from + gap).contains(i)) {
+                    let dx = (i as f32 - (n - 1) as f32 * 0.5) * spacing + slip;
+                    Hazards::fire(out, Spawn { x: self.x + dx, y: self.y, vx: 0.0, vy: g.speed, kind: g.kind, behavior: g.behavior, owner: self.owner, hue: g.hue }, player);
+                }
+                self.shots += 1;
+                true
+            }
+            Shape::Flower { n, petals, turn } => {
+                for i in 0..n {
+                    let a = 360.0 * i as f32 / n as f32;
+                    let swell = 0.6 + 0.4 * (petals as f32 * a.to_radians() * 0.5).cos().abs();
+                    shot(self.angle + a, g.speed * swell, out);
+                }
+                self.angle += turn;
+                true
+            }
         };
         if fired {
             self.since = 0;
@@ -382,6 +409,34 @@ mod tests {
         }
         assert_eq!(frames, vec![0, 3, 6, 9, 30, 33, 36, 39]);
         assert!(out.iter().all(|s| s.vx.abs() < 1e-4 && s.vy > 0.0), "aimed straight down at the player below");
+    }
+
+    #[test]
+    fn curtains_leave_a_drifting_lane_and_flowers_bloom() {
+        let curtain = Gun { mount: Mount::At(135.0, 60.0), shape: Shape::Curtain { n: 9, spacing: 10.0, gap: 3, period: 8, jitter: 0.0 }, kind: Kind::Rice, speed: 1.5, every: 1, delay: 0, behavior: Behavior::Straight, hue: Hue::Teal };
+        let mut e = Emitter::new(curtain, 0, 0.0);
+        let (mut rng, mut out) = (Rng::new(1), vec![]);
+        let mut gaps = vec![];
+        for _ in 0..8 {
+            out.clear();
+            e.fire_frame((135.0, 300.0), &DUMMIES, &mut rng, &mut out);
+            assert_eq!(out.len(), 6, "nine less the three in the gap");
+            assert!(out.iter().all(|s| s.vx == 0.0 && s.vy == 1.5 && s.y == 60.0), "straight down from the row");
+            // where the gap is: the first missing slot
+            let xs: Vec<i32> = out.iter().map(|s| ((s.x - 95.0) / 10.0).round() as i32).collect();
+            gaps.push((0..9).find(|i| !xs.contains(i)).unwrap());
+        }
+        assert_eq!(gaps.iter().min(), Some(&0), "the gap reaches one end");
+        assert_eq!(gaps.iter().max(), Some(&6), "and the other");
+        let flower = Gun { shape: Shape::Flower { n: 24, petals: 4, turn: 10.0 }, kind: Kind::Small, speed: 2.0, ..curtain };
+        let mut e = Emitter::new(flower, 0, 0.0);
+        out.clear();
+        e.fire_frame((135.0, 300.0), &DUMMIES, &mut rng, &mut out);
+        let speeds: Vec<f32> = out.iter().map(|s| s.vx.hypot(s.vy)).collect();
+        assert_eq!(speeds.len(), 24);
+        let (lo, hi) = (speeds.iter().cloned().fold(9.0, f32::min), speeds.iter().cloned().fold(0.0, f32::max));
+        assert!(lo < 1.4 && hi > 1.95, "petals: {lo}..{hi}");
+        assert_eq!(e.angle, 10.0, "and it turns");
     }
 
     #[test]

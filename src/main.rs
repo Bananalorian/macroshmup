@@ -134,6 +134,11 @@ impl Game {
         match req {
             None | Some(SceneReq::Title) => {}
             Some(SceneReq::Stage(secs)) => g.start_stage(secs),
+            Some(SceneReq::Boss(phase)) => {
+                let mut w = World::boss_at(seed, g.settings.tuning, phase);
+                w.invincible = g.settings.view.invincible;
+                g.scene = Scene::Stage { world: Box::new(w), menu: None, over: None };
+            }
             Some(SceneReq::Shots(n)) => {
                 g.fill_shots = n;
                 g.start_sandbox();
@@ -374,6 +379,166 @@ fn foe_effects(w: &World, r: &mut Renderer) {
     }
 }
 
+/// JAWSTHIC's running effects: glitch smears streaming off its tail fin and plates
+/// the way it's leaving, threads dripping off its belly.
+fn boss_effects(w: &World, r: &mut Renderer) {
+    use sim::boss::Act;
+    let Some(b) = w.boss.as_ref().filter(|b| b.act != Act::Gone) else { return };
+    let back = -b.facing;
+    let surface = b.surface();
+    let above = |y: f32| surface.is_none_or(|s| y < s - 1.0);
+    // the fin cutting through the disk throws up a wake
+    if b.act == Act::Intro && b.t < tune::JAWS_INTRO[0] {
+        let (fx, _) = b.at(tune::JAWS_DORSAL_AT);
+        r.parts.splash(fx - 6.0 * b.facing, tune::HOLE_Y - 1.0, 14.0, 2);
+    }
+    let wild = b.turn > 0 || matches!(b.act, Act::Dying | Act::Falling);
+    let hot = wild || b.phase >= 3;
+    let j = b.tail();
+    let (tx, ty, _) = j[5];
+    let rate = if wild { 6 } else { [1, 1, 2, 2, 3][b.phase as usize] };
+    for _ in 0..rate {
+        let (x, y) = r.parts.somewhere(tx + back * 14.0, ty - 4.0, 18.0, 52.0);
+        if above(y) {
+            r.parts.smear(x, y, back, hot);
+        }
+    }
+    if w.frame % 3 == 0 {
+        let i = (w.frame / 3 % 5) as usize;
+        let (x, y) = r.parts.somewhere(j[i].0, j[i].1, 8.0, 18.0);
+        if above(y) {
+            r.parts.smear(x, y, back, hot);
+        }
+    }
+    if wild {
+        let (cx, cy) = b.at((10.0, -2.0));
+        for _ in 0..3 {
+            let (x, y) = r.parts.somewhere(cx, cy, 110.0, 50.0);
+            if above(y) {
+                r.parts.smear(x, y, back, true);
+            }
+        }
+    }
+    if w.frame % if hot { 6 } else { 17 } == 0 {
+        let (cx, cy) = b.at((12.0, 21.0));
+        let (x, y) = r.parts.somewhere(cx, cy, 70.0, 2.0);
+        if above(y) {
+            r.parts.drip(x, y);
+        }
+    }
+}
+
+/// JAWSTHIC's moments: the breach, the roar, phases breaking, turns, fins snapping
+/// off, the laser, and its death in a chain of blasts ending in a white-out.
+fn boss_moments(w: &World, r: &mut Renderer, s: &Settings, audio: &mut Audio) {
+    let me = (w.player.x, w.player.y);
+    let Some(b) = &w.boss else { return };
+    let mirror = |pixels: &[(i8, i8, Color)]| -> Vec<(i8, i8, Color)> { pixels.iter().map(|&(x, y, c)| (if b.facing < 0.0 { -x } else { x }, y, c)).collect() };
+    let surge = |r: &mut Renderer, px: f32, frames: u32| r.fx.surge(if s.reduce_flash { px * tune::REDUCED_CA } else { px }, frames);
+    for e in &w.events {
+        match *e {
+            Event::BossBreach { x, y } => {
+                r.parts.splash(x, y, 110.0, 90);
+                r.fx.shock(x, y, 140.0, 3.0, 34);
+                audio.blast(Size::Large);
+            }
+            Event::BossRoar { x, y } => {
+                let (mx, my) = b.muzzle(sim::boss::Muzzle::Mouth);
+                r.parts.ring(mx, my, 5.0, 26, SIGNAL_C);
+                r.fx.shock(x, y, 200.0, 4.0, 40);
+                surge(r, 2.4, 14);
+                r.fx.shake(tune::SHAKE_BOMB, w.hazards.bullets.len(), s.shake);
+            }
+            Event::BossPhase(_) => {
+                let (cx, cy) = b.at((10.0, -2.0));
+                r.parts.ring(cx, cy, 4.0, 30, SIGNAL_C);
+            }
+            Event::BossBreak { timeout, .. } => {
+                let (cx, cy) = b.at((10.0, -2.0));
+                explode(&mut r.fx, &mut r.parts, cx, cy, if timeout { Size::Medium } else { Size::Large }, me, s.reduce_flash, w.frame);
+                r.parts.ring(cx, cy, 6.0, 30, render::palette::CREAM);
+                surge(r, 1.6, 10);
+                for _ in 0..40 {
+                    let (x, y) = r.parts.somewhere(cx, cy, 150.0, 60.0);
+                    r.parts.smear(x, y, -b.facing, true);
+                }
+                audio.blast(Size::Large);
+            }
+            Event::BossTurn => {
+                let (cx, cy) = b.at((10.0, -2.0));
+                for _ in 0..24 {
+                    let (x, y) = r.parts.somewhere(cx, cy, 160.0, 60.0);
+                    r.parts.smear(x, y, -b.facing, true);
+                }
+            }
+            Event::FinBreak { x, y, fin } => {
+                let pieces = if fin == 0 { &r.jaws.fin_shards } else { &r.jaws.tail_shards[5] };
+                r.parts.shatter(x, y, &mirror(pieces));
+                explode(&mut r.fx, &mut r.parts, x, y, Size::Medium, me, s.reduce_flash, w.frame);
+                r.parts.smoke(x, y, 8, 20.0);
+                audio.blast(Size::Medium);
+            }
+            Event::LaserFire => {
+                if let Some(l) = b.laser {
+                    for _ in 0..3 {
+                        r.parts.hit(l.x, l.y, false);
+                    }
+                    r.fx.aberrate(if s.reduce_flash { 0.4 } else { 1.2 });
+                }
+            }
+            Event::BossDown { x, y } => {
+                explode(&mut r.fx, &mut r.parts, x, y, Size::Large, me, s.reduce_flash, w.frame);
+                r.parts.ring(x, y, 6.0, 40, SIGNAL_C);
+                surge(r, 3.0, 16);
+                audio.blast(Size::Boss);
+            }
+            Event::BossBlast { x, y, last } => {
+                if last {
+                    let (cx, cy) = (b.x, b.y);
+                    explode(&mut r.fx, &mut r.parts, cx, cy, Size::Boss, me, s.reduce_flash, w.frame);
+                    r.parts.shatter(cx, cy, &mirror(&r.jaws.shards));
+                    r.parts.smoke(cx, cy, 40, 120.0);
+                    r.parts.glow(cx, cy, 8.0, 30);
+                    r.parts.ring(cx, cy, 7.0, 36, render::palette::CREAM);
+                    r.fx.whiteout(70, if s.reduce_flash { 0.45 } else { 0.9 });
+                    surge(r, tune::BOMB_SURGE.0, tune::BOMB_SURGE.1);
+                    r.fx.shake(tune::SHAKE_BOMB * 1.4, w.hazards.bullets.len(), s.shake);
+                    audio.blast(Size::Boss);
+                } else {
+                    // the piece it hit blows off in its own pixels: the tail fin, the
+                    // plates from the back, the fins
+                    let k = b.blown().saturating_sub(1);
+                    let piece = match k {
+                        0 => Some(&r.jaws.tail_shards[5]),
+                        1..=5 => Some(&r.jaws.tail_shards[5 - k]),
+                        6 => Some(&r.jaws.dorsal_shards),
+                        7 => Some(&r.jaws.fin_shards),
+                        _ => None,
+                    };
+                    if let Some(px) = piece {
+                        let px = mirror(px);
+                        r.parts.shatter(x, y, &px);
+                    }
+                    explode(&mut r.fx, &mut r.parts, x, y, Size::Medium, me, s.reduce_flash, w.frame);
+                    r.fx.shock(x, y, 70.0, 2.5, 22);
+                    r.parts.smoke(x, y, 6, 20.0);
+                    for _ in 0..10 {
+                        let (sx, sy) = r.parts.somewhere(x, y, 30.0, 24.0);
+                        r.parts.smear(sx, sy, -b.facing, true);
+                    }
+                    r.fx.shake(tune::SHAKE_DEATH * 0.6, w.hazards.bullets.len(), s.shake);
+                    audio.blast(Size::Large);
+                }
+            }
+            Event::BossFall => {
+                r.parts.splash(b.x, tune::HOLE_Y, 160.0, 120);
+                surge(r, 2.0, 30);
+            }
+            _ => {}
+        }
+    }
+}
+
 /// The derelict's chained death, a blast every few frames across the wreck.
 fn chain_effects(chains: &mut Vec<Chain>, w: &World, r: &mut Renderer, s: &Settings, audio: &mut Audio) {
     let me = (w.player.x, w.player.y);
@@ -538,7 +703,18 @@ fn stage_view(w: &World, s: &sim::stage1::Stage) -> hud::StageView {
         }
         (e.parts[0].hp / e.parts[0].max_hp, t)
     });
-    let warn_at = sim::stage1::frames(tune::SECTIONS[tune::SECTIONS.len() - 1].0);
+    let warn_at = sim::stage1::frames(tune::SECTIONS[tune::WARNING_SECTION].0);
+    use sim::boss::{Act, Outcome};
+    let jaws = w.boss.as_ref().filter(|b| !matches!(b.act, Act::Gone | Act::Dying | Act::Falling)).map(|b| {
+        let [_, _, peak, done] = tune::JAWS_INTRO;
+        let fill = if b.act == Act::Intro { (b.t.saturating_sub(peak) as f32 / (done - peak) as f32).min(1.0) } else { 1.0 };
+        hud::JawsView { bar: b.bar(), phase: if b.act == Act::Intro { 0 } else { b.phase }, left: b.time_left(), fill }
+    });
+    let jaws_end = w.boss.as_ref().filter(|_| s.over).map(|b| {
+        let broken = b.outcomes.iter().filter(|o| **o == Some(Outcome::Broken)).count() as u8;
+        let clean = (0..4).filter(|&p| b.outcomes[p] == Some(Outcome::Broken) && b.clean[p]).count() as u8;
+        (b.outcomes[3] == Some(Outcome::Broken), broken, clean)
+    });
     hud::StageView {
         t: s.t,
         section: s.section,
@@ -548,6 +724,8 @@ fn stage_view(w: &World, s: &sim::stage1::Stage) -> hud::StageView {
         over: s.over,
         boss,
         warned: (s.t >= warn_at).then(|| s.t - warn_at),
+        jaws,
+        jaws_end,
     }
 }
 
@@ -604,6 +782,9 @@ async fn amain() {
     let settings = Settings::load();
     let mut audio = Audio::load().await;
     audio.muted = settings.muted;
+    if matches!(hooks.scene, Some(SceneReq::Boss(p)) if p > 0) {
+        audio.music(true);
+    }
     let seed = hooks.seed.unwrap_or_else(|| (miniquad::date::now() * 1000.0) as u64);
     let scripted = !hooks.shots.is_empty();
     let last_shot = hooks.shots.iter().copied().max().unwrap_or(0);
@@ -625,6 +806,7 @@ async fn amain() {
     let mut fullscreen = false;
     let mut mode_known = false;
     let mut dip_skip = false;
+    let mut slow_n = 0u32;
     let mut frame: u64 = 0;
     let mut ended_at: Option<u64> = None;
     let started = miniquad::date::now();
@@ -673,9 +855,15 @@ async fn amain() {
         let dt = get_frame_time();
         let ticks = keys.filter(if scripted { 1 } else { clock.advance(dt as f64) }, game.settings.view.slowmo);
         for _ in 0..ticks {
-            // the bomb's slow-motion dip: half the ticks run while it lasts
+            // the bomb's slow-motion dip: half the ticks run while it lasts; the boss's
+            // death: a quarter
             if let Scene::Stage { world, menu: None, .. } = &game.scene {
-                if world.dip > 0 {
+                if world.slow > 0 {
+                    slow_n += 1;
+                    if slow_n % 4 != 0 {
+                        continue;
+                    }
+                } else if world.dip > 0 {
                     dip_skip = !dip_skip;
                     if dip_skip {
                         continue;
@@ -684,8 +872,12 @@ async fn amain() {
             }
             match &mut game.scene {
                 Scene::Title { t, .. } => *t += 1,
-                // the stage is over: everything holds still behind the panel
-                Scene::Stage { world, over: Some(_), .. } if world.stage.as_ref().is_some_and(|s| s.over) => {}
+                // the stage is over: everything holds still behind the panel, but the
+                // smoke and light of whatever just happened play out
+                Scene::Stage { world, over: Some(_), .. } if world.stage.as_ref().is_some_and(|s| s.over) => {
+                    renderer.parts.tick((world.player.x, world.player.y));
+                    renderer.fx.tick();
+                }
                 Scene::Stage { world, menu: None, over } => {
                     let (drag, bomb) = input.take();
                     let mut c = if game.settings.view.autopilot { bot.decide(world) } else { Controls { mv: held.mv, drag, fire: held.fire, focus: held.focus, bomb } };
@@ -695,6 +887,10 @@ async fn amain() {
                     if hooks.die_at == Some(world.frame + 1) {
                         world.debug_strike();
                     }
+                    // (counted in screen frames, like PG_SHOTS: the stage's clock starts late in boss practice)
+                    if hooks.kill_at == Some(frame) {
+                        world.skip_section();
+                    }
                     world.tick(c);
                     if hooks.boom.is_some() && world.frame == 30 {
                         game.boom = hooks.boom.map(|i| Size::ALL[i]);
@@ -702,6 +898,8 @@ async fn amain() {
                     renderer.parts.tick((world.player.x, world.player.y));
                     renderer.fx.tick();
                     effects(world, &mut renderer, &game.settings, &mut audio, &mut game.chains);
+                    boss_effects(world, &mut renderer);
+                    boss_moments(world, &mut renderer, &game.settings, &mut audio);
                     chain_effects(&mut game.chains, world, &mut renderer, &game.settings, &mut audio);
                     let cleared = world.stage.as_ref().is_some_and(|s| s.over);
                     if (world.life == Life::GameOver || cleared) && over.is_none() {

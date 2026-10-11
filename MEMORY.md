@@ -3,6 +3,77 @@
 Session notes for Claude Code: what shipped, tuning that changed, known issues, what's next.
 Newest first.
 
+## v0.7.0 JAWSTHIC (Sprint 6, the boss) - 2026-10-11
+
+**Jason's calls:** the boss is JAWSTHIC, his concept ("name jawsthic? lol"), 100% drawn
+in code from his reference (saved to docs/reference/jawsthic.jpg: a 3/4 view, bone-white
+cracked-stone great white, gothic lancet windows, red/teal lights, segmented tail with
+glitch smears, red diamond eye, red crosshair in the jaws). "These bosses are very
+important: spend time and get it right." The Cathedral proposal is retired (render/
+cathedral.rs deleted; its mock-up png stays in docs).
+
+**Shipped**
+- `render/carve.rs`: the boss painter. Parts = shapes (Poly/Disc/Ring/Line) with
+  materials (Hull, Seam, Recess, Slot, Red, Teal, Tooth, Gum, Mouth, Vein, Pit, Frame,
+  Pipe, Shade) in part coordinates; `carve(part, Pose{angle, flip})` maps each pixel back
+  into the part, so any angle/facing is crisp; `Shape::turned(hinge, a)` for the jaw.
+  Light is screen top-left; `Form::Barrel` (normals from the outline) or `Flat`; per-plate
+  bevel (lip/drop at seams), bounce + bottom rim light, sparse grain in part coords,
+  6-tone RAMP (26241F..DDD6C2, top 0.84 luma) with a narrow Bayer band (DARK 0.16,
+  BRIGHT 0.96).
+- `render/jawsthic.rs`: the model (body+jaw per opening, 5 tail plates, caudal, dorsal,
+  pectoral, pectoral stump) and `JawsArt` (own 1024x1024 texture: body x7 jaw frames, tail
+  turns every 0.05 rad to REACH [0.1..0.84], paddle +-0.2, both facings; carved in 66 ms).
+  `draw()`: glitch bands (canvas rows shifted), surface clip (intro/fall), window charge
+  glows, turret cores, eye pulse, crosshair, cracks (phase 3+), additive red hit flash,
+  red/teal ghosts; pieces blown off in the death (`Boss::blown`). `draw_laser()`.
+  Review: `cargo test --release jawsthic_sheet -- --ignored` (CPU sheet) and PG_MOCKUP=1
+  (real renderer, 6 states) -> shots/jawsthic_sheet.png.
+- `sim/boss.rs`: `Boss` (Act Intro/Fight/Break/Dying/Falling/Gone; facing; turn; hp with
+  phase floors; fins [pectoral, tail fin]; jaw; swim; laser; guns per phase from
+  tune::JAWS_GUNS with Muzzle Mouth/Window/Pectoral/Tail/Belly; `enraged` guns fire once
+  both fins are gone). `tail()` is the swim kinematics shared with the art. BOSS_ID =
+  u32::MAX owns its bullets. World: `boss`, `slow` (quarter-speed ticks), spawn at JAWS_AT
+  (BossArrive), `boss_aftermath` (break -> cancel_owner into shards; down -> cancel all +
+  slow; gone -> stage over + StageEnd), Target::Boss(p), bombs, laser + crash hits,
+  `boss_at(seed, tuning, phase)`, `skip_section` breaks a phase during the fight.
+- Patterns: Shape::Curtain{n, spacing, gap, period, jitter}, Shape::Flower{n, petals,
+  turn}; Pull bullets are swallowed within 4 px.
+- Stage: SECTIONS has 8 (JAWSTHIC at 157.5 s), WARNING_SECTION = 6; STAGE_END is gone
+  (the stage ends with the boss); `Stage.boss_called`.
+- HUD: `JawsView` bar (segments by share, fills during the intro, phase name, timer red
+  under 10 s); the tally line JAWSTHIC DESTROYED / LOST TO THE HOLE + PHASES BROKEN n/4
+  CLEAN n.
+- Effects: smears (tail fin + plates, more when glitching/hot), drips, wake on the intro
+  fin pass, splash on the breach, roar shock/surge, break bursts, fin shatter, death
+  pieces, final blast + `Fx::whiteout` (70 frames, 0.9 peak / 0.45 reduced). Effects keep
+  ticking behind the stage-end panel now.
+- Audio: `synth::boss_theme` (16 bars, 150 BPM, E Phrygian, seamless via wrap-around
+  mixing + two-pass reverb), approach, roar, laser charge/beam, glitch x3, swallowed.
+  Audio music track (BossBreach starts it, BossDown/BossFall fade it; boss practice phases
+  start it in amain). VOL_MUSIC 0.32. Not reviewed by ear.
+- Bot: aims at the boss's first target, crash boxes in the lookahead, laser capsule, and
+  `sweep_risk` (big penalty inside the remaining sweep, gradient toward the warning line).
+  `bot::phase_trial`, `stage_limit()`, StageRun.phase_time/phase_deaths/boss_killed.
+  PG_SIM=boss:<n>; PG_KILL=<screen frame>.
+
+**Tuning (tune.rs):** JAWS_HP 12000, phases (share, secs, dmg mult, turn period):
+(0.25, 30, 0.65, 840) (0.30, 40, 1.0, -) (0.30, 40, 1.0, 600) (0.15, 35, 0.42, 420);
+FIN_HP 900, FIN_BLOW 0.25; JAWS_Y 82, HOME (150 right, 120 left), sway 12/480, bob 5/300;
+laser (45 warn, 60 beam, 55 deg, 9 px), every 330 from 150; death 235 frames, slowmo 48,
+blasts [0,8,15,22,30,40,52,66,82,100,140].
+
+**Measured:** PG_SIM=boss:200 all phases 100% survived without bombs, medians 24.8 / 23.1
+/ 26.0 / 24.8 s (21.6-32.0). PG_SIM=200 stage: 100% cleared, 100% no-miss, boss destroyed
+in every run. PG_PERF: cpu 0.35-0.49 ms avg, 2 ms worst; occasional stalls only on the
+first runs after a rebuild (Defender scanning the exe).
+
+**Known / next:** the bot finds every phase easy (grazes 1-29); human difficulty is for
+Sprint 9 and Jason's play. The music needs his ear (Sprint 8 is the mix). He dropped
+"Split-sword starship_ flight to laser.png" into docs/reference mid-sprint (a bone-white
+ship whose two blades join into a sword that fires a teal laser): not committed, asked him
+what it's for. Next: Sprint 7, Score & shell (the capture bonus uses Boss.clean).
+
 ## v0.6.5 XInput, and the Cathedral mock-up - 2026-10-11
 
 Jason: lag happens only with the controller (keyboard fine); other games are fine with it
