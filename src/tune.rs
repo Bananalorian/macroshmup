@@ -3,6 +3,7 @@
 //! frame, angles in degrees (0 is right, 90 is straight down the screen).
 
 use crate::sim::bullets::{Behavior, Kind};
+use crate::sim::enemy::{Arm, arm};
 use crate::sim::pattern::{Gun, Mount, Preset, Shape};
 
 // ------------------------------------------------------------------ the clock
@@ -337,6 +338,126 @@ pub const SANDBOX: &[Preset] = &[
     Preset { name: "STRESS 4000", guns: &[], fill: 4000 },
 ];
 
+// ------------------------------------------------------------------ Stage 1: OUTER DISK
+
+pub const STAGE_NAME: &str = "OUTER DISK";
+/// The timeline, in seconds: (start, name). Each section's enemies arrive on cue.
+pub const SECTIONS: [(f32, &str); 7] = [
+    (0.0, "FLY-IN"),
+    (10.0, "GUNSHIPS"),
+    (40.0, "BUOYS"),
+    (70.0, "BREATHER"),
+    (85.0, "DERELICT"),
+    (115.0, "HEAVIES"),
+    (150.0, "WARNING"),
+];
+/// The stage ends (for now: the boss arrives in v0.7) this many seconds in.
+pub const STAGE_END: f32 = 160.0;
+/// Kill the derelict early and the next section comes forward, landing at most this
+/// many seconds ahead of the timeline.
+pub const SECTION_EARLY: f32 = 4.0;
+/// No enemy fires for this many seconds after the fly-in.
+pub const FIRST_FIRE: f32 = 6.0;
+/// The stage title shows for this many frames.
+pub const TITLE_CARD: u32 = 210;
+
+/// The breather's set dressing. The disk flares (peak boost of its light; seconds to
+/// rise, hold and fall), a debris field drifts by (start, end in seconds), and a tiny
+/// figure tumbles into the hole (start, seconds to fall).
+pub const FLARE: (f32, f32, f32, f32) = (1.6, 2.0, 5.0, 6.0);
+pub const DEBRIS_AT: (f32, f32) = (71.0, 84.0);
+pub const FIGURE_AT: (f32, f32) = (72.5, 11.0);
+
+/// The playfield's 7 lanes; the two edge lanes never get spawns.
+pub const LANES: usize = 7;
+/// Nothing spawns closer than this to a side edge.
+pub const SPAWN_EDGE: f32 = 20.0;
+/// Enemies this close to the top can't be hurt (no killing what you can't see),
+/// and enemies this close to the bottom don't fire (no shots from point-blank range).
+pub const DEAD_ZONE: f32 = 12.0;
+pub const CEASEFIRE: f32 = 60.0;
+/// High-HP enemies arrive one at a time: at least this many seconds apart.
+pub const HEAVY_GAP: f32 = 2.0;
+/// Enemies flash on a hit at most this often (frames lit, gap).
+pub const ENEMY_FLASH: (u8, u8) = (2, 5);
+/// Crashing into an enemy: its body is this share of its hurtbox (against your hitbox).
+pub const BODY_SHRINK: f32 = 0.7;
+/// No enemy stays longer than this (frames), whatever its path.
+pub const ENEMY_MAX_AGE: u32 = 60 * 60;
+/// A red charge glow on a gun this many frames before it fires (the telegraph).
+pub const CHARGE_FRAMES: u32 = 14;
+
+/// Each enemy: (hit points, hurtbox w, h). Big hurtboxes, just enough HP for the job
+/// (the wide shot does about 120 a second to one target, the beam about 190).
+pub const DRONE: (f32, f32, f32) = (4.0, 16.0, 14.0);
+pub const GUNSHIP: (f32, f32, f32) = (140.0, 30.0, 22.0);
+pub const BUOY: (f32, f32, f32) = (220.0, 22.0, 22.0);
+pub const HEAVY: (f32, f32, f32) = (1100.0, 48.0, 34.0);
+/// The derelict: the hull, and its three weak-point turrets.
+pub const HULL: (f32, f32, f32) = (2400.0, 116.0, 50.0);
+pub const HULL_TURRET: (f32, f32, f32) = (300.0, 18.0, 18.0);
+/// Where the derelict's turrets hang under the hull (offsets from its center): left,
+/// keel, right. They hang lower than the hull, so shots reach them first.
+pub const HULL_TURRETS: [(f32, f32); 3] = [(-40.0, 20.0), (0.0, 26.0), (40.0, 20.0)];
+/// The derelict rises out of the disk (it can't be hurt meanwhile) to hover here.
+pub const HULL_EMERGE: u32 = 150;
+pub const HULL_Y: f32 = 78.0;
+
+/// How long things stay if you don't kill them (frames), and how fast they move.
+pub const DRONE_SPEED: f32 = 2.2;
+pub const GUNSHIP_STAY: u32 = 240;
+pub const BUOY_DRIFT: f32 = 0.38;
+/// Buoys stop firing below this share of the playfield.
+pub const BUOY_QUIET: f32 = 0.6;
+pub const HEAVY_STAY: u32 = 450;
+/// The derelict leaves this long after it starts to rise (frames).
+pub const HULL_STAY: u32 = 25 * 60;
+/// The derelict cracks open (its second pattern) when its turrets are gone or this long after it arrives.
+pub const HULL_PHASE2: u32 = 12 * 60;
+/// Frames for enemies to fly in to where they hover.
+pub const ENTER_FRAMES: u32 = 50;
+/// Leaving: accelerating up the screen at this many px a frame, every frame.
+pub const LEAVE_ACCEL: f32 = 0.05;
+/// Hovering enemies sway side to side by these many px, once per SWAY_FRAMES.
+pub const SWAY_FRAMES: u32 = 240;
+pub const GUNSHIP_SWAY: f32 = 6.0;
+pub const BUOY_SWAY: f32 = 6.0;
+pub const HEAVY_SWAY: f32 = 10.0;
+pub const HULL_SWAY: f32 = 12.0;
+
+/// The guns: which part carries each (0 the body, 1-3 the derelict's turrets), the
+/// phase it fires in (0 always, 1 before the derelict cracks, 2 after) and the gun.
+/// Delays count from the enemy's arrival; hovering enemies only fire once they've settled.
+/// In a firing flight of popcorn, this share fire (the rest are just obstacles).
+pub const DRONE_FIRE_SHARE: f32 = 0.8;
+/// Popcorn: one aimed shot, about half a second in.
+pub const DRONE_GUNS: &[Arm] = &[arm(0, 0, gun(Mount::Owner { dx: 0.0, dy: 5.0 }, Shape::Fan { n: 1, spread: 0.0, aimed: true }, Kind::Small, 2.6, 10_000, 34, STRAIGHT))];
+/// Gunships: aimed 3-way fans, then 5-way, while they hover.
+pub const GUNSHIP_GUNS: &[Arm] = &[
+    arm(0, 0, gun(Mount::Owner { dx: 0.0, dy: 9.0 }, Shape::Fan { n: 3, spread: 24.0, aimed: true }, Kind::Rice, 2.6, 90, 56, STRAIGHT)),
+    arm(0, 0, gun(Mount::Owner { dx: 0.0, dy: 9.0 }, Shape::Fan { n: 5, spread: 48.0, aimed: true }, Kind::Small, 2.2, 90, 101, STRAIGHT)),
+];
+/// Buoys: a static ring, or a three-armed spiral.
+pub const BUOY_RING: &[Arm] = &[arm(0, 0, gun(Mount::Owner { dx: 0.0, dy: 0.0 }, Shape::Ring { n: 16, turn: 5.6 }, Kind::Orb, 1.35, 50, 30, STRAIGHT))];
+pub const BUOY_SPIRAL: &[Arm] = &[arm(0, 0, gun(Mount::Owner { dx: 0.0, dy: 0.0 }, Shape::Spiral { arms: 3, spin: 13.0, flip: 0 }, Kind::Rice, 1.6, 7, 30, STRAIGHT))];
+/// Heavies: slow rings of big orbs (static) layered with needle bursts from both flanks
+/// (aimed) and a sprinkle of small ones (random).
+pub const HEAVY_GUNS: &[Arm] = &[
+    arm(0, 0, gun(Mount::Owner { dx: 0.0, dy: 6.0 }, Shape::Ring { n: 18, turn: 10.0 }, Kind::Large, 1.15, 64, 56, STRAIGHT)),
+    arm(0, 0, gun(Mount::Owner { dx: -16.0, dy: 12.0 }, Shape::Stream { burst: 4, gap: 5 }, Kind::Needle, 3.0, 70, 90, STRAIGHT)),
+    arm(0, 0, gun(Mount::Owner { dx: 16.0, dy: 12.0 }, Shape::Stream { burst: 4, gap: 5 }, Kind::Needle, 3.0, 70, 90, STRAIGHT)),
+    arm(0, 0, gun(Mount::Owner { dx: 0.0, dy: 10.0 }, Shape::Cone { n: 3, spread: 90.0, jitter: 0.25 }, Kind::Small, 1.9, 18, 70, STRAIGHT)),
+];
+/// The derelict. First: aimed fans from the wing turrets and slow rings from the keel
+/// turret. Cracked: a reversing spiral from the hull and aimed needle bursts.
+pub const HULL_GUNS: &[Arm] = &[
+    arm(1, 0, gun(Mount::Owner { dx: -40.0, dy: 26.0 }, Shape::Fan { n: 5, spread: 36.0, aimed: true }, Kind::Rice, 2.4, 60, 20, STRAIGHT)),
+    arm(3, 0, gun(Mount::Owner { dx: 40.0, dy: 26.0 }, Shape::Fan { n: 5, spread: 36.0, aimed: true }, Kind::Rice, 2.4, 60, 50, STRAIGHT)),
+    arm(2, 0, gun(Mount::Owner { dx: 0.0, dy: 32.0 }, Shape::Ring { n: 20, turn: 4.5 }, Kind::Orb, 1.35, 64, 40, STRAIGHT)),
+    arm(0, 2, gun(Mount::Owner { dx: 0.0, dy: 2.0 }, Shape::Spiral { arms: 5, spin: 8.5, flip: 30 }, Kind::Rice, 1.7, 7, 0, STRAIGHT)),
+    arm(0, 2, gun(Mount::Owner { dx: 0.0, dy: 18.0 }, Shape::Stream { burst: 5, gap: 4 }, Kind::Needle, 3.1, 90, 50, STRAIGHT)),
+];
+
 // ------------------------------------------------------------------ the bot
 // A dodger: tries 9 directions at two speeds, looking this many frames ahead.
 
@@ -346,6 +467,8 @@ pub const BOT_HOME: (f32, f32) = (135.0, 285.0);
 pub const BOT_HOME_PULL: f32 = 0.1;
 /// A small bonus for keeping the same choice (so it doesn't dither).
 pub const BOT_STICKY: f32 = 0.3;
+/// How strongly it lines up under its target (enemies above it).
+pub const BOT_AIM: f32 = 0.06;
 /// Bullets inside this many px of clearance count as danger.
 pub const BOT_DANGER: f32 = 12.0;
 /// Extra clearance it wants before calling a path safe.
@@ -374,6 +497,7 @@ pub const RUMBLE_STRUCK: (f32, f32, u32) = (0.6, 0.6, 140);
 pub const RUMBLE_RESPAWN: (f32, f32, u32) = (0.15, 0.25, 160);
 pub const RUMBLE_GAME_OVER: (f32, f32, u32) = (0.5, 0.3, 900);
 pub const RUMBLE_GRAZE: (f32, f32, u32) = (0.0, 0.12, 35);
+pub const RUMBLE_WARNING: (f32, f32, u32) = (0.35, 0.1, 700);
 /// Continuous rumble is re-sent every this many frames.
 pub const RUMBLE_REPEAT: u64 = 4;
 /// "Low" rumble scales everything by this.
@@ -398,6 +522,7 @@ pub const VOL_BOMB: f32 = 0.9;
 pub const VOL_STRUCK: f32 = 0.5;
 pub const VOL_RESPAWN: f32 = 0.35;
 pub const VOL_GAME_OVER: f32 = 0.55;
+pub const VOL_WARNING: f32 = 0.5;
 /// How fast the beam hum fades in and out (volume per second).
 pub const BEAM_FADE: f32 = 6.0;
 

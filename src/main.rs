@@ -36,6 +36,7 @@ use render::layout::IRect;
 use render::{PostParams, Renderer};
 use render::hud::{self, HudView};
 use render::layout::Layout;
+use sim::enemy::EnemyKind;
 use sim::player::Controls;
 use sim::{Event, Life, World};
 
@@ -45,11 +46,28 @@ use storage::Settings;
 use synth::Id;
 
 enum Scene {
-    /// The title, `t` ticks after it appeared.
-    Title { t: u64 },
-    /// A run. `menu` is the pause menu's selected row while paused; `over` the
-    /// game-over menu's once the last ship is gone.
+    /// The title, `t` ticks after it appeared, with `sel` chosen.
+    Title { t: u64, sel: usize },
+    /// A run: Stage 1, or the pattern sandbox. `menu` is the pause menu's selected
+    /// row while paused; `over` the end menu's once the last ship is gone or the
+    /// stage is over.
     Stage { world: Box<World>, menu: Option<usize>, over: Option<usize> },
+}
+
+/// The derelict's death: blasts rippling across the wreck, then the big one.
+struct Chain {
+    x: f32,
+    y: f32,
+    t: u32,
+}
+
+impl Chain {
+    const EVERY: u32 = 6;
+    const BLASTS: u32 = 9;
+    /// The last blast, frames in.
+    fn end() -> u32 {
+        Self::EVERY * Self::BLASTS + 10
+    }
 }
 
 struct Game {
@@ -61,6 +79,7 @@ struct Game {
     fill_shots: usize,
     /// BOOM TEST asked for an explosion of this size.
     boom: Option<Size>,
+    chains: Vec<Chain>,
 }
 
 /// What a frame of menu input asked for.
@@ -112,43 +131,44 @@ fn menu_input(sel: &mut usize, ui: &Ui, lay: &Layout, s: &mut Settings) -> MenuA
 
 impl Game {
     fn new(seed: u64, req: Option<SceneReq>, settings: Settings) -> Game {
-        let mut g = Game { scene: Scene::Title { t: 0 }, seed, settings, toast: None, fill_shots: 0, boom: None };
+        let mut g = Game { scene: Scene::Title { t: 0, sel: 0 }, seed, settings, toast: None, fill_shots: 0, boom: None, chains: vec![] };
         match req {
             None | Some(SceneReq::Title) => {}
-            Some(SceneReq::Stage(secs)) => {
-                g.start_stage();
-                if let Scene::Stage { world, .. } = &mut g.scene {
-                    for _ in 0..(secs * tune::TICK_HZ as f32).round() as u64 {
-                        world.tick(Controls::default());
-                        world.events.clear();
-                    }
-                }
-            }
+            Some(SceneReq::Stage(secs)) => g.start_stage(secs),
             Some(SceneReq::Shots(n)) => {
                 g.fill_shots = n;
-                g.start_stage();
+                g.start_sandbox();
             }
             Some(SceneReq::Sandbox(i)) => {
                 g.settings.view.pattern = i;
-                g.start_stage();
+                g.start_sandbox();
             }
         }
         g
     }
 
-    fn start_stage(&mut self) {
+    /// Stage 1, `secs` seconds in.
+    fn start_stage(&mut self, secs: f32) {
+        let mut w = World::stage_at(self.seed, self.settings.tuning, secs);
+        w.invincible = self.settings.view.invincible;
+        self.chains.clear();
+        self.scene = Scene::Stage { world: Box::new(w), menu: None, over: None };
+    }
+
+    fn start_sandbox(&mut self) {
         let mut w = World::new(self.seed, self.settings.tuning);
         w.fill_shots = self.fill_shots;
         w.set_pattern(self.settings.view.pattern);
         w.invincible = self.settings.view.invincible;
+        self.chains.clear();
         self.scene = Scene::Stage { world: Box::new(w), menu: None, over: None };
     }
 
-    /// The sandbox switches changed: apply them to the running stage.
+    /// The sandbox switches changed: apply them to the running game.
     fn sync_view(&mut self) {
         let v = self.settings.view;
         if let Scene::Stage { world, .. } = &mut self.scene {
-            if world.hazards.preset != v.pattern {
+            if world.stage.is_none() && world.hazards.preset != v.pattern {
                 world.set_pattern(v.pattern);
             }
             world.invincible = v.invincible;
@@ -157,7 +177,7 @@ impl Game {
 
     /// Step the sandbox pattern from a key, LB or the NEXT button.
     fn step_pattern(&mut self, dir: i32) {
-        if dir == 0 || !matches!(self.scene, Scene::Stage { menu: None, over: None, .. }) {
+        if dir == 0 || !matches!(&self.scene, Scene::Stage { menu: None, over: None, world } if world.stage.is_none()) {
             return;
         }
         menu::adjust(&mut self.settings, Item::Pattern, dir.signum());
@@ -182,7 +202,7 @@ impl Game {
 
     fn sim_frame(&self) -> u64 {
         match &self.scene {
-            Scene::Title { t } => *t,
+            Scene::Title { t, .. } => *t,
             Scene::Stage { world, .. } => world.frame,
         }
     }
@@ -200,20 +220,37 @@ impl Game {
             self.say(if self.settings.muted { "SOUND OFF" } else { "SOUND ON" });
         }
         match &mut self.scene {
-            Scene::Title { .. } => {
-                if ui.confirm || ui.tap.is_some() {
-                    audio.play(Id::Select, 1.0);
-                    input.release();
-                    self.start_stage();
-                }
-            }
-            Scene::Stage { over: Some(sel), .. } => {
-                let n = hud::OVER_ITEMS.len() as i32;
+            Scene::Title { sel, .. } => {
+                let n = hud::TITLE_ITEMS.len() as i32;
                 let before = *sel;
                 *sel = (*sel as i32 + ui.nav.1).rem_euclid(n) as usize;
                 let mut choice = ui.confirm.then_some(*sel);
                 if let Some((x, y)) = ui.tap {
-                    if let Some(i) = hud::over_tap(lay, x, y) {
+                    // a tap on a row picks it; anywhere else starts what's selected
+                    choice = Some(hud::title_tap(lay, x, y).unwrap_or(*sel));
+                }
+                if *sel != before {
+                    audio.play(Id::Select, 0.5);
+                }
+                if let Some(i) = choice {
+                    audio.play(Id::Select, 1.0);
+                    input.release();
+                    if i == 0 {
+                        self.start_stage(0.0);
+                    } else {
+                        self.start_sandbox();
+                    }
+                }
+            }
+            Scene::Stage { over: Some(sel), world, .. } => {
+                let n = hud::OVER_ITEMS.len() as i32;
+                let before = *sel;
+                let cleared = world.stage.as_ref().is_some_and(|s| s.over);
+                let staged = world.stage.is_some();
+                *sel = (*sel as i32 + ui.nav.1).rem_euclid(n) as usize;
+                let mut choice = ui.confirm.then_some(*sel);
+                if let Some((x, y)) = ui.tap {
+                    if let Some(i) = hud::ended_tap(lay, cleared, x, y) {
                         *sel = i;
                         choice = Some(i);
                     }
@@ -229,12 +266,16 @@ impl Game {
                         audio.play(Id::Select, 1.0);
                         audio.silence();
                         input.release();
-                        self.start_stage();
+                        if staged {
+                            self.start_stage(0.0);
+                        } else {
+                            self.start_sandbox();
+                        }
                     }
                     Some(_) => {
                         audio.silence();
                         input.release();
-                        self.scene = Scene::Title { t: 0 };
+                        self.scene = Scene::Title { t: 0, sel: if staged { 0 } else { 1 } };
                     }
                     None => {}
                 }
@@ -274,7 +315,8 @@ impl Game {
                     MenuAct::Quit => {
                         audio.silence();
                         input.release();
-                        self.scene = Scene::Title { t: 0 };
+                        let staged = matches!(&self.scene, Scene::Stage { world, .. } if world.stage.is_some());
+                        self.scene = Scene::Title { t: 0, sel: if staged { 0 } else { 1 } };
                     }
                     MenuAct::Boom => {
                         if let Scene::Stage { menu, .. } = &mut self.scene {
@@ -302,10 +344,59 @@ fn window_conf() -> Conf {
     }
 }
 
+/// The enemies' engines, smoke from the damaged ones, flakes off the rising derelict.
+fn foe_effects(w: &World, r: &mut Renderer) {
+    for e in w.foes.list.iter().filter(|e| e.alive()) {
+        if w.frame % 3 == 0 {
+            for &(dx, dy) in render::foes::engines(e.kind) {
+                r.parts.exhaust(e.x + dx, e.y + dy);
+            }
+        }
+        let q = &e.parts[0];
+        let (_, bw, bh) = e.kind.stats();
+        if e.kind != EnemyKind::Drone && q.hp < q.max_hp * 0.5 && w.frame % 5 == 0 {
+            let (x, y) = r.parts.somewhere(e.x, e.y, bw * 0.6, bh * 0.6);
+            r.parts.wound(x, y);
+        }
+        if e.path.entering(e.t) && e.kind == EnemyKind::Hull && w.frame % 2 == 0 {
+            let (x, y) = r.parts.somewhere(e.x, e.y, bw, bh);
+            r.parts.flake(x, y);
+        }
+    }
+}
+
+/// The derelict's chained death, a blast every few frames across the wreck.
+fn chain_effects(chains: &mut Vec<Chain>, w: &World, r: &mut Renderer, s: &Settings, audio: &mut Audio) {
+    let me = (w.player.x, w.player.y);
+    for c in chains.iter_mut() {
+        c.t += 1;
+        let (_, bw, bh) = EnemyKind::Hull.stats();
+        if c.t % Chain::EVERY == 0 && c.t <= Chain::EVERY * Chain::BLASTS {
+            let (x, y) = r.parts.somewhere(c.x, c.y, bw, bh);
+            explode(&mut r.fx, &mut r.parts, x, y, Size::Medium, me, s.reduce_flash, w.frame);
+            r.parts.smoke(x, y, 4, 14.0);
+            audio.blast(Size::Medium);
+        }
+        if c.t == Chain::end() {
+            explode(&mut r.fx, &mut r.parts, c.x, c.y, Size::Boss, me, s.reduce_flash, w.frame);
+            r.parts.shatter(c.x, c.y, &r.atlas.r.foes.hull.pixels);
+            r.parts.smoke(c.x, c.y, 30, 90.0);
+            r.parts.glow(c.x, c.y, 6.0, 24);
+            r.parts.ring(c.x, c.y, 6.0, 30, render::palette::CREAM);
+            let (px, frames) = tune::BOMB_SURGE;
+            r.fx.surge(if s.reduce_flash { px * tune::REDUCED_CA * 0.6 } else { px * 0.6 }, frames);
+            r.fx.shake(tune::SHAKE_BOMB, w.hazards.bullets.len(), s.shake);
+            audio.blast(Size::Boss);
+        }
+    }
+    chains.retain(|c| c.t < Chain::end());
+}
+
 /// Feed one tick's events to the effects, the blasts' sounds, the rumble and the phone buzz.
-fn effects(w: &World, r: &mut Renderer, input: &mut Input, s: &Settings, audio: &mut Audio) {
+fn effects(w: &World, r: &mut Renderer, input: &mut Input, s: &Settings, audio: &mut Audio, chains: &mut Vec<Chain>) {
     let p = &w.player;
     let me = (p.x, p.y);
+    foe_effects(w, r);
     let flying = matches!(w.life, Life::Alive | Life::Respawning { .. });
     if flying && w.frame % 2 == 0 {
         r.parts.trail(p.x, p.y + 23.0, p.thrust() || !w.alive());
@@ -371,6 +462,44 @@ fn effects(w: &World, r: &mut Renderer, input: &mut Input, s: &Settings, audio: 
             }
             Event::Respawn => r.parts.ring(tune::START_X, tune::FIELD_H as f32 - 4.0, 3.0, 24, TEAL_C),
             Event::GameOver => r.parts.ring(w.player.x, w.player.y, 4.0, 60, render::palette::CREAM),
+            // much bigger than what died, and it shatters into its own pixels
+            Event::Kill { x, y, kind } => {
+                let art = &r.atlas.r.foes;
+                let (size, pixels) = match kind {
+                    EnemyKind::Drone => (Size::Small, &art.drone.pixels),
+                    EnemyKind::Gunship => (Size::Medium, &art.gunship.pixels),
+                    EnemyKind::Buoy => (Size::Medium, &art.buoy[0].pixels),
+                    EnemyKind::Heavy => (Size::Large, &art.heavy.pixels),
+                    EnemyKind::Hull => (Size::Large, &art.turret.pixels),
+                };
+                r.parts.shatter(x, y, pixels);
+                explode(&mut r.fx, &mut r.parts, x, y, size, me, s.reduce_flash, w.frame);
+                audio.blast(size);
+                if kind != EnemyKind::Drone {
+                    r.parts.smoke(x, y, if kind.heavy() { 14 } else { 5 }, if kind.heavy() { 34.0 } else { 16.0 });
+                }
+                match kind {
+                    EnemyKind::Heavy => {
+                        r.parts.ring(x, y, 4.0, 24, render::palette::CREAM);
+                        r.fx.shake(tune::SHAKE_DEATH * 0.5, w.hazards.bullets.len(), s.shake);
+                    }
+                    EnemyKind::Hull => chains.push(Chain { x, y, t: 0 }),
+                    _ => {}
+                }
+            }
+            Event::PartBreak { x, y } => {
+                r.parts.shatter(x, y, &r.atlas.r.foes.turret.pixels);
+                explode(&mut r.fx, &mut r.parts, x, y, Size::Medium, me, s.reduce_flash, w.frame);
+                r.parts.smoke(x, y, 6, 16.0);
+                audio.blast(Size::Medium);
+            }
+            Event::Crack { x, y } => {
+                explode(&mut r.fx, &mut r.parts, x, y - 6.0, Size::Large, me, s.reduce_flash, w.frame);
+                r.parts.ring(x, y, 5.0, 26, SIGNAL_C);
+                r.parts.smoke(x, y, 16, 60.0);
+                r.fx.surge(if s.reduce_flash { 0.4 } else { 1.4 }, 10);
+                audio.blast(Size::Large);
+            }
             _ => {}
         }
         if let Some(k) = rumble::for_event(e).and_then(|k| rumble::scaled(k, s.rumble)) {
@@ -400,10 +529,32 @@ fn effects(w: &World, r: &mut Renderer, input: &mut Input, s: &Settings, audio: 
     }
 }
 
+/// What the HUD needs to know about Stage 1.
+fn stage_view(w: &World, s: &sim::stage1::Stage) -> hud::StageView {
+    let boss = w.foes.list.iter().find(|e| e.kind == EnemyKind::Hull && e.alive()).map(|e| {
+        let mut t = [0.0; 3];
+        for (i, q) in e.parts[1..].iter().take(3).enumerate() {
+            t[i] = q.hp / q.max_hp;
+        }
+        (e.parts[0].hp / e.parts[0].max_hp, t)
+    });
+    let warn_at = sim::stage1::frames(tune::SECTIONS[tune::SECTIONS.len() - 1].0);
+    hud::StageView {
+        t: s.t,
+        section: s.section,
+        killed: s.killed,
+        spawned: s.spawned,
+        bombs_used: w.bombs_used,
+        over: s.over,
+        boss,
+        warned: (s.t >= warn_at).then(|| s.t - warn_at),
+    }
+}
+
 fn main() {
     #[cfg(not(target_arch = "wasm32"))]
-    if let Ok(n) = std::env::var("PG_SIM") {
-        debug::sim_report(n.trim().parse().unwrap_or(200));
+    if let Ok(arg) = std::env::var("PG_SIM") {
+        debug::sim_report(&arg);
         return;
     }
     let conf = macroquad::conf::Conf {
@@ -480,6 +631,12 @@ async fn amain() {
             set_fullscreen(fullscreen);
         }
         let f7 = keys.read(&mut game.settings.view);
+        if std::mem::take(&mut keys.skip) {
+            if let Scene::Stage { world, .. } = &mut game.scene {
+                world.skip_section();
+                game.chains.clear();
+            }
+        }
         game.sync_view();
         renderer.gray = game.settings.view.gray;
         if keys.sheet {
@@ -516,7 +673,9 @@ async fn amain() {
                 }
             }
             match &mut game.scene {
-                Scene::Title { t } => *t += 1,
+                Scene::Title { t, .. } => *t += 1,
+                // the stage is over: everything holds still behind the panel
+                Scene::Stage { world, over: Some(_), .. } if world.stage.as_ref().is_some_and(|s| s.over) => {}
                 Scene::Stage { world, menu: None, over } => {
                     let (drag, bomb) = input.take();
                     let mut c = if game.settings.view.autopilot { bot.decide(world) } else { Controls { mv: held.mv, drag, fire: held.fire, focus: held.focus, bomb } };
@@ -532,8 +691,10 @@ async fn amain() {
                     }
                     renderer.parts.tick((world.player.x, world.player.y));
                     renderer.fx.tick();
-                    effects(world, &mut renderer, &mut input, &game.settings, &mut audio);
-                    if world.life == Life::GameOver && over.is_none() {
+                    effects(world, &mut renderer, &mut input, &game.settings, &mut audio, &mut game.chains);
+                    chain_effects(&mut game.chains, world, &mut renderer, &game.settings, &mut audio);
+                    let cleared = world.stage.as_ref().is_some_and(|s| s.over);
+                    if (world.life == Life::GameOver || cleared) && over.is_none() {
                         *over = Some(0);
                     }
                     if let Some(size) = game.boom.take() {
@@ -559,13 +720,14 @@ async fn amain() {
         renderer.begin(&lay);
         let time = game.sim_frame() as f32 / tune::TICK_HZ as f32;
         match &game.scene {
-            Scene::Title { t } => {
+            Scene::Title { t, sel } => {
                 hud::title_bg(&renderer, &lay, *t);
                 renderer.post(&lay, &PostParams { field: IRect::new(0, 0, lay.cw, lay.ch), time });
-                hud::title(&renderer, &lay, *t, mode_known.then_some(input.mode));
+                hud::title(&renderer, &lay, *t, mode_known.then_some(input.mode), *sel);
             }
             Scene::Stage { world, menu, over } => {
-                render::scene::draw(&renderer, &lay, world, game.settings.view.hitboxes);
+                let wrecks: Vec<(f32, f32, f32)> = game.chains.iter().map(|c| (c.x, c.y, c.t as f32 / Chain::end() as f32)).collect();
+                render::scene::draw(&renderer, &lay, world, game.settings.view.hitboxes, &wrecks);
                 renderer.post(&lay, &PostParams { field: lay.field, time });
                 let view = HudView {
                     settings: &game.settings,
@@ -580,6 +742,7 @@ async fn amain() {
                     bullets: world.hazards.bullets.len(),
                     hits: world.deaths,
                     grazes: world.grazes,
+                    stage: world.stage.as_ref().map(|s| stage_view(world, s)),
                 };
                 hud::stage(&renderer, &lay, &view);
             }
@@ -621,11 +784,44 @@ mod tests {
     }
 
     #[test]
-    fn pg_scene_stage_fast_forwards_in_frames() {
+    fn pg_scene_starts_the_stage_partway_in() {
         let g = Game::new(1, Some(SceneReq::Stage(2.5)), Settings::default());
-        assert_eq!(g.sim_frame(), 150);
+        assert_eq!(g.sim_frame(), 149, "the next tick is 2.5 s in");
+        assert!(matches!(&g.scene, Scene::Stage { world, .. } if world.stage.is_some()));
         let g = Game::new(1, Some(SceneReq::Shots(500)), Settings::default());
-        assert!(matches!(&g.scene, Scene::Stage { world, .. } if world.fill_shots == 500));
+        assert!(matches!(&g.scene, Scene::Stage { world, .. } if world.fill_shots == 500 && world.stage.is_none()));
+    }
+
+    #[test]
+    fn the_title_starts_the_stage_or_the_sandbox() {
+        let lay = Layout::fit(1280, 720);
+        let mut g = Game::new(1, None, Settings::default());
+        // no audio device in tests: drive the menu through its own logic
+        let pick = |g: &mut Game, ui: &Ui| {
+            if let Scene::Title { sel, .. } = &mut g.scene {
+                *sel = (*sel as i32 + ui.nav.1).rem_euclid(2) as usize;
+                if ui.confirm {
+                    if *sel == 0 { g.start_stage(0.0) } else { g.start_sandbox() }
+                }
+            }
+        };
+        pick(&mut g, &Ui { nav: (0, 1), ..ui() });
+        pick(&mut g, &Ui { confirm: true, ..ui() });
+        assert!(matches!(&g.scene, Scene::Stage { world, .. } if world.stage.is_none()), "the sandbox");
+        let mut g = Game::new(1, None, Settings::default());
+        pick(&mut g, &Ui { confirm: true, ..ui() });
+        assert!(matches!(&g.scene, Scene::Stage { world, .. } if world.stage.is_some()), "stage 1");
+        let (cx, y0, rh) = hud::title_rows(&lay);
+        assert_eq!(hud::title_tap(&lay, cx as f32, (y0 + rh + 2) as f32), Some(1));
+    }
+
+    #[test]
+    fn the_stage_ignores_the_sandbox_switches() {
+        let mut g = Game::new(1, Some(SceneReq::Stage(0.0)), Settings::default());
+        g.step_pattern(1);
+        g.settings.view.pattern = 3;
+        g.sync_view();
+        assert!(matches!(&g.scene, Scene::Stage { world, .. } if world.hazards.preset == 0));
     }
 
     #[test]

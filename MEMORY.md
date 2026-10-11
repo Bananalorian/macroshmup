@@ -3,6 +3,64 @@
 Session notes for Claude Code: what shipped, tuning that changed, known issues, what's next.
 Newest first.
 
+## v0.6.0 Stage 1 (Sprint 5) - 2026-10-11
+
+**Jason's calls (before the sprint):** mid-boss = the derelict hull (a wreck rising out of
+the disk, engraved hull, red-cored weak-point turrets that break off in blasts); include the
+tiny tumbling figure with RGB streaks in the breather; stage name OUTER DISK ("STAGE 1 //
+OUTER DISK").
+
+**Shipped**
+- `sim/enemy.rs`: EnemyKind Drone/Gunship/Buoy/Heavy/Hull; `Path` Spline (Catmull-Rom,
+  arc-length walked at a speed) / Hover{from, at, enter, stay, sway} (leaves upward at
+  LEAVE_ACCEL) / Drift; all pure functions of age (the bot predicts them). `Part`s with
+  their own hurtbox + HP (part 0 = body; the hull's 3 turrets); `Arm{part, phase, gun}`
+  guns from the pattern library riding the enemy (`Mount::Owner{dx,dy}`, mounts[0] = the
+  enemy); `may_fire`: settled, below DEAD_ZONE, above the ceasefire (buoys: BUOY_QUIET).
+  Hull phase 2 ("Crack") when its turrets are gone or at HULL_PHASE2. `Foes` has its own
+  seeded rng (gun start angles; which popcorn fire).
+- `sim/stage1.rs`: SCRIPT (seconds, Cue) on lanes 1-5; `arrivals()` expands it; `Stage`
+  clock/queue/section/began/deaths/spawned/killed/over; `skip_to(t)` = next tick is frame t;
+  `hurry()` brings the next section forward to SECTION_EARLY (4 s) early when the derelict
+  dies; `unfair()` checks edges + heavy gaps (debug_assert in Stage::new and the tests).
+- World: `World::stage(seed)`, `stage_at(seed, secs)`, `clock()` (stage time; the hole grows
+  on it), `skip_section()` (F6), `bombs_used`. Shots/beam/aura/bomb all go through
+  `boxes: Vec<(Target, Rect)>` (Target::Dummy | Foe(i, part); weak points listed first).
+  Enemy kill -> Event::Kill{kind}; heavy kinds cancel their own bullets (bullet `owner`) into
+  shards. Body contact (shrunk 0.7 body vs hitbox) = struck. Events Kill, PartBreak, Crack,
+  Section, Warning, StageEnd. Bomb caps only the hull body at 40%.
+- Bot: clones foes too, avoids bodies, aims under the heavy-kind / lowest enemy above it
+  (BOT_AIM only with a target, so the sandbox is unchanged). `stage_trial(seed, bombs, shoot)`.
+- Render: `render/foes.rs` (art: drone + gunship half-grids mirrored with a shade map; buoy,
+  heavy, hull, turret procedural via `engrave()` = rounded fall-off, bayer-stippled tones,
+  seams + rivets; crack seams; debris; the figure), enemy drawing with charge-up glow (red
+  only, no cream center = no fake bullet core) + muzzle flash, hull emerging tint, sockets.
+  Breather: `scene::flare()` -> hole shader Look.z boosts light before quantization;
+  debris + figure drawn after the hole. HUD: title menu (STAGE 1 / PATTERN SANDBOX), stage
+  panel, title card, derelict bar, WARNING bands, stage-end panel (`end_box`, `ended_tap`).
+  main: `Chain` for the derelict's rippling death, `foe_effects` (exhaust, wound smoke,
+  flakes). The world freezes behind the stage-end panel.
+- Synth `warning()` siren (Id::Warning). PG_SIM -> stage report (+ pacifist line);
+  `PG_SIM=patterns:N` for the old one. Enemy sheet in PG_SHEET/F9. 183 tests.
+
+**Tuning (tune.rs, Stage 1 block)**: sections 0/10/40/70/85/115/150, end 160; FIRST_FIRE 6;
+DEAD_ZONE 12, CEASEFIRE 60, SPAWN_EDGE 20, HEAVY_GAP 2; HP drone 4, gunship 140, buoy 220,
+heavy 1100, hull 2400 + turrets 300 (hang at dy 20/26/20 so shots reach them first);
+GUNSHIP_STAY 240, HEAVY_STAY 450, HULL_STAY 1500, HULL_EMERGE 150, HULL_PHASE2 720;
+DRONE_SPEED 2.2, BUOY_DRIFT 0.38, DRONE_FIRE_SHARE 0.8; FLARE peak 1.6.
+
+**Verified**: PG_SIM=200 bot 100% clear, 100% no-miss, 0 bombs, kills 89%, avg 47 bullets
+(peak 199), derelict median 20.5 s; pacifist 100% (avg 70, peak 200). Sections exactly on the
+timeline. CPU < 1.4 ms/frame in the busiest parts; web 60 fps, no console errors.
+
+**Known issues / for Jason**: the bot never dies (perfect foresight), so the 90% bar is
+easy; real difficulty needs Jason's play. If it's too gentle: HP, fan counts, ring sizes and
+the script are all in tune.rs / stage1.rs. The pause menu's PATTERN row does nothing in the
+stage. No music yet (Sprint 8).
+
+**Next: Sprint 6, the boss** (v0.7.0): proposal "the Cathedral"; needs Jason's approval of
+the concept before starting. Stage end currently stops at 2:40 with a panel.
+
 ## v0.5.0 The special weapon (Sprint 4) - 2026-10-11
 
 **Jason's calls (after v0.4):** the black hole was meant as mood reference only, but he

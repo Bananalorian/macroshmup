@@ -166,7 +166,7 @@ void main() {
 
     float shadow = 1.0 - smoothstep(0.97, 1.0, r);
     float near = d.y > 0.0 ? 1.0 : 1.0 - shadow;
-    float light = (arc + ring + stars) * (1.0 - shadow) + disk * near;
+    float light = ((arc + ring + stars) * (1.0 - shadow) + disk * near) * (1.0 + Look.z);
 
     // engraved stipple: a few levels of cream, ordered-dithered
     float v = clamp(light, 0.0, 1.0);

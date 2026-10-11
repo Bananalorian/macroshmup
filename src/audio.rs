@@ -27,6 +27,7 @@ fn mix(id: Id) -> (f32, f64) {
         Id::Beam => (VOL_BEAM, 0.0),
         Id::Graze => (VOL_GRAZE, GRAZE_SOUND_GAP),
         Id::Death => (VOL_DEATH, 0.3),
+        Id::Warning => (VOL_WARNING, 2.0),
     }
 }
 
@@ -108,7 +109,10 @@ impl Audio {
                 Event::Death { .. } => self.play(Id::Death, 1.0),
                 Event::Respawn => self.play(Id::Respawn, 1.0),
                 Event::GameOver => self.play(Id::GameOver, 1.0),
-                Event::BombSwept | Event::Cancel => {}
+                Event::Warning => self.play(Id::Warning, 1.0),
+                Event::StageEnd => self.play(Id::Respawn, 1.0),
+                // kills, broken turrets and cracks are blasts too
+                Event::BombSwept | Event::Cancel | Event::Kill { .. } | Event::PartBreak { .. } | Event::Crack { .. } | Event::Section(_) => {}
             }
         }
         self.beam_target = if w.player.beaming { 1.0 } else { 0.0 };

@@ -395,6 +395,27 @@ pub fn game_over() -> Vec<f32> {
     b
 }
 
+/// WARNING: a slow two-tone alarm, three times, low and filtered, under a sub drone.
+pub fn warning() -> Vec<f32> {
+    let len = 2.6;
+    let mut b = buf(len);
+    let (mut lp, mut ph) = (Lp::default(), 0.0f32);
+    for (i, s) in b.iter_mut().enumerate() {
+        let t = i as f32 / SR;
+        let k = (t / 0.8) as u32;
+        let u = t - k as f32 * 0.8;
+        // each call: a low note sliding up into a high one, then a breath
+        let f = if u < 0.32 { 220.0 + 40.0 * (u / 0.32) } else { 330.0 };
+        let env = if k < 3 && u < 0.62 { attack(u, 0.02) * (1.0 - ((u - 0.5) / 0.12).clamp(0.0, 1.0)) } else { 0.0 };
+        ph += f / SR;
+        let tone = sq(ph, 0.5) * 0.5 + saw(ph * 2.0) * 0.25;
+        *s = lp.run(tone, 1400.0) * env * 0.6 + (TAU * 55.0 * t).sin() * (1.0 - t / len).max(0.0) * 0.3;
+    }
+    let mut b = reverb(&b, 0.3, 1.4, 0.6);
+    normalize(&mut b, 0.75);
+    b
+}
+
 /// A graze: a tiny bright tick, quiet enough to hear dozens of.
 pub fn graze(seed: u32) -> Vec<f32> {
     let mut b = buf(0.045);
@@ -443,6 +464,7 @@ pub enum Id {
     Struck,
     Respawn,
     GameOver,
+    Warning,
 }
 
 /// Every sound as (id, wav bytes). Variants share an id.
@@ -473,6 +495,7 @@ pub fn bank() -> Vec<(Id, Vec<u8>)> {
         v.push((Id::Graze, mono(graze(400 + k))));
     }
     v.push((Id::Death, mono(death(500))));
+    v.push((Id::Warning, mono(warning())));
     v
 }
 
@@ -491,7 +514,7 @@ mod tests {
 
     #[test]
     fn nothing_clips() {
-        for b in [pilgrim_shot(1, 900.0), beam_hum(), not_yet(), tick(2), explosion(3, true), graze(4), death(5), pop(6), boss_blast(7), bomb(8), struck(9), respawn_chime(), game_over()] {
+        for b in [pilgrim_shot(1, 900.0), beam_hum(), not_yet(), tick(2), explosion(3, true), graze(4), death(5), pop(6), boss_blast(7), bomb(8), struck(9), respawn_chime(), game_over(), warning()] {
             assert!(b.iter().all(|s| s.is_finite() && s.abs() <= 1.0));
         }
     }

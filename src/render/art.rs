@@ -292,6 +292,8 @@ pub struct Rects {
     /// The HUD's life (a tiny Pilgrim) and bomb icons, 7x7.
     pub life_icon: Rect,
     pub bomb_icon: Rect,
+    /// Stage 1's enemies and the breather's background extras.
+    pub foes: super::foes::FoeArt,
 }
 
 impl Rects {
@@ -379,7 +381,8 @@ pub fn build() -> (Image, Rects) {
         (dummy[i], dummy_sil[i]) = p.add_with_silhouette(im);
     }
 
-    (p.img, Rects { glyphs, px, plus, sparkle, ship, bullets, dummy, dummy_sil, discs, stipple, life_icon, bomb_icon })
+    let foes = super::foes::build(&mut p);
+    (p.img, Rects { glyphs, px, plus, sparkle, ship, bullets, dummy, dummy_sil, discs, stipple, life_icon, bomb_icon, foes })
 }
 
 pub struct Atlas {
@@ -484,6 +487,7 @@ mod tests {
         all.extend([r.life_icon, r.bomb_icon]);
         all.extend(r.discs);
         all.extend(r.stipple);
+        all.extend(r.foes.rects());
         for (i, a) in all.iter().enumerate() {
             assert!(a.x >= 0.0 && a.y >= 0.0 && a.x + a.w <= W as f32 && a.y + a.h <= H as f32);
             for b in &all[i + 1..] {

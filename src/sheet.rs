@@ -1,5 +1,5 @@
-//! Sheets for review, native only: the ship's animation sheet (PG_SHEET=1 or F9),
-//! laid out like Jason's reference sheet, and the effects sheet (PG_FXSHEET=1):
+//! Sheets for review, native only: the ship's animation sheet and the enemy sheet
+//! (PG_SHEET=1 or F9), laid out like Jason's reference sheet, and the effects sheet (PG_FXSHEET=1):
 //! every explosion size at 4 moments, and the black hole at the start and end of
 //! the stage.
 
@@ -84,13 +84,73 @@ fn draw_sheet(a: &Atlas) {
     text(a, &crate::render::hud::version_stamp(), 10, SHEET.1 as i32 - 9, 1, 2, SLATE);
 }
 
-/// Render the sheet off-screen and save it as `./shots/pilgrim_sheet.png`, 3x.
+/// Stage 1's enemies: every sprite, the derelict whole, cracked and stripped, and the
+/// breather's background extras.
+fn draw_enemy_sheet(a: &Atlas) {
+    use crate::render::palette::WHITE_A;
+    let f = &a.r.foes;
+    let label = |s: &str, x: i32, y: i32| text(a, s, x, y, 1, 2, CREAM);
+    text(a, "STAGE 1 ENEMIES", 10, 8, 1, 2, CREAM);
+    text(a, "OUTER DISK  //  BUILT IN CODE", 10, 18, 1, 2, ASH);
+    let at = |r: Rect, cx: i32, cy: i32| a.blit(r, cx - (r.w * 0.5) as i32, cy - (r.h * 0.5) as i32, 1, WHITE_A);
+    label("DRONE", 10, 38);
+    at(f.drone.r, 30, 66);
+    a.fill(30, 67, 1, 1, SIGNAL);
+    at(f.drone.sil, 56, 66);
+    label("GUNSHIP", 84, 38);
+    at(f.gunship.r, 106, 66);
+    label("BUOY (4 FRAMES)", 150, 38);
+    for i in 0..4 {
+        at(f.buoy[i].r, 166 + i as i32 * 30, 66);
+    }
+    label("HEAVY", 292, 38);
+    at(f.heavy.r, 320, 68);
+    at(f.heavy.sil, 376, 68);
+    label("DERELICT  //  WHOLE, CRACKED, STRIPPED", 10, 100);
+    for (i, phase) in [0, 1, 2].iter().enumerate() {
+        let (cx, cy) = (72 + i as i32 * 136, 150);
+        at(f.hull.r, cx, cy);
+        if *phase >= 1 {
+            for &(dx, dy) in &f.cracks {
+                a.fill(cx + dx as i32, cy + dy as i32, 1, 1, SIGNAL);
+            }
+        }
+        for &(dx, dy) in &crate::tune::HULL_TURRETS {
+            let (tx, ty) = (cx + dx as i32, cy + dy as i32);
+            if *phase == 2 {
+                a.blit(f.socket, tx - 6, ty - 9, 1, WHITE_A);
+            } else {
+                at(f.turret.r, tx, ty);
+                a.fill(tx - 1, ty - 1, 3, 3, Color { a: 0.6, ..SIGNAL });
+            }
+        }
+    }
+    label("TURRET", 10, 200);
+    at(f.turret.r, 30, 228);
+    at(f.turret.sil, 54, 228);
+    label("BREATHER  //  DEBRIS, THE FIGURE", 100, 200);
+    for i in 0..6 {
+        at(f.debris[i], 112 + i as i32 * 16, 228);
+    }
+    at(f.figure, 230, 228);
+    a.blit(f.figure, 250, 222, 2, WHITE_A);
+    a.fill(10, SHEET.1 as i32 - 13, SHEET.0 as i32 - 20, 1, DUSK);
+    text(a, &crate::render::hud::version_stamp(), 10, SHEET.1 as i32 - 9, 1, 2, SLATE);
+}
+
+/// Render the sheets off-screen and save them as `./shots/pilgrim_sheet.png` and
+/// `./shots/enemy_sheet.png`, 3x.
 pub fn export(a: &Atlas) {
+    save_sheet(a, draw_sheet, "shots/pilgrim_sheet.png");
+    save_sheet(a, draw_enemy_sheet, "shots/enemy_sheet.png");
+}
+
+fn save_sheet(a: &Atlas, draw: fn(&Atlas), path: &str) {
     let rt = render_target(SHEET.0 as u32, SHEET.1 as u32);
     rt.texture.set_filter(FilterMode::Nearest);
     set_camera(&crate::render::canvas_camera(&rt, SHEET.0, SHEET.1));
     clear_background(VOID);
-    draw_sheet(a);
+    draw(a);
     unsafe { get_internal_gl().flush() };
     let img = rt.texture.get_texture_data();
     set_default_camera();
@@ -104,8 +164,8 @@ pub fn export(a: &Atlas) {
         }
     }
     let _ = std::fs::create_dir_all("shots");
-    big.export_png("shots/pilgrim_sheet.png");
-    println!("saved shots/pilgrim_sheet.png");
+    big.export_png(path);
+    println!("saved {path}");
 }
 
 
@@ -183,7 +243,7 @@ pub fn export_fx(r: &mut Renderer) {
         r.fx = Fx::new();
         r.begin(&lay);
         r.stars.draw(&r.atlas, lay.field, *frame, 1.0);
-        r.hole(lay.field, HOLE_X, HOLE_Y, scene::hole_radius(*frame), scene::hole_bright(1.0), *frame as f32 / 60.0);
+        r.hole(lay.field, HOLE_X, HOLE_Y, scene::hole_radius(*frame), scene::hole_bright(1.0), *frame as f32 / 60.0, 0.0);
         r.post(&lay, &PostParams { field: lay.field, time: 0.0 });
         let img = r.read_post(&lay);
         paste(&mut sheet, &img, hx + i as u32 * 270, 32);

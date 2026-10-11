@@ -62,6 +62,8 @@ pub struct Spawn {
     pub vy: f32,
     pub kind: Kind,
     pub behavior: Behavior,
+    /// The enemy that fired it (0: nobody), so its bullets can go when it dies.
+    pub owner: u32,
 }
 
 #[derive(Clone)]
@@ -77,6 +79,7 @@ pub struct Bullets {
     pub behavior: Vec<Behavior>,
     pub age: Vec<u16>,
     pub grazed: Vec<bool>,
+    pub owner: Vec<u32>,
 }
 
 impl Bullets {
@@ -93,6 +96,7 @@ impl Bullets {
             behavior: Vec::with_capacity(n),
             age: Vec::with_capacity(n),
             grazed: Vec::with_capacity(n),
+            owner: Vec::with_capacity(n),
         }
     }
 
@@ -111,6 +115,7 @@ impl Bullets {
         self.behavior.clear();
         self.age.clear();
         self.grazed.clear();
+        self.owner.clear();
     }
 
     /// Add a bullet. Past the pool's capacity it's dropped rather than reallocating.
@@ -130,6 +135,7 @@ impl Bullets {
         self.behavior.push(s.behavior);
         self.age.push(0);
         self.grazed.push(false);
+        self.owner.push(s.owner);
     }
 
     pub fn swap_remove(&mut self, i: usize) {
@@ -143,6 +149,7 @@ impl Bullets {
         self.behavior.swap_remove(i);
         self.age.swap_remove(i);
         self.grazed.swap_remove(i);
+        self.owner.swap_remove(i);
     }
 
     /// Advance bullet `i` one frame. Returns true if it split (and should be removed);
@@ -182,7 +189,7 @@ impl Bullets {
                     let base = self.dy[i].atan2(self.dx[i]);
                     for k in 0..n {
                         let a = base + k as f32 * std::f32::consts::TAU / n as f32;
-                        out.push(Spawn { x: self.x[i], y: self.y[i], vx: a.cos() * speed, vy: a.sin() * speed, kind, behavior: Behavior::Straight });
+                        out.push(Spawn { x: self.x[i], y: self.y[i], vx: a.cos() * speed, vy: a.sin() * speed, kind, behavior: Behavior::Straight, owner: self.owner[i] });
                     }
                     return true;
                 }
@@ -232,7 +239,7 @@ mod tests {
 
     fn one(kind: Kind, behavior: Behavior, vx: f32, vy: f32) -> Bullets {
         let mut b = Bullets::new();
-        b.push(Spawn { x: 100.0, y: 100.0, vx, vy, kind, behavior });
+        b.push(Spawn { x: 100.0, y: 100.0, vx, vy, kind, behavior, owner: 0 });
         b
     }
 
@@ -251,13 +258,13 @@ mod tests {
         let mut b = Bullets::new();
         let cap = b.x.capacity();
         for _ in 0..BULLET_CAP + 100 {
-            b.push(Spawn { x: 0.0, y: 0.0, vx: 0.0, vy: 1.0, kind: Kind::Small, behavior: Behavior::Straight });
+            b.push(Spawn { x: 0.0, y: 0.0, vx: 0.0, vy: 1.0, kind: Kind::Small, behavior: Behavior::Straight, owner: 0 });
         }
         assert_eq!(b.len(), BULLET_CAP);
         assert_eq!(b.x.capacity(), cap, "no reallocation");
         b.swap_remove(0);
         assert_eq!(b.len(), BULLET_CAP - 1);
-        assert!(b.kind.len() == b.len() && b.age.len() == b.len() && b.grazed.len() == b.len());
+        assert!(b.kind.len() == b.len() && b.age.len() == b.len() && b.grazed.len() == b.len() && b.owner.len() == b.len());
     }
 
     #[test]

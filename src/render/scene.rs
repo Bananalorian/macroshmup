@@ -10,7 +10,8 @@ use super::ship::{self, Pose};
 use crate::sim::{BombBlast, Life, World};
 use crate::sim::geom::Rect as SimRect;
 use crate::sim::shots::ShotKind;
-use crate::tune::{AFTERIMAGE_MIN, AURA_R, BEAM_W, BG_DIM_AT, BG_DIM_MIN, BG_MAX_VALUE, GRAIN, HITBOX_R, HOLE_R, HOLE_X, HOLE_Y, STAGE_FRAMES};
+use crate::sim::stage1::frames;
+use crate::tune::{AFTERIMAGE_MIN, AURA_R, BEAM_W, BG_DIM_AT, BG_DIM_MIN, BG_MAX_VALUE, DEBRIS_AT, FIGURE_AT, FLARE, GRAIN, HITBOX_R, HOLE_R, HOLE_X, HOLE_Y, SECTIONS, STAGE_FRAMES};
 use macroquad::color::Color;
 
 /// Max opacity of the Pilgrim's shots, so they never read as enemy bullets.
@@ -37,12 +38,50 @@ pub fn hole_radius(frame: u64) -> f32 {
     HOLE_R.0 + (HOLE_R.1 - HOLE_R.0) * k
 }
 
-pub fn draw(r: &Renderer, lay: &Layout, w: &World, hitboxes: bool) {
+/// How hard the disk flares `t` frames into the stage: it swells at the breather,
+/// holds, and dies away.
+pub fn flare(t: u64) -> f32 {
+    let (peak, rise, hold, fall) = FLARE;
+    let s = t as f32 / 60.0 - SECTIONS[3].0;
+    if s < 0.0 {
+        0.0
+    } else if s < rise {
+        peak * s / rise
+    } else if s < rise + hold {
+        peak * (1.0 + 0.08 * (s * 5.0).sin())
+    } else {
+        peak * (1.0 - (s - rise - hold) / fall).max(0.0)
+    }
+}
+
+/// The breather's background extras: debris drifting by, the tiny figure falling.
+fn breather(a: &Atlas, ox: i32, oy: i32, t: u32) {
+    let (d0, d1) = (frames(DEBRIS_AT.0), frames(DEBRIS_AT.1));
+    if (d0..d1).contains(&t) {
+        let edge = ((t - d0) as f32 / 90.0).min((d1 - t) as f32 / 90.0).min(1.0);
+        super::foes::draw_debris(a, ox, oy, t - d0, edge);
+    }
+    let (f0, len) = (frames(FIGURE_AT.0), frames(FIGURE_AT.1));
+    if (f0..f0 + len).contains(&t) {
+        super::foes::draw_figure(a, ox, oy, (t - f0) as f32 / len as f32, (HOLE_X, HOLE_Y));
+    }
+}
+
+/// `wrecks`: the derelict's wreck during its death, (x, y, 0..1 of the way to the end).
+pub fn draw(r: &Renderer, lay: &Layout, w: &World, hitboxes: bool, wrecks: &[(f32, f32, f32)]) {
     let a = &r.atlas;
     let (ox, oy) = (lay.field.x, lay.field.y);
     let dim = dim_for(w.hazards.bullets.len());
+    let clock = w.clock();
     r.stars.draw(a, lay.field, w.frame, dim);
-    r.hole(lay.field, HOLE_X, HOLE_Y, hole_radius(w.frame), hole_bright(dim), w.frame as f32 / 60.0);
+    r.hole(lay.field, HOLE_X, HOLE_Y, hole_radius(clock), hole_bright(dim), w.frame as f32 / 60.0, flare(clock));
+    if let Some(s) = &w.stage {
+        breather(a, ox, oy, s.t);
+    }
+    for &(x, y, k) in wrecks {
+        super::foes::draw_wreck(a, ox, oy, x, y, k, w.frame);
+    }
+    super::foes::draw(a, w, ox, oy);
 
     // enemies
     for (i, d) in w.dummies.iter().enumerate() {
@@ -148,6 +187,13 @@ pub fn draw(r: &Renderer, lay: &Layout, w: &World, hitboxes: bool) {
         };
         for d in w.dummies.iter().filter(|d| d.alive()) {
             box_(d.rect(), Color::new(1.0, 1.0, 0.3, 0.7));
+        }
+        for e in w.foes.list.iter().filter(|e| e.alive()) {
+            let c = if e.hittable() { Color::new(1.0, 1.0, 0.3, 0.7) } else { Color::new(0.5, 0.5, 0.5, 0.5) };
+            for p in (0..e.parts.len()).filter(|&p| e.parts[p].alive()) {
+                box_(e.rect(p), c);
+            }
+            box_(e.body(), Color::new(1.0, 0.3, 0.3, 0.6));
         }
         for s in &w.shots {
             box_(s.rect(), Color::new(0.3, 1.0, 0.6, 0.5));
@@ -272,5 +318,13 @@ mod tests {
         assert_eq!(dim_for(0), 1.0);
         assert!((dim_for(100_000) - BG_DIM_MIN).abs() < 1e-6, "down to half: 30% becomes 15%");
         assert!(hole_bright(1.0) + GRAIN * 0.5 <= BG_MAX_VALUE + 1e-6, "grain and all, the hole stays in budget");
+    }
+
+    #[test]
+    fn the_disk_flares_through_the_breather_and_settles() {
+        let at = |s: f32| flare(frames(s) as u64);
+        assert_eq!(at(SECTIONS[3].0 - 1.0), 0.0);
+        assert!(at(SECTIONS[3].0 + FLARE.1 + 1.0) > FLARE.0 * 0.9);
+        assert_eq!(at(SECTIONS[4].0 + 10.0), 0.0, "calm again for the derelict... after it rises");
     }
 }

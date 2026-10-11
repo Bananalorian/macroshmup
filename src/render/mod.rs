@@ -10,6 +10,7 @@ pub mod bg;
 pub mod bullets;
 pub mod explode;
 pub mod font;
+pub mod foes;
 pub mod hud;
 pub mod layout;
 pub mod palette;
@@ -139,15 +140,16 @@ impl Renderer {
     }
 
     /// Draw the black hole over `area`: center `(cx, cy)` and shadow radius in area px,
-    /// `bright` its value ceiling, `time` in seconds.
-    pub fn hole(&self, area: IRect, cx: f32, cy: f32, radius: f32, bright: f32, time: f32) {
+    /// `bright` its value ceiling, `time` in seconds, `flare` how much the disk flares
+    /// (0 calm; it lights more of the disk, never past the ceiling).
+    pub fn hole(&self, area: IRect, cx: f32, cy: f32, radius: f32, bright: f32, time: f32, flare: f32) {
         let ink = palette::CREAM;
         let k = 1.0 / palette::luma(ink);
         let m = &self.hole_mat;
         m.set_uniform("Origin", vec2(area.x as f32, area.y as f32));
         m.set_uniform("Size", vec2(area.w as f32, area.h as f32));
         m.set_uniform("Hole", vec3(cx, cy, radius));
-        m.set_uniform("Look", vec4(time, bright, 0.0, crate::tune::HOLE_TILT));
+        m.set_uniform("Look", vec4(time, bright, flare, crate::tune::HOLE_TILT));
         m.set_uniform("Ink", vec3(ink.r * k, ink.g * k, ink.b * k));
         gl_use_material(m);
         draw_texture_ex(&self.atlas.tex, area.x as f32, area.y as f32, WHITE, DrawTextureParams { dest_size: Some(vec2(area.w as f32, area.h as f32)), ..Default::default() });

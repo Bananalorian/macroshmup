@@ -3,6 +3,76 @@
 Every version is one build sprint. Newest first. Versions are tagged in git, and
 each tag publishes a GitHub Release with downloads.
 
+## [0.6.0] - 2026-10-11 - Stage 1
+
+Sprint 5: OUTER DISK, a stage of two and a half minutes, with enemies, a mid-boss
+and a breather.
+
+### Added
+- **STAGE 1 // OUTER DISK.** The title now offers STAGE 1 or the PATTERN SANDBOX.
+  The stage runs to a timeline:
+  - 0:00 the fly-in: the stage title types itself in, the first popcorn drones arrive,
+    and nothing fires for 6 seconds;
+  - 0:10 gunships alternate sides with popcorn around them, their aimed fans pushing
+    you back and forth across the screen;
+  - 0:40 turret buoys drift down among them: static rings and spirals that make lanes;
+  - 1:10 a breather: the black hole's disk flares, a field of debris drifts past, and
+    a tiny figure tumbles into the hole trailing red, green and blue streaks (a nod
+    to your image);
+  - 1:25 the mid-boss, **the derelict**: a gothic capital ship rises out of the disk,
+    its three red-cored turrets firing aimed fans and rings. Break them (they hang
+    below the hull, so your shots reach them first) and the hull cracks open, its
+    seams burning red, into a reversing spiral with needle bursts. It leaves at
+    25 s. Destroy it and every bullet it fired is cancelled, the burning wreck
+    shudders as blasts ripple across it, then it goes up in a boss-sized blast
+    ([the sequence](docs/screenshots/derelict-death.png)), and the next section
+    comes forward a little;
+  - 1:55 heavies, one at a time, through swarms: slow rings of big orbs, needle
+    bursts from both towers, a random sprinkle. Killing one turns all of its bullets
+    into teal shards;
+  - 2:30 calm, and WARNING: red bands crawl across, a siren sounds;
+  - 2:40 the end of the stage for now, with your kills, misses, bombs and grazes,
+    and RETRY or QUIT TO TITLE. The boss arrives in v0.7.
+- **The enemy framework:** spline flight paths (or fly in, hover and leave, or a
+  slow drift), big hurtboxes, a hit flash at most every 5 frames, deaths sized to the
+  enemy (they shatter into their own pixels), engine exhaust, smoke once they're
+  damaged. Nothing can be hurt in the top 12 px of the screen, nothing fires from
+  the bottom 60 px, and crashing into an enemy is as bad as a bullet. Every enemy has
+  an optimal, average and slow kill (in `sim/enemy.rs`): ignore one and it fires
+  until it leaves.
+- **Telegraphs:** every enemy gun glows red as it charges, then flashes as it fires.
+  Popcorn that's going to shoot has a dim red eye until it does.
+- The black hole now grows on the stage clock and flares during the breather
+  (brighter, never past the background's value budget).
+- The derelict's health bar at the top of the playfield, with a notch per turret.
+  The side panel shows the section, the stage clock, kills and misses.
+- Sounds and rumble: the WARNING siren; blasts sized to every kill, broken turret
+  and the derelict's crack; rumble for the big ones (not for popcorn).
+- Debug: `PG_SCENE=stage:<seconds>` now starts Stage 1 that far in,
+  `PG_SCENE=midboss` goes straight to the derelict, F6 skips to the next section,
+  `PG_SIM=200` plays the stage (`PG_SIM=patterns:200` runs the sandbox patterns),
+  and F9 / `PG_SHEET=1` also saves the enemy sheet.
+
+### Changed
+- The bot simulates the enemies as well as their bullets, steers clear of their
+  bodies, and drifts under whatever it should be shooting.
+- Every bullet remembers which enemy fired it.
+
+### Checked
+- `PG_SIM=200`: the bot clears the stage on 200 of 200 seeds (the bar is 90%), with
+  no deaths and no bombs. It kills 89% of the enemies; the derelict goes down in a
+  median 20.5 s. Every section begins on the timeline. A pacifist bot that dodges
+  but never shoots also survives, facing 70 bullets on average and up to 200.
+- Tests prove: nothing spawns within 20 px of an edge or in an edge lane; no two
+  heavies arrive within 2 s; no enemy takes damage in the top dead zone; nothing
+  fires from the ceasefire zone; crashing kills; a heavy's bullets cancel when it
+  dies; shots reach the turrets before the hull; the derelict can't be hurt while it
+  rises and a bomb takes at most 40% of it; no bullets in the first 6 s; the bot
+  clears the stage with every section within 5 s of the timeline; every enemy sprite
+  sits in the 35-75% value band and the breather's extras in the background's 30%.
+- 60 fps through the derelict and the heavies (CPU under 1.4 ms a frame), and 60 fps
+  in a browser, where the title menu, pause and quit all work.
+
 ## [0.5.0] - 2026-10-11 - The special weapon
 
 Sprint 4: the Shinjuku grenade becomes the bomb, with lives, death and recovery.

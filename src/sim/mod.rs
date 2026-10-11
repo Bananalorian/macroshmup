@@ -5,6 +5,7 @@
 pub mod bot;
 pub mod bullets;
 pub mod dummy;
+pub mod enemy;
 #[cfg(test)]
 mod fairness;
 pub mod geom;
@@ -14,10 +15,15 @@ pub mod pattern;
 pub mod player;
 pub mod rng;
 pub mod shots;
+pub mod stage1;
+#[cfg(test)]
+mod stage_tests;
 
 use crate::tune::*;
 use dummy::Dummy;
+use enemy::{EnemyKind, Foes, Hurt};
 use geom::Rect;
+use stage1::Stage;
 use pattern::Hazards;
 use player::{Controls, Player, Tuning};
 use rng::Rng;
@@ -52,6 +58,25 @@ pub enum Event {
     Respawn,
     /// No ships left.
     GameOver,
+    /// An enemy was destroyed at `(x, y)`.
+    Kill { x: f32, y: f32, kind: EnemyKind },
+    /// A weak point broke off the derelict.
+    PartBreak { x: f32, y: f32 },
+    /// The derelict's hull cracked open: its second pattern.
+    Crack { x: f32, y: f32 },
+    /// A new section of the stage began.
+    Section(u8),
+    /// The boss is coming.
+    Warning,
+    /// The end of the stage.
+    StageEnd,
+}
+
+/// Something shots can hit: a target dummy, or part `p` of enemy `i` (0 is its body).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Target {
+    Dummy(usize),
+    Foe(usize, usize),
 }
 
 /// Where the Pilgrim is in its life.
@@ -93,7 +118,7 @@ pub struct Beam {
     pub top: f32,
     /// Where its hitbox starts (low on the ship, like the shots).
     pub bottom: f32,
-    pub hit: Option<usize>,
+    pub hit: Option<Target>,
 }
 
 impl Beam {
@@ -102,8 +127,8 @@ impl Beam {
     }
 }
 
-/// One run of the game: for now the Pilgrim, three target dummies and the
-/// pattern sandbox's guns, with lives and bombs.
+/// One run of the game: Stage 1, or the pattern sandbox (three target dummies and
+/// the sandbox's guns). The Pilgrim, lives and bombs either way.
 pub struct World {
     pub seed: u64,
     /// Ticks since the run began. Every gameplay timing counts these.
@@ -127,6 +152,8 @@ pub struct World {
     /// Ships left, including the one flying.
     pub lives: u8,
     pub bombs: u8,
+    /// Bombs set off this run.
+    pub bombs_used: u32,
     /// Frames left that bullets can't hurt you (after a bomb or a respawn), and
     /// whether it came from a respawn (the ship blinks) rather than a bomb.
     pub invuln: u32,
@@ -142,6 +169,12 @@ pub struct World {
     /// whether a bomb did it (they turn into teal shards that fly to you).
     pub cancelled: Vec<(f32, f32)>,
     pub cancel_shards: bool,
+    pub foes: Foes,
+    /// Stage 1's script and clock (none in the sandbox).
+    pub stage: Option<Stage>,
+    /// Everything shots can hit this frame, weak points before bodies.
+    boxes: Vec<(Target, Rect)>,
+    hits_now: Vec<Target>,
 }
 
 impl World {
@@ -162,6 +195,7 @@ impl World {
             life: Life::Alive,
             lives: LIVES,
             bombs: BOMBS,
+            bombs_used: 0,
             invuln: 0,
             invuln_blink: false,
             bomb: None,
@@ -171,6 +205,44 @@ impl World {
             grazes: 0,
             cancelled: Vec::with_capacity(crate::tune::BULLET_CAP),
             cancel_shards: false,
+            foes: Foes::new(seed),
+            stage: None,
+            boxes: Vec::with_capacity(64),
+            hits_now: Vec::with_capacity(64),
+        }
+    }
+
+    /// Stage 1 from the top.
+    pub fn stage(seed: u64, tuning: Tuning) -> World {
+        let mut w = World::new(seed, tuning);
+        w.dummies.clear();
+        w.stage = Some(Stage::new());
+        w
+    }
+
+    /// Stage 1, starting `secs` seconds in (the enemies due earlier never came).
+    pub fn stage_at(seed: u64, tuning: Tuning, secs: f32) -> World {
+        let mut w = World::stage(seed, tuning);
+        let t = stage1::frames(secs);
+        if let Some(s) = &mut w.stage {
+            s.skip_to(t);
+            w.frame = s.t as u64;
+        }
+        w
+    }
+
+    /// The stage clock (frames since it began), or the run's frame in the sandbox.
+    pub fn clock(&self) -> u64 {
+        self.stage.as_ref().map_or(self.frame, |s| s.t as u64)
+    }
+
+    /// Debug (F6): straight to the next section, clearing the screen.
+    pub fn skip_section(&mut self) {
+        let Some(s) = &mut self.stage else { return };
+        if let Some(next) = SECTIONS.get(s.section + 1) {
+            s.skip_to(stage1::frames(next.0));
+            self.foes.list.clear();
+            self.hazards.bullets.clear();
         }
     }
 
@@ -192,7 +264,7 @@ impl World {
     /// Debug (PG_DIE): a live bullet right on the Pilgrim.
     pub fn debug_strike(&mut self) {
         let (x, y) = (self.player.x, self.player.y);
-        self.hazards.bullets.push(bullets::Spawn { x, y, vx: 0.0, vy: 0.0, kind: bullets::Kind::Orb, behavior: bullets::Behavior::Straight });
+        self.hazards.bullets.push(bullets::Spawn { x, y, vx: 0.0, vy: 0.0, kind: bullets::Kind::Orb, behavior: bullets::Behavior::Straight, owner: 0 });
         let i = self.hazards.bullets.len() - 1;
         self.hazards.bullets.age[i] = 30;
     }
@@ -242,9 +314,17 @@ impl World {
         for d in &mut self.dummies {
             d.tick(f);
         }
+        // the stage's timeline: who arrives this frame
+        if let Some(s) = &mut self.stage {
+            s.tick(&mut self.foes, &mut self.events);
+        }
+        let me = (self.player.x, self.player.y);
         let mut m = [(0.0, 0.0, false); 8];
         let n = self.mounts(&mut m);
-        self.hazards.step((self.player.x, self.player.y), &m[..n]);
+        self.hazards.step(me, &m[..n]);
+        let fire_ok = self.stage.as_ref().is_none_or(|s| s.fire_ok());
+        self.foes.step(&mut self.hazards, me, fire_ok, &mut self.events);
+        self.build_boxes();
         self.step_bomb();
 
         for s in &mut self.shots {
@@ -325,6 +405,9 @@ impl World {
 
     fn final_death(&mut self) {
         self.deaths += 1;
+        if let Some(s) = &mut self.stage {
+            s.deaths[s.section] += 1;
+        }
         self.lives = self.lives.saturating_sub(1);
         self.life = Life::Dead { t: 0 };
         self.beam = None;
@@ -334,7 +417,13 @@ impl World {
     fn start_bomb(&mut self) {
         let (x, y) = (self.player.x, self.player.y);
         self.bombs -= 1;
+        self.bombs_used += 1;
         self.bomb = Some(BombBlast { x, y, t: 0, hit: [false; 8] });
+        for e in &mut self.foes.list {
+            for q in &mut e.parts {
+                q.bombed = false;
+            }
+        }
         self.invuln = self.invuln.max(BOMB_INVULN);
         self.invuln_blink = false;
         self.dip = BOMB_DIP;
@@ -351,13 +440,32 @@ impl World {
         self.hazards.cancel_within(b.x, b.y, r, &mut out);
         self.cancel_shards |= out.len() > before;
         self.cancelled = out;
-        for k in 0..self.dummies.len().min(8) {
-            let d = &self.dummies[k];
-            if !b.hit[k] && d.alive() && d.rect().dist(b.x, b.y) <= r {
-                b.hit[k] = true;
-                let dmg = if d.kind == dummy::DummyKind::Big { BOMB_DAMAGE.min(d.max_hp * BOMB_BOSS_CAP) } else { BOMB_DAMAGE };
-                self.hurt(k, dmg);
+        self.hits_now.clear();
+        for &(t, rect) in &self.boxes {
+            if rect.dist(b.x, b.y) > r {
+                continue;
             }
+            match t {
+                Target::Dummy(k) if k < 8 && !b.hit[k] => {
+                    b.hit[k] = true;
+                    self.hits_now.push(t);
+                }
+                Target::Foe(i, p) if !self.foes.list[i].parts[p].bombed => {
+                    self.foes.list[i].parts[p].bombed = true;
+                    self.hits_now.push(t);
+                }
+                _ => {}
+            }
+        }
+        for k in 0..self.hits_now.len() {
+            let t = self.hits_now[k];
+            // the big ones only lose a share of their health to a bomb
+            let cap = match t {
+                Target::Dummy(k) if self.dummies[k].kind == dummy::DummyKind::Big => self.dummies[k].max_hp * BOMB_BOSS_CAP,
+                Target::Foe(i, 0) if self.foes.list[i].kind == EnemyKind::Hull => self.foes.list[i].parts[0].max_hp * BOMB_BOSS_CAP,
+                _ => f32::MAX,
+            };
+            self.hurt(t, BOMB_DAMAGE.min(cap));
         }
         if b.t + 1 == BOMB_GROW {
             self.events.push(Event::BombSwept);
@@ -366,12 +474,68 @@ impl World {
         self.bomb = (b.t < BOMB_ACTIVE).then_some(b);
     }
 
-    fn hurt(&mut self, i: usize, dmg: f32) {
-        let f = self.frame;
-        let d = &mut self.dummies[i];
-        if d.damage(dmg, f) {
-            let big = d.kind == dummy::DummyKind::Big;
-            self.events.push(Event::Break { x: d.x, y: d.y, big });
+    /// Everything shots can hit this frame: the dummies, and the enemies below the top
+    /// dead zone (weak points before the body they sit on).
+    fn build_boxes(&mut self) {
+        self.boxes.clear();
+        for (k, d) in self.dummies.iter().enumerate() {
+            if d.alive() {
+                self.boxes.push((Target::Dummy(k), d.rect()));
+            }
+        }
+        for (i, e) in self.foes.list.iter().enumerate() {
+            if !e.hittable() {
+                continue;
+            }
+            for p in (1..e.parts.len()).filter(|&p| e.parts[p].alive()) {
+                self.boxes.push((Target::Foe(i, p), e.rect(p)));
+            }
+            self.boxes.push((Target::Foe(i, 0), e.rect(0)));
+        }
+    }
+
+    fn hurt(&mut self, t: Target, dmg: f32) {
+        match t {
+            Target::Dummy(i) => {
+                let f = self.frame;
+                let d = &mut self.dummies[i];
+                if d.damage(dmg, f) {
+                    let big = d.kind == dummy::DummyKind::Big;
+                    self.events.push(Event::Break { x: d.x, y: d.y, big });
+                    self.boxes.retain(|b| b.0 != t);
+                }
+            }
+            Target::Foe(i, _) if !self.foes.list[i].alive() => {}
+            Target::Foe(i, p) => match self.foes.list[i].hurt(p, dmg) {
+                Hurt::Died => self.kill(i),
+                Hurt::Broke => {
+                    let r = self.foes.list[i].rect(p);
+                    self.events.push(Event::PartBreak { x: (r.x0 + r.x1) * 0.5, y: (r.y0 + r.y1) * 0.5 });
+                    self.boxes.retain(|b| b.0 != t);
+                }
+                Hurt::Hit | Hurt::Nothing => {}
+            },
+        }
+    }
+
+    /// Enemy `i` is destroyed. A high-HP one takes its bullets with it, as shards.
+    fn kill(&mut self, i: usize) {
+        let e = &self.foes.list[i];
+        let (id, kind) = (e.id, e.kind);
+        self.events.push(Event::Kill { x: e.x, y: e.y, kind });
+        self.boxes.retain(|b| !matches!(b.0, Target::Foe(j, _) if j == i));
+        if kind.heavy() {
+            let mut out = std::mem::take(&mut self.cancelled);
+            let before = out.len();
+            self.hazards.cancel_owner(id, &mut out);
+            self.cancel_shards |= out.len() > before;
+            self.cancelled = out;
+        }
+        if let Some(s) = &mut self.stage {
+            s.killed += 1;
+            if kind == EnemyKind::Hull {
+                s.hurry();
+            }
         }
     }
 
@@ -380,13 +544,14 @@ impl World {
         while i < self.shots.len() {
             let r = self.shots[i].rect();
             let live = self.shots[i].dmg > 0.0; // the debug filler shots pass through
-            let hit = self.dummies.iter().position(|d| live && d.alive() && d.rect().overlaps(&r));
+            let hit = self.boxes.iter().position(|b| live && b.1.overlaps(&r));
             if let Some(k) = hit {
+                let (t, rect) = self.boxes[k];
                 let s = self.shots.swap_remove(i);
                 let (_, ty) = s.tip();
-                let y = ty.max(self.dummies[k].rect().y0).min(self.dummies[k].rect().y1);
+                let y = ty.max(rect.y0).min(rect.y1);
                 self.events.push(Event::Hit { x: s.x, y, beam: false });
-                self.hurt(k, s.dmg);
+                self.hurt(t, s.dmg);
             } else {
                 i += 1;
             }
@@ -402,19 +567,20 @@ impl World {
         let bottom = py + MUZZLE_Y;
         let lane = Rect { x0: px - BEAM_W * 0.5, y0: -1000.0, x1: px + BEAM_W * 0.5, y1: bottom };
         // it stops at the nearest thing in its lane
-        let hit = (0..self.dummies.len())
-            .filter(|&k| self.dummies[k].alive() && self.dummies[k].rect().overlaps(&lane))
-            .max_by(|&a, &b| self.dummies[a].rect().y1.total_cmp(&self.dummies[b].rect().y1));
-        let top = hit.map_or(0.0, |k| self.dummies[k].rect().y1.min(bottom));
-        self.beam = Some(Beam { x: px, top, bottom, hit });
-        if let Some(k) = hit {
+        let hit = self.boxes.iter().filter(|b| b.1.overlaps(&lane)).max_by(|a, b| a.1.y1.total_cmp(&b.1.y1)).copied();
+        let top = hit.map_or(0.0, |b| b.1.y1.min(bottom));
+        self.beam = Some(Beam { x: px, top, bottom, hit: hit.map(|b| b.0) });
+        if let Some((t, _)) = hit {
             self.events.push(Event::Hit { x: px, y: top, beam: true });
-            self.hurt(k, BEAM_DMG);
+            self.hurt(t, BEAM_DMG);
         }
         // the point-blank aura burns anything close
-        for k in 0..self.dummies.len() {
-            if self.dummies[k].alive() && self.dummies[k].rect().dist(px, py) <= AURA_R {
-                self.hurt(k, AURA_DMG);
+        self.hits_now.clear();
+        self.hits_now.extend(self.boxes.iter().filter(|b| b.1.dist(px, py) <= AURA_R).map(|b| b.0));
+        for k in 0..self.hits_now.len() {
+            let t = self.hits_now[k];
+            if self.boxes.iter().any(|b| b.0 == t) {
+                self.hurt(t, AURA_DMG);
             }
         }
     }
@@ -451,6 +617,10 @@ impl World {
                 self.grazes += 1;
                 self.events.push(Event::Graze { x: b.x[i], y: b.y[i] });
             }
+        }
+        // crashing into an enemy's body is as bad as a bullet
+        if !safe {
+            hit |= self.foes.list.iter().any(|e| e.alive() && e.body().dist(px, py) < HITBOX_R);
         }
         if hit {
             // struck: the deathbomb window opens
@@ -543,7 +713,7 @@ mod tests {
         w.dummies = vec![Dummy::new(DummyKind::Big, START_X, 60.0), Dummy::new(DummyKind::Still, START_X, 200.0)];
         w.tick(beam());
         let b = w.beam.unwrap();
-        assert_eq!(b.hit, Some(1));
+        assert_eq!(b.hit, Some(Target::Dummy(1)));
         assert_eq!(b.top, w.dummies[1].rect().y1);
         assert_eq!(w.dummies[0].hp, w.dummies[0].max_hp, "the far one is shielded");
     }

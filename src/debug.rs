@@ -1,10 +1,11 @@
 //! Debug hooks. Environment variables work in native builds only (the browser has
 //! none); the debug keys work in debug builds only.
 //!
-//!   PG_SCENE=title | stage:<seconds> | shots:<n> | sandbox:<pattern> | stress   jump straight there
+//!   PG_SCENE=title | stage:<seconds> | midboss | shots:<n> | sandbox:<pattern> | stress   jump straight there
 //!   PG_SHOTS=60,300                    save those frames to ./shots/ and quit
 //!   PG_AUTO=1                          the dodging bot plays
-//!   PG_SIM=<n>                         n seeded bot runs per pattern, headless, with a report
+//!   PG_SIM=<n>                         n seeded bot runs of Stage 1, headless, with a report
+//!   PG_SIM=patterns:<n>                n seeded bot runs of every sandbox pattern
 //!   PG_SEED=<n>                        fixed gameplay seed
 //!   PG_GRAY=1                          grayscale screenshots (the value check)
 //!   PG_SIZE=1280x720                   window size, for screenshots
@@ -20,7 +21,8 @@
 //!   PG_DIE=<frame>                     put a bullet on the ship on that frame
 //!
 //! F1 hitboxes, F2 grayscale, F3 quarter speed, F4 frame step (Enter resumes),
-//! F5 invincible, F7 next pattern, F8 performance overlay, F9 export the ship sheet.
+//! F5 invincible, F6 next stage section, F7 next pattern, F8 performance overlay,
+//! F9 export the sprite sheets.
 //! (F1-F3, F5, F7 and F8 are also in the pause menu, in every build.)
 
 use crate::render::Renderer;
@@ -36,16 +38,16 @@ use macroquad::prelude::*;
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum SceneReq {
     Title,
-    /// The stage, fast-forwarded this many seconds in.
+    /// Stage 1, starting this many seconds in.
     Stage(f32),
-    /// The stage with this many extra player shots kept alive (performance check).
+    /// The sandbox with this many extra player shots kept alive (performance check).
     Shots(usize),
-    /// The stage with sandbox pattern `i` running.
+    /// The sandbox with pattern `i` running.
     Sandbox(usize),
 }
 
 /// Scenes from the plan that later sprints will build.
-const LATER: [&str; 2] = ["midboss", "boss"];
+const LATER: [&str; 1] = ["boss"];
 
 /// A sandbox pattern by number or by name (`3`, `spiral`, `slow-pause-aim`).
 fn find_pattern(arg: &str) -> Option<usize> {
@@ -61,6 +63,7 @@ pub fn parse_scene(s: &str) -> Result<SceneReq, String> {
     let (name, arg) = s.split_once(':').map_or((s.as_str(), None), |(n, a)| (n, Some(a)));
     match name {
         "title" => Ok(SceneReq::Title),
+        "midboss" => Ok(SceneReq::Stage(crate::tune::SECTIONS[4].0)),
         "stage" => match arg {
             None => Ok(SceneReq::Stage(0.0)),
             Some(a) => a
@@ -80,7 +83,7 @@ pub fn parse_scene(s: &str) -> Result<SceneReq, String> {
         "sandbox" => find_pattern(arg.unwrap_or("1")).map(SceneReq::Sandbox).ok_or_else(|| format!("no sandbox pattern {arg:?}")),
         "stress" => Ok(SceneReq::Sandbox(SANDBOX.iter().position(|p| p.fill >= 4000).unwrap_or(0))),
         n if LATER.contains(&n) => Err(format!("PG_SCENE={n} arrives in a later sprint")),
-        _ => Err(format!("unknown PG_SCENE {s:?} (try title, stage:<seconds>, shots:<n>, sandbox:<pattern> or stress)")),
+        _ => Err(format!("unknown PG_SCENE {s:?} (try title, stage:<seconds>, midboss, shots:<n>, sandbox:<pattern> or stress)")),
     }
 }
 
@@ -157,10 +160,108 @@ pub fn hooks() -> Hooks {
     }
 }
 
-/// PG_SIM=<n>: `n` seeded bot runs of 60 s on every sandbox pattern, in parallel,
-/// with a balance report. Headless; runs before any window opens.
+/// Run `job(k)` for k in 0..n on every core, collecting the results (in any order).
 #[cfg(not(target_arch = "wasm32"))]
-pub fn sim_report(seeds: u32) {
+fn parallel<T: Send>(n: u32, job: impl Fn(u32) -> T + Sync) -> Vec<T> {
+    let threads = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4);
+    let next = std::sync::atomic::AtomicU32::new(0);
+    let results = std::sync::Mutex::new(Vec::new());
+    std::thread::scope(|s| {
+        for _ in 0..threads {
+            s.spawn(|| {
+                loop {
+                    let k = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    if k >= n {
+                        break;
+                    }
+                    let r = job(k);
+                    results.lock().unwrap().push(r);
+                }
+            });
+        }
+    });
+    results.into_inner().unwrap()
+}
+
+/// PG_SIM=<n> plays Stage 1 with the bot on `n` seeds; PG_SIM=patterns:<n> runs every
+/// sandbox pattern. Headless, in parallel, with a balance report; runs before any
+/// window opens.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn sim_report(arg: &str) {
+    let (patterns, n) = match arg.trim().split_once(':') {
+        Some((what, n)) => (what.eq_ignore_ascii_case("patterns"), n),
+        None => (false, arg),
+    };
+    let seeds = n.trim().parse().unwrap_or(200);
+    if patterns {
+        pattern_report(seeds);
+    } else {
+        stage_report(seeds);
+    }
+}
+
+/// Stage 1, played by the bot with 3 lives and its bombs: clears, deaths per section,
+/// when each section began, and how fast the derelict went down.
+#[cfg(not(target_arch = "wasm32"))]
+fn stage_report(seeds: u32) {
+    use crate::sim::bot;
+    use crate::sim::stage1::frames;
+    use crate::tune::{SECTIONS, STAGE_NAME};
+    let start = std::time::Instant::now();
+    let threads = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4);
+    println!("PG_SIM: {seeds} seeds of STAGE 1 // {STAGE_NAME}, the bot with 3 lives and bombs, {threads} threads");
+    // first, what the stage throws at you if you shoot nothing
+    let calm = parallel(seeds, |k| bot::stage_trial(1000 + k as u64, true, false));
+    let m = calm.len().max(1) as f32;
+    println!(
+        "PACIFIST (dodges, never shoots): cleared {:.0}%, deaths/run {:.2}, avg bullets {:.0}, peak {}",
+        calm.iter().filter(|r| r.cleared).count() as f32 * 100.0 / m,
+        calm.iter().map(|r| r.deaths).sum::<u32>() as f32 / m,
+        calm.iter().map(|r| r.bullet_frames as f32 / r.frames.max(1) as f32).sum::<f32>() / m,
+        calm.iter().map(|r| r.peak).max().unwrap_or(0)
+    );
+    let runs = parallel(seeds, |k| bot::stage_trial(1000 + k as u64, true, true));
+    let n = runs.len().max(1) as f32;
+    let pct = |c: usize| c as f32 * 100.0 / n;
+    let cleared = runs.iter().filter(|r| r.cleared).count();
+    let clean = runs.iter().filter(|r| r.cleared && r.deaths == 0).count();
+    let avg = |f: &dyn Fn(&bot::StageRun) -> f32| runs.iter().map(f).sum::<f32>() / n;
+    println!("{:>8} {:>8} {:>11} {:>10} {:>7} {:>7} {:>13} {:>5}", "CLEARED", "NO-MISS", "DEATHS/RUN", "BOMBS/RUN", "KILLED", "GRAZES", "AVG BULLETS", "PEAK");
+    println!(
+        "{:>7.0}% {:>7.0}% {:>11.2} {:>10.2} {:>6.0}% {:>7.0} {:>13.0} {:>5}",
+        pct(cleared),
+        pct(clean),
+        avg(&|r| r.deaths as f32),
+        avg(&|r| r.bombs as f32),
+        avg(&|r| r.killed as f32 / r.spawned.max(1) as f32) * 100.0,
+        avg(&|r| r.grazes as f32),
+        avg(&|r| r.bullet_frames as f32 / r.frames.max(1) as f32),
+        runs.iter().map(|r| r.peak).max().unwrap_or(0)
+    );
+    let mmss = |f: u32| format!("{}:{:04.1}", f / 3600, (f % 3600) as f32 / 60.0);
+    println!("{:<10} {:>8} {:>18} {:>7} {:>11}", "SECTION", "PLANNED", "BEGAN", "DEATHS", "DEATHS/RUN");
+    for (i, s) in SECTIONS.iter().enumerate() {
+        let began: Vec<u32> = runs.iter().filter_map(|r| r.began[i]).collect();
+        let span = match (began.iter().min(), began.iter().max()) {
+            (Some(a), Some(b)) => format!("{} - {}", mmss(*a), mmss(*b)),
+            _ => "never".into(),
+        };
+        let deaths: u32 = runs.iter().map(|r| r.section_deaths[i]).sum();
+        println!("{:<10} {:>8} {:>18} {:>7} {:>11.2}", s.1, mmss(frames(s.0)), span, deaths, deaths as f32 / n);
+    }
+    let mut kills: Vec<u32> = runs.iter().filter_map(|r| r.hull_kill).collect();
+    kills.sort();
+    if let (Some(fast), Some(med)) = (kills.first(), kills.get(kills.len() / 2)) {
+        println!("DERELICT: destroyed in {:.0}% of runs, median {:.1} s, fastest {:.1} s; it left in the rest", pct(kills.len()), *med as f32 / 60.0, *fast as f32 / 60.0);
+    } else {
+        println!("DERELICT: never destroyed");
+    }
+    println!("done in {:.1} s", start.elapsed().as_secs_f32());
+}
+
+/// Every sandbox pattern for 60 s without bombs (and endless lives).
+#[cfg(not(target_arch = "wasm32"))]
+fn pattern_report(seeds: u32) {
     use crate::sim::bot;
     use crate::tune::{SANDBOX, TICK_HZ};
     let frames = 60 * TICK_HZ;
@@ -170,23 +271,7 @@ pub fn sim_report(seeds: u32) {
     println!("PG_SIM: {seeds} seeds x 60 s per pattern, {threads} threads, no bombs");
     println!("{:<18} {:>9} {:>11} {:>9} {:>11}", "PATTERN", "SURVIVED", "DEATHS/RUN", "GRAZES", "PEAK SHOTS");
     for &p in &presets {
-        let next = std::sync::atomic::AtomicU32::new(0);
-        let results = std::sync::Mutex::new(Vec::new());
-        std::thread::scope(|s| {
-            for _ in 0..threads {
-                s.spawn(|| {
-                    loop {
-                        let k = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                        if k >= seeds {
-                            break;
-                        }
-                        let r = bot::trial(p, 1000 + k as u64, frames, false);
-                        results.lock().unwrap().push(r);
-                    }
-                });
-            }
-        });
-        let r = results.into_inner().unwrap();
+        let r = parallel(seeds, |k| bot::trial(p, 1000 + k as u64, frames, false));
         let n = r.len().max(1) as f32;
         let survived = r.iter().filter(|x| x.0 == 0).count() as f32 / n;
         let deaths = r.iter().map(|x| x.0).sum::<u32>() as f32 / n;
@@ -205,6 +290,8 @@ pub struct Keys {
     pub stepping: bool,
     pub step: bool,
     pub sheet: bool,
+    /// F6: skip to the next section of the stage.
+    pub skip: bool,
     quarter_n: u32,
 }
 
@@ -225,6 +312,7 @@ impl Keys {
             self.stepping = false;
         }
         v.invincible ^= is_key_pressed(KeyCode::F5);
+        self.skip |= is_key_pressed(KeyCode::F6);
         v.fps ^= is_key_pressed(KeyCode::F8);
         self.sheet |= is_key_pressed(KeyCode::F9);
         is_key_pressed(KeyCode::F7) as i32

@@ -178,6 +178,40 @@ impl Particles {
         self.spawn(Kind::Cross, gx, gy, 0.0, 0.0, 10.0, TEAL, 1.0);
     }
 
+    /// An enemy's engine: a gray dot thrown up behind it (they fly nose down).
+    pub fn exhaust(&mut self, x: f32, y: f32) {
+        let a = -std::f32::consts::FRAC_PI_2 + self.rng.range(-0.25, 0.25);
+        let s = self.rng.range(0.6, 1.6);
+        let life = self.rng.range(6.0, 14.0);
+        let x = x + self.rng.range(-1.0, 1.0);
+        self.spawn(Kind::Dot, x, y, a, s, life, Color { a: 0.8, ..ASH }, 0.92);
+    }
+
+    /// A flake of metal shed by the derelict as it rises out of the disk.
+    pub fn flake(&mut self, x: f32, y: f32) {
+        let a = self.rng.range(0.0, std::f32::consts::TAU);
+        let s = self.rng.range(0.1, 0.6);
+        let life = self.rng.range(30.0, 70.0);
+        let c = if self.rng.chance(0.5) { ASH } else { SLATE };
+        self.spawn(Kind::Shard, x, y, a, s, life, c, 0.98);
+    }
+
+    /// A damaged enemy: a puff of smoke, and now and then an ember or a spark.
+    pub fn wound(&mut self, x: f32, y: f32) {
+        self.smoke(x, y, 1, 4.0);
+        if self.rng.chance(0.3) {
+            let a = self.rng.range(0.0, std::f32::consts::TAU);
+            let life = self.rng.range(12.0, 24.0);
+            let c = if self.rng.chance(0.5) { SIGNAL } else { CREAM };
+            self.spawn(Kind::Ember, x, y, a, 0.5, life, c, 0.95);
+        }
+    }
+
+    /// Somewhere inside a `w` x `h` box centered on `(x, y)` (cosmetic randomness).
+    pub fn somewhere(&mut self, x: f32, y: f32, w: f32, h: f32) -> (f32, f32) {
+        (x + self.rng.range(-w * 0.5, w * 0.5), y + self.rng.range(-h * 0.5, h * 0.5))
+    }
+
     /// A bullet cancelled by a death: a red pop.
     pub fn cancel(&mut self, x: f32, y: f32) {
         let a = self.rng.range(0.0, std::f32::consts::TAU);

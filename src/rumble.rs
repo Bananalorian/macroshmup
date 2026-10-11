@@ -2,6 +2,7 @@
 //! gently while held; breaking things, bumping and the bomb button kick. Phones
 //! playing by touch get a short buzz on the big moments instead.
 
+use crate::sim::enemy::EnemyKind;
 use crate::sim::{Event, World};
 use crate::storage::Rumble;
 use crate::tune::*;
@@ -21,7 +22,13 @@ pub fn for_event(e: &Event) -> Option<Kick> {
         Event::Respawn => Some(RUMBLE_RESPAWN),
         Event::GameOver => Some(RUMBLE_GAME_OVER),
         Event::Graze { .. } => Some(RUMBLE_GRAZE),
-        Event::Volley { .. } | Event::Hit { .. } | Event::BombSwept | Event::NoBomb | Event::Cancel => None,
+        // popcorn dies too often to kick every time
+        Event::Kill { kind: EnemyKind::Drone, .. } => None,
+        Event::Kill { kind, .. } if kind.heavy() => Some(RUMBLE_BIG_BREAK),
+        Event::Kill { .. } | Event::PartBreak { .. } => Some(RUMBLE_BREAK),
+        Event::Crack { .. } => Some(RUMBLE_BIG_BREAK),
+        Event::Warning => Some(RUMBLE_WARNING),
+        Event::Volley { .. } | Event::Hit { .. } | Event::BombSwept | Event::NoBomb | Event::Cancel | Event::Section(_) | Event::StageEnd => None,
     }
 }
 
@@ -50,6 +57,8 @@ pub fn scaled(k: Kick, level: Rumble) -> Option<Kick> {
 pub fn buzz(e: &Event) -> Option<u32> {
     match e {
         Event::Break { big: true, .. } => Some(40),
+        Event::Kill { kind, .. } if kind.heavy() => Some(40),
+        Event::Crack { .. } => Some(40),
         Event::Bomb { .. } => Some(60),
         Event::Struck { .. } => Some(30),
         Event::Death { .. } => Some(80),

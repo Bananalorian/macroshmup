@@ -28,6 +28,8 @@ pub enum Mount {
     Dummy(u8),
     /// Sweeps side to side along `y` between `x0` and `x1`, once per `period` frames.
     Sweep { y: f32, x0: f32, x1: f32, period: u32 },
+    /// Rides an enemy, offset `(dx, dy)` from its center (the enemy is `mounts[0]`).
+    Owner { dx: f32, dy: f32 },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -64,9 +66,12 @@ pub struct Emitter {
     pub x: f32,
     pub y: f32,
     pub live: bool,
+    /// The enemy carrying it (0: none); its bullets carry the same id.
+    pub owner: u32,
 }
 
 /// Where the guns' mounts are this frame: (x, y, alive) for each target dummy.
+/// For an enemy's guns it's the one enemy: (x, y, may fire).
 pub type Mounts<'a> = &'a [(f32, f32, bool)];
 
 /// Everything that can hurt the player: the guns and their bullets.
@@ -102,8 +107,30 @@ impl Hazards {
         self.emitters = SANDBOX[self.preset]
             .guns
             .iter()
-            .map(|g| Emitter { gun: *g, t: 0, angle: self.rng.range(0.0, 360.0), dir: 1.0, shots: 0, since: u32::MAX, x: 0.0, y: 0.0, live: true })
+            .map(|g| Emitter::new(*g, 0, self.rng.range(0.0, 360.0)))
             .collect();
+    }
+
+    /// Fire one frame of an enemy's gun from `origin` (x, y, may fire) into the pool.
+    pub fn fire_gun(&mut self, e: &mut Emitter, player: (f32, f32), origin: (f32, f32, bool)) {
+        e.fire_frame(player, &[origin], &mut self.rng, &mut self.spawns);
+        for s in self.spawns.drain(..) {
+            self.bullets.push(s);
+        }
+    }
+
+    /// Cancel every bullet `owner` fired, noting where each was.
+    pub fn cancel_owner(&mut self, owner: u32, out: &mut Vec<(f32, f32)>) {
+        let b = &mut self.bullets;
+        let mut i = 0;
+        while i < b.len() {
+            if b.owner[i] == owner {
+                out.push((b.x[i], b.y[i]));
+                b.swap_remove(i);
+            } else {
+                i += 1;
+            }
+        }
     }
 
     /// Cancel every bullet whose core is within `r` of `(x, y)`, noting where each was.
@@ -162,12 +189,27 @@ impl Hazards {
             let a = self.rng.range(60.0, 120.0);
             let v = self.rng.range(0.8, 2.6);
             let (c, s) = deg(a);
-            self.bullets.push(Spawn { x, y: -BULLET_MARGIN * 0.5, vx: c * v, vy: s * v, kind: k, behavior: Behavior::Straight });
+            self.bullets.push(Spawn { x, y: -BULLET_MARGIN * 0.5, vx: c * v, vy: s * v, kind: k, behavior: Behavior::Straight, owner: 0 });
         }
     }
 }
 
 impl Emitter {
+    pub fn new(gun: Gun, owner: u32, angle: f32) -> Emitter {
+        Emitter { gun, t: 0, angle, dir: 1.0, shots: 0, since: u32::MAX, x: 0.0, y: 0.0, live: true, owner }
+    }
+
+    /// Ticks until it next fires (a burst's first shot, for streams), if its mount lets it.
+    pub fn until_next(&self) -> u32 {
+        let g = self.gun;
+        let next = self.t + 1;
+        if next <= g.delay {
+            return g.delay + 1 - self.t;
+        }
+        let r = (next - g.delay - 1) % g.every.max(1);
+        if r == 0 { 1 } else { g.every - r + 1 }
+    }
+
     fn fire_frame(&mut self, player: (f32, f32), mounts: Mounts, rng: &mut Rng, out: &mut Vec<Spawn>) {
         let g = self.gun;
         // where the mount is
@@ -178,6 +220,7 @@ impl Emitter {
                 let k = 0.5 - 0.5 * (std::f32::consts::TAU * self.t as f32 / period.max(1) as f32).cos();
                 (x0 + (x1 - x0) * k, y, true)
             }
+            Mount::Owner { dx, dy } => mounts.first().map_or((0.0, 0.0, false), |&(x, y, ok)| (x + dx, y + dy, ok)),
         };
         self.t += 1;
         self.since = self.since.saturating_add(1);
@@ -188,7 +231,7 @@ impl Emitter {
         let aim = (player.1 - self.y).atan2(player.0 - self.x).to_degrees();
         let shot = |angle: f32, speed: f32, out: &mut Vec<Spawn>| {
             let (c, s) = deg(angle);
-            Hazards::fire(out, Spawn { x: self.x, y: self.y, vx: c * speed, vy: s * speed, kind: g.kind, behavior: g.behavior }, player);
+            Hazards::fire(out, Spawn { x: self.x, y: self.y, vx: c * speed, vy: s * speed, kind: g.kind, behavior: g.behavior, owner: self.owner }, player);
         };
         let fired = match g.shape {
             Shape::Stream { burst, gap } => {
@@ -305,7 +348,7 @@ mod tests {
     #[test]
     fn spirals_reverse_and_streams_burst() {
         let spiral = Gun { mount: Mount::At(135.0, 60.0), shape: Shape::Spiral { arms: 1, spin: 10.0, flip: 3 }, kind: Kind::Rice, speed: 2.0, every: 1, delay: 0, behavior: Behavior::Straight };
-        let mut e = Emitter { gun: spiral, t: 0, angle: 0.0, dir: 1.0, shots: 0, since: 0, x: 0.0, y: 0.0, live: true };
+        let mut e = Emitter::new(spiral, 0, 0.0);
         let mut out = vec![];
         let mut rng = Rng::new(1);
         let mut angles = vec![];
@@ -329,5 +372,33 @@ mod tests {
         }
         assert_eq!(frames, vec![0, 3, 6, 9, 30, 33, 36, 39]);
         assert!(out.iter().all(|s| s.vx.abs() < 1e-4 && s.vy > 0.0), "aimed straight down at the player below");
+    }
+
+    #[test]
+    fn until_next_counts_down_to_each_shot() {
+        let g = Gun { mount: Mount::Owner { dx: 0.0, dy: 5.0 }, shape: Shape::Fan { n: 3, spread: 20.0, aimed: true }, kind: Kind::Small, speed: 2.0, every: 10, delay: 4, behavior: Behavior::Straight };
+        let mut e = Emitter::new(g, 7, 0.0);
+        let (mut rng, mut out) = (Rng::new(1), vec![]);
+        for _ in 0..40 {
+            let promised = e.until_next();
+            let mut fired_at = 0;
+            for k in 1..=promised {
+                let before = out.len();
+                e.fire_frame((135.0, 300.0), &[(100.0, 50.0, true)], &mut rng, &mut out);
+                if out.len() > before {
+                    fired_at = k;
+                    break;
+                }
+            }
+            assert_eq!(fired_at, promised, "it fires exactly when it said it would");
+        }
+        assert!(out.iter().all(|s| s.owner == 7 && s.y == 55.0), "owned, and fired from the enemy plus the offset");
+        // a gun whose enemy may not fire stays quiet
+        let mut e = Emitter::new(g, 7, 0.0);
+        out.clear();
+        for _ in 0..60 {
+            e.fire_frame((135.0, 300.0), &[(100.0, 50.0, false)], &mut rng, &mut out);
+        }
+        assert!(out.is_empty());
     }
 }
