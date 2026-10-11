@@ -187,6 +187,20 @@ impl Particles {
         self.spawn(Kind::Cross, gx, gy, 0.0, 0.0, 10.0, TEAL, 1.0);
     }
 
+    /// The Pilgrim's blades locking together: teal sparks flicked sideways off the
+    /// crossbar where they meet, and a glint at the sword's tip.
+    pub fn lock(&mut self, x: f32, bar: f32, tip: f32) {
+        for side in [0.0, std::f32::consts::PI] {
+            for _ in 0..2 {
+                let a = side + self.rng.range(-0.5, 0.5);
+                let s = self.rng.range(1.0, 2.2);
+                let life = self.rng.range(5.0, 9.0);
+                self.spawn(Kind::Spark, x, bar, a, s, life, TEAL, 0.85);
+            }
+        }
+        self.spawn(Kind::Cross, x, tip, 0.0, 0.0, 8.0, TEAL, 1.0);
+    }
+
     /// An enemy's engine: a gray dot thrown up behind it (they fly nose down).
     pub fn exhaust(&mut self, x: f32, y: f32) {
         let a = -std::f32::consts::FRAC_PI_2 + self.rng.range(-0.25, 0.25);
@@ -475,6 +489,23 @@ mod tests {
             p.tick((0.0, 0.0));
         }
         assert_eq!(p.len(), 0, "everything burns out");
+    }
+
+    /// The blades locking: two sparks flicked out each side of the crossbar, a
+    /// sparkle at the tip, all teal and gone in a few frames.
+    #[test]
+    fn the_lock_flicks_sparks_both_ways_and_flares_the_tip() {
+        let mut p = Particles::new();
+        p.lock(100.0, 109.0, 79.0);
+        let sparks: Vec<&P> = p.list.iter().filter(|q| q.kind == Kind::Spark).collect();
+        assert_eq!(sparks.len(), 4);
+        assert_eq!(sparks.iter().filter(|q| q.vx < 0.0).count(), 2, "two each way");
+        assert!(p.list.iter().any(|q| q.kind == Kind::Cross && q.y == 79.0));
+        assert!(p.list.iter().all(|q| q.color.g == TEAL.g && q.life <= 10));
+        for _ in 0..10 {
+            p.tick((0.0, 0.0));
+        }
+        assert_eq!(p.len(), 0);
     }
 
     #[test]

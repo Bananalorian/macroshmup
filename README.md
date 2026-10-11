@@ -44,11 +44,18 @@ the font and every sound are built when the game starts. Written in Rust on
 
 ![Every explosion size at 4 moments, and the black hole at the start and end of the stage](docs/screenshots/fx-sheet.png)
 
-![The Pilgrim's animation sheet](docs/screenshots/pilgrim-sheet.png)
+![The Pilgrim's animation sheet: the flight form, banking, the five frames to the laser form, and the beam](docs/screenshots/pilgrim-sheet.png)
+
+![The split sword in play: focus, and the blades close into one sword as the teal beam fires from its tip](docs/screenshots/pilgrim-forms.png)
 
 ![Stage 1's enemies in bone white, all built in code](docs/screenshots/enemy-sheet.png)
 
 ## Status
+
+**v0.7.1, the split sword:** the Pilgrim is redesigned from Jason's sheet: two
+bone-white blades with teal channels, on a crossbar with an engine at each end.
+When you focus, the blades close into one sword and the teal beam fires from its
+tip. It flies exactly as before.
 
 **v0.7, the boss:** JAWSTHIC, a great white carved from moon rock with a gothic
 cathedral for a body, from Jason's concept. Its fin cuts through the black hole's

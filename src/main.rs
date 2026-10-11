@@ -575,10 +575,15 @@ fn effects(w: &World, r: &mut Renderer, s: &Settings, audio: &mut Audio, chains:
     if flying && w.frame % 2 == 0 {
         r.parts.trail(p.x, p.y + 23.0, p.thrust() || !w.alive());
     }
+    let ship = r.atlas.r.ship.frame(p.blend(&w.tuning), p.bank);
     if flying && w.frame % 4 == 0 {
-        for (gx, gy) in p.pod_guns() {
-            r.parts.trail(gx, gy + 13.0, false);
+        for &(nx, ny) in &ship.nozzles[..2] {
+            r.parts.trail(p.x + nx as f32, p.y + ny as f32 + 3.0, false);
         }
+    }
+    // the blades lock into the laser form: sparks off the crossbar, a glint at the tip
+    if flying && p.locked == 1 {
+        r.parts.lock(p.x, p.y + 9.0, p.y + render::ship::TIP as f32);
     }
     // a bomb's cancelled bullets become teal shards that fly to you (a sample on a crowded screen)
     if w.cancel_shards {

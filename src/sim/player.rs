@@ -44,6 +44,8 @@ pub struct Player {
     pub focus_t: u32,
     /// Roll, -2 (hard left) to 2 (hard right).
     pub bank: i8,
+    /// Frames since the blades locked into the laser form (0 while they're apart).
+    pub locked: u32,
     bank_t: u32,
     /// The wing pods' offsets from the hitbox, left then right. They lag a little.
     pub pods: [(f32, f32); 2],
@@ -70,6 +72,7 @@ impl Player {
             focus_t: 0,
             bank: 0,
             bank_t: 0,
+            locked: 0,
             pods: [(-POD_X, 0.0), (POD_X, 0.0)],
             fire_cd: 0,
             firing: false,
@@ -111,6 +114,7 @@ impl Player {
         let top = t.focus_blend.max(1);
         self.focus_t = if c.focus { (self.focus_t + 1).min(top) } else { self.focus_t.saturating_sub(1).min(top) };
         let speed = self.speed(t);
+        self.locked = if self.blend(t) >= 1.0 { self.locked.saturating_add(1) } else { 0 };
 
         let (mut dx, mut dy) = if c.drag != (0.0, 0.0) {
             // touch: 1:1 with the finger, never faster than the ship can fly
@@ -332,6 +336,21 @@ mod tests {
             p.step(&held((0.0, 0.0)), &t);
         }
         assert_eq!(p.bank, 0);
+    }
+
+    #[test]
+    fn the_blades_lock_when_the_blend_finishes_and_part_when_it_drops() {
+        let t = Tuning::default();
+        let mut p = Player::new();
+        let focused = Controls { focus: true, ..Default::default() };
+        for i in 1..=t.focus_blend {
+            p.step(&focused, &t);
+            assert_eq!(p.locked, (i == t.focus_blend) as u32, "frame {i}");
+        }
+        p.step(&focused, &t);
+        assert_eq!(p.locked, 2);
+        p.step(&Controls::default(), &t);
+        assert_eq!(p.locked, 0, "parting the moment focus is let go");
     }
 
     #[test]

@@ -82,10 +82,14 @@ enemy bullets (big, slow ones below small, fast ones) → HUD.
 - All art is generated in code at startup, like Shinjuku. A debug key exports every sprite sheet as PNG so you can paint over it in Aseprite; a PNG placed back in `art/` replaces the coded version at build time.
 
 ### The Pilgrim
-Rebuilt pixel by pixel from your sheet at about 28–32 × 36–40 px (final size set in Sprint 1 so bullets around the ship stay readable).
-Gothic spires, the cross on the spine, red reactor dots down the center, red/teal wingtip lights, a teal engine plume.
-- From your sheet: idle (4 frames), thrust (4), fire (4), hit flash (4), destroy (6), the twin red bolt (4).
-- Added: bank left and right (2 frames each) and a focus pose with the wing pods tucked in.
+**The split sword** (v0.7.1, from [your sheet](docs/reference/Split-sword%20starship_%20flight%20to%20laser.png)), about 31 × 44 px, bone white like Stage 1's enemies:
+- **Flight form:** two blades, each with a teal channel and a red heart, an antenna on each bevelled top, a crossbar with an engine nacelle at each end, and a capsule below on struts.
+- **Laser form:** focus closes the blades into one sword over the focus blend. The antennas fold, the nacelles tuck in, the channels merge into one core, and the beam fires from the tip.
+- **Hitbox:** in the gap between the blades' red hearts (on the single heart in the laser form).
+- **Animations:**
+  - from your first sheet: idle (4 frames), thrust (4), fire (4), hit flash (4), destroy (6), the twin red bolt (4);
+  - added: bank left and right (2 frames each) and the 5 frames from flight to laser.
+- The first design (gothic spires, the cross on the spine, wing pods that trailed the hull; 30 × 34 px, sized in Sprint 1 so bullets around the ship stay readable) flew from v0.1 to v0.7.0.
 
 ### Explosions and the RGB effect
 - **Chromatic aberration** in the post shader sits near zero, spikes with each explosion (scaled by its size and distance), and fades in about 0.3 s.
@@ -110,7 +114,7 @@ a version stamp bottom-left (`V0.1 // PILGRIM`) and a tagline bottom-right.
 - No inertia. Normalized diagonals. The same speed on both axes.
 - Focus means slower movement plus a concentrated beam, with the speed change blended over a few frames.
 - The hitbox sits exactly in the center of the ship and shows while focused.
-- Smooth movement comes from visuals: banking matched to speed, afterimages, trails, wing pods that lag slightly.
+- Smooth movement comes from visuals: banking matched to speed, afterimages, trails, the blades closing for focus.
 
 **Shooting**
 - Player shots are fast, long, dense and a little messy. Big shot hitboxes, big enemy hurtboxes, low emitters, so you can hit an enemy you're sitting right under.
@@ -224,7 +228,7 @@ F6 skip to the next section · F7 next sandbox pattern · F8 performance overlay
 | Move speed | 4.0 px/frame (240 px/s) | crosses the playfield in about 1.1 s |
 | Focus speed | 0.55× (2.2 px/frame) | Boghog calls ⅔ a good middle ground; A/B test 0.5 / 0.55 / 0.67 in Sprint 1 |
 | Focus blend | 5 frames | |
-| Hitbox | 2 px radius, centered on the cross | |
+| Hitbox | 2 px radius, between the blades' red hearts | on the heart in the laser form |
 | Graze radius | 14 px | |
 | Wide shot | twin center bolts + angled pod streams, every 3 frames, 14 px/frame | |
 | Focus beam | 12 px wide, about 1.6× the wide shot's single-target damage | plus an aura, 28 px radius |

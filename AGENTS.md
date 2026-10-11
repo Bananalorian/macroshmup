@@ -30,7 +30,7 @@ The toolchain is pinned in `rust-toolchain.toml` and CI uses the same version. D
 
 ## Design references
 - [Boghog's bullet hell shmup 101](https://shmups.wiki/library/Boghog%27s_bullet_hell_shmup_101) is the design bible. `SPRINTS.md` §3 condenses it; follow it unless Jason says otherwise.
-- Jason's reference art lives in `docs/reference/`: the PILGRIM sprite sheet (the ship, its animations, the palette) and the black hole image (background, mood, the RGB streaks). Match them. The palette tokens are in `SPRINTS.md` §2.
+- Jason's reference art lives in `docs/reference/`: the PILGRIM sprite sheet (the first ship, its animations, the palette), the split-sword sheet (the Pilgrim since v0.7.1: its flight and laser forms), the black hole image (background, mood, the RGB streaks), and the enemy and boss references. Match them. The palette tokens are in `SPRINTS.md` §2.
 - Code to reuse from Shinjuku: `synth.rs`, `audio.rs`, `input.rs`, `pad.rs`, `storage.rs`, `font.rs`, `build_web.py`, `web/template.html`, `.github/`. The bomb is Shinjuku's grenade blast scaled up: `World::explode`, the post shader's `Shock` ring, and `synth::explosion` (the grenade uses the light variant; the bomb gets the heavy one).
 
 ## Definition of done (every sprint)

@@ -15,71 +15,71 @@ use crate::render::scene;
 use crate::render::ship::{self, Pose};
 use crate::render::{PostParams, Renderer};
 use crate::sim::World;
-use crate::tune::{BUMP_FLASH, HOLE_X, HOLE_Y, POD_X, POD_X_FOCUS, STAGE_FRAMES};
+use crate::tune::{BUMP_FLASH, HOLE_X, HOLE_Y, STAGE_FRAMES};
 use macroquad::prelude::*;
 
-const SHEET: (f32, f32) = (420.0, 312.0);
+const SHEET: (f32, f32) = (440.0, 344.0);
 const SHEET_SCALE: u32 = 3;
 
-/// Draw the ship's animation sheet, laid out like Jason's reference sheet.
+/// Draw the ship's animation sheet, laid out like Jason's reference sheets.
 fn draw_sheet(a: &Atlas) {
     let label = |s: &str, x: i32, y: i32| text(a, s, x, y, 1, 2, CREAM);
     text(a, "PROTAGONIST SHIP", 10, 8, 1, 2, CREAM);
-    text(a, "TYPE-07  \"PILGRIM\"  //  BUILT IN CODE", 10, 18, 1, 2, ASH);
-    a.fill(212, 36, 1, SHEET.1 as i32 - 50, DUSK);
-    let base = Pose { pods: [(-POD_X, 0.0), (POD_X, 0.0)], ..Default::default() };
-    let row = |y: i32| y + 28;
-    let col = |x0: i32, i: i32| x0 + 20 + i * 46;
-    let shot = Color::new(1.0, 1.0, 1.0, 0.6);
+    text(a, "TYPE-07  \"PILGRIM\"  //  SPLIT SWORD  //  BUILT IN CODE", 10, 18, 1, 2, ASH);
+    a.fill(222, 36, 1, SHEET.1 as i32 - 50, DUSK);
+    let base = Pose::default();
+    let laser = Pose { form: 1.0, ..base };
+    let row = |y: i32| y + 30;
+    let col = |x0: i32, i: i32| x0 + 24 + i * 50;
 
     label("IDLE (4 FRAMES)", 10, 38);
     for i in 0..4 {
         ship::draw(a, col(10, i), row(38), &Pose { frame: i as u64 * 23 + 4, ..base });
     }
-    label("THRUST (4 FRAMES)", 10, 104);
+    label("THRUST (4 FRAMES)", 10, 110);
     for i in 0..4 {
-        ship::draw(a, col(10, i), row(104), &Pose { thrust: true, frame: i as u64 * 3, ..base });
+        ship::draw(a, col(10, i), row(110), &Pose { thrust: true, frame: i as u64 * 3, ..base });
     }
-    label("FIRE (4 FRAMES)", 10, 170);
+    label("FIRE (4 FRAMES)", 10, 182);
     for i in 0..4 {
-        let (x, y) = (col(10, i), row(170) + 6);
-        for side in [-4, 4] {
-            a.blit(a.r.ship.bolt[i as usize], x + side - 1, y - 30 - i * 2, 1, shot);
-        }
-        ship::draw(a, x, y, &Pose { fire_t: i as u32 + 1, frame: i as u64, ..base });
+        ship::draw(a, col(10, i), row(182) + 4, &Pose { fire_t: i as u32 + 1, frame: i as u64 * 2, ..base });
     }
-    label("HIT FLASH (4 FRAMES)", 10, 236);
+    label("HIT FLASH (4 FRAMES)", 10, 268);
     for i in 0..4 {
         let hit_t = BUMP_FLASH - (i as u32 * BUMP_FLASH / 4);
-        ship::draw(a, col(10, i), row(236), &Pose { hit_t, frame: 4, ..base });
+        ship::draw(a, col(10, i), row(268), &Pose { hit_t, frame: 4, ..base });
     }
 
-    label("BANK (L2 L1 R1 R2)", 222, 38);
+    label("BANK (L2 L1 R1 R2)", 232, 38);
     for (i, b) in [-2i8, -1, 1, 2].into_iter().enumerate() {
-        ship::draw(a, col(222, i as i32) - 6, row(38), &Pose { bank: b, frame: 4, ..base });
+        ship::draw(a, 232 + 20 + i as i32 * 46, row(38), &Pose { bank: b, frame: 4, ..base });
     }
-    label("FOCUS + BEAM", 222, 104);
-    let tucked = Pose { pods: [(-POD_X_FOCUS, 0.0), (POD_X_FOCUS, 0.0)], frame: 4, ..base };
-    let (fx, fy) = (col(222, 0), row(104) + 4);
-    ship::draw(a, fx, fy, &tucked);
+    label("FLIGHT TO LASER (5 FRAMES)", 232, 110);
+    for i in 0..ship::FORMS {
+        let form = i as f32 / (ship::FORMS - 1) as f32;
+        let locked = if i == ship::FORMS - 1 { 3 } else { 0 };
+        ship::draw(a, 232 + 16 + i as i32 * 40, row(110), &Pose { form, locked, frame: 4, ..base });
+    }
+    label("LASER FORM  //  BEAM", 232, 182);
+    let (fx, fy) = (232 + 20, row(182) + 14);
+    ship::draw(a, fx, fy, &Pose { frame: 4, ..laser });
     ship::draw_hitbox(a, fx, fy, 1.0, 0);
-    let (bx, by) = (col(222, 2), row(104) + 4);
-    a.fill(bx - 6, by - 32, 12, 21, Color { a: 0.18, ..SIGNAL });
-    a.fill(bx - 4, by - 32, 8, 21, Color { a: 0.34, ..SIGNAL });
-    a.fill(bx - 1, by - 32, 2, 21, Color { a: 0.55, ..CREAM });
-    ship::draw(a, bx, by, &Pose { beaming: true, fire_t: 2, ..tucked });
+    let (bx, by) = (232 + 66, row(182) + 14);
+    scene::draw_beam(a, 0, 0, bx as f32, 191.0, (by + ship::TIP) as f32, 6);
+    ship::draw(a, bx, by, &Pose { beaming: true, fire_t: 2, frame: 6, ..laser });
     ship::draw_hitbox(a, bx, by, 1.0, 9);
-    label("PROJECTILE (4 FRAMES)", 222, 170);
+    let (kx, ky) = (232 + 112, row(182) + 14);
+    ship::draw(a, kx, ky, &Pose { bank: 2, frame: 4, ..laser });
+    let shot = Color::new(1.0, 1.0, 1.0, 0.6);
+    label("SHOTS  //  AFTERIMAGES", 232, 268);
     for i in 0..4 {
-        a.blit(a.r.ship.bolt[i], col(222, i as i32) - 6, row(170) - 12, 1, shot);
-        a.blit(a.r.ship.bolt[i], col(222, i as i32) + 2, row(170) - 16, 2, shot);
+        a.blit(a.r.ship.bolt[i], 232 + 8 + i as i32 * 10, 282, 1, shot);
     }
-    label("POD SHOT  //  AFTERIMAGES", 222, 236);
     for i in 0..2 {
-        a.blit(a.r.ship.pod_shot[i], col(222, 0) - 8 + i as i32 * 8, row(236) - 8, 1, Color::new(1.0, 1.0, 1.0, 0.45));
+        a.blit(a.r.ship.pod_shot[i], 232 + 50 + i as i32 * 6, 284, 1, Color::new(1.0, 1.0, 1.0, 0.45));
     }
-    let (ax, ay) = (col(222, 2), row(236));
-    ship::draw_afterimages(a, 2, &[(ax - 9, ay + 3), (ax - 18, ay + 6), (ax - 27, ay + 9)]);
+    let (ax, ay) = (232 + 150, row(268));
+    ship::draw_afterimages(a, 0.0, 2, &[(ax - 9, ay + 3), (ax - 18, ay + 6), (ax - 27, ay + 9)]);
     ship::draw(a, ax, ay, &Pose { bank: 2, frame: 4, ..base });
     a.fill(10, SHEET.1 as i32 - 13, SHEET.0 as i32 - 20, 1, DUSK);
     text(a, &crate::render::hud::version_stamp(), 10, SHEET.1 as i32 - 9, 1, 2, SLATE);

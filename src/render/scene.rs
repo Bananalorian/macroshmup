@@ -5,7 +5,7 @@
 use super::Renderer;
 use super::art::Atlas;
 use super::layout::Layout;
-use super::palette::{ASH, CREAM, DUSK, SIGNAL, SLATE, TEAL};
+use super::palette::{ASH, CREAM, DUSK, SIGNAL, SLATE, TEAL, TEAL_HOT};
 use super::ship::{self, Pose};
 use crate::sim::{BombBlast, Life, World};
 use crate::sim::geom::Rect as SimRect;
@@ -145,24 +145,26 @@ pub fn draw(r: &Renderer, lay: &Layout, w: &World, hitboxes: bool, wrecks: &[(f3
     let (px, py) = (ox + snap(p.x), oy + snap(p.y));
     let shown = matches!(w.life, Life::Alive | Life::Struck { .. } | Life::Respawning { .. });
     if let Some(b) = w.beam {
-        draw_beam(a, ox, oy, b.x, b.top, p.y - 11.0, w.frame);
+        draw_beam(a, ox, oy, b.x, b.top, p.y + ship::TIP as f32, w.frame);
         draw_aura(a, px, py, w.frame);
     }
 
     // afterimages at full speed
     let moving = (p.dx * p.dx + p.dy * p.dy).sqrt();
+    let form = p.blend(&w.tuning);
     if shown && !p.focused() && moving >= w.tuning.speed * AFTERIMAGE_MIN {
         let at = [2, 4, 6].map(|k| (ox + snap(p.history[k].0), oy + snap(p.history[k].1)));
-        ship::draw_afterimages(a, p.bank, &at);
+        ship::draw_afterimages(a, form, p.bank, &at);
     }
 
     let pose = Pose {
         bank: p.bank,
-        pods: p.pods,
+        form,
         thrust: p.thrust(),
         fire_t: p.fire_t,
         beaming: p.beaming,
         hit_t: p.hit_t,
+        locked: p.locked,
         frame: w.frame,
     };
     if shown {
@@ -255,8 +257,7 @@ fn draw_shields(a: &Atlas, w: &World, x: i32, y: i32) {
         }
         _ if w.invuln > 0 && w.invuln_blink => {
             if (f / 3) % 2 == 0 {
-                let hull = &a.r.ship.body[2];
-                a.blit(hull.sil, x - hull.ax, y - hull.ay, 1, Color { a: 0.55, ..TEAL });
+                ship::draw_silhouette(a, w.player.blend(&w.tuning), 0, x, y, Color { a: 0.55, ..TEAL });
             }
         }
         _ if w.invuln > 0 => ring(20.0 + (f % 8) as f32 * 0.25, 24, Color { a: 0.3, ..TEAL }, 0.05),
@@ -288,8 +289,9 @@ fn draw_bomb_ring(a: &Atlas, ox: i32, oy: i32, bx: f32, by: f32, t: u32, frame: 
     }
 }
 
-/// The focus beam: a translucent red column with a cream core, crawling upward.
-fn draw_beam(a: &Atlas, ox: i32, oy: i32, x: f32, top: f32, nose: f32, frame: u64) {
+/// The focus beam, the laser from the sword's tip: a translucent teal column with
+/// a hot core, bright dashes crawling up it.
+pub fn draw_beam(a: &Atlas, ox: i32, oy: i32, x: f32, top: f32, nose: f32, frame: u64) {
     let (y0, y1) = (top.max(0.0), nose);
     if y1 <= y0 {
         return;
@@ -298,22 +300,22 @@ fn draw_beam(a: &Atlas, ox: i32, oy: i32, x: f32, top: f32, nose: f32, frame: u6
     let (top_px, h) = (oy + snap(y0), snap(y1 - y0));
     let wob = ((frame / 2) % 3) as i32 - 1; // the width breathes a pixel
     let half = (BEAM_W * 0.5) as i32;
-    a.fill(cx - half - wob.max(0), top_px, 2 * (half + wob.max(0)), h, Color { a: 0.18, ..SIGNAL });
-    a.fill(cx - half + 2, top_px, 2 * half - 4, h, Color { a: 0.34, ..SIGNAL });
-    a.fill(cx - 1 - (wob == 1) as i32, top_px, 2 + 2 * (wob == 1) as i32, h, Color { a: 0.55, ..CREAM });
+    a.fill(cx - half - wob.max(0), top_px, 2 * (half + wob.max(0)), h, Color { a: 0.16, ..TEAL });
+    a.fill(cx - half + 2, top_px, 2 * half - 4, h, Color { a: 0.3, ..TEAL });
+    a.fill(cx - 1 - (wob == 1) as i32, top_px, 2 + 2 * (wob == 1) as i32, h, Color { a: 0.6, ..TEAL_HOT });
     // bright dashes running up the beam
     let step = 14;
     let off = (frame as i32 * 7) % step;
     let mut y = top_px + h - off;
     while y > top_px {
-        a.fill(cx - 3, y, 6, 2, Color { a: 0.3, ..CREAM });
+        a.fill(cx - 3, y, 6, 2, Color { a: 0.3, ..TEAL_HOT });
         y -= step;
     }
     // where it lands
     if top > 0.0 {
         let flare = if frame % 4 < 2 { 0.6 } else { 0.4 };
-        a.blit(a.r.sparkle, cx - 3, top_px - 3, 1, Color { a: flare, ..CREAM });
-        a.fill(cx - half, top_px - 1, 2 * half, 2, Color { a: 0.4, ..SIGNAL });
+        a.blit(a.r.sparkle, cx - 3, top_px - 3, 1, Color { a: flare, ..TEAL_HOT });
+        a.fill(cx - half, top_px - 1, 2 * half, 2, Color { a: 0.4, ..TEAL });
     }
 }
 

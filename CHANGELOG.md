@@ -3,6 +3,83 @@
 Every version is one build sprint. Newest first. Versions are tagged in git, and
 each tag publishes a GitHub Release with downloads.
 
+## [0.7.1] - 2026-10-12 - Split sword
+
+### Changed
+- **The Pilgrim is redesigned from your split-sword sheet**
+  ([your reference](docs/reference/Split-sword%20starship_%20flight%20to%20laser.png)),
+  drawn in code in the bone white of Stage 1 ([its sheet](docs/screenshots/pilgrim-sheet.png)).
+  It flies and fights exactly as before; only the look has changed.
+  - **Flight form:** two stone blades side by side, each with a teal-lit channel and
+    a red heart. An antenna stands on each blade's bevelled top. Under the blades, a
+    crossbar carries an engine nacelle at each end, and a capsule hangs below on
+    struts. All three engines burn teal.
+  - **Laser form:** when you focus, the blades close into one sword over the
+    5-frame focus blend ([in play](docs/screenshots/pilgrim-forms.png)):
+    - they slide together and slim down;
+    - the antennas fold away and the nacelles tuck in;
+    - the two channels merge into one core.
+
+    As they lock, a glint runs down the seam, a sparkle flares at the tip and sparks
+    flick off the crossbar. The beam fires from the sword's tip.
+  - **The hitbox hasn't moved:** the ship is drawn around it. In the flight form it
+    sits in the gap between the blades, level with their red hearts. In the laser
+    form the single heart sits on it, under the focus dot.
+  - The ship is about 31 × 44 px, taller than the old one (30 × 34), because the
+    sword reaches higher above the hitbox.
+- **The focus beam is teal** to match your laser form: a translucent teal column
+  with a hot core and bright dashes running up it. It's as wide as before, which is
+  the width it hits.
+- The wide shot's red bolts now leave from the blade tips, and its angled pod
+  streams from the antennas. The shots themselves haven't changed.
+- The old wing pods trailed a little behind the hull. They're gone, because the
+  blades are part of one rigid ship.
+- It still rolls as it banks: the dipping side foreshortens and darkens. Only plain
+  stone drops out of the roll, so every light, window and channel stays.
+- It shatters into its new pixels when it dies. The HUD's life icons are the split
+  sword in miniature.
+- The engine trails stream from the two nacelles and the capsule.
+- The afterimages at full speed are fainter: at the old strength the broader
+  silhouette piled up into a wall of teal.
+
+### Added
+- The ship's animation sheet (`PG_SHEET=1` or F9) now shows the new ship:
+  - idle, thrust, fire, hit flash and bank;
+  - the five frames from flight form to laser form;
+  - the laser form with its beam.
+- A review sheet of every frame, each form at each roll, 6x:
+  `cargo test --release pilgrim_sheet -- --ignored` writes
+  `shots/pilgrim_frames.png`.
+
+### Checked
+- **It plays the same.** The only change to the simulation is a counter for the
+  lock's glint, which only the drawing reads. With `PG_SIM=50`, the bot clears the
+  stage in 100% of runs with no misses, and destroys JAWSTHIC in every one, as in
+  v0.7.0.
+- **Tests prove:**
+  - in the flight form, the blades are split from tip to foot, with the hitbox in
+    the gap between their hearts;
+  - in the laser form, they're one blade, with its heart on the hitbox and a
+    one-pixel point straight above it;
+  - frame by frame, the blades only close, slim down and lose their antennas, the
+    channels converge into one, and the nacelles tuck in;
+  - the blades lock on the frame the focus blend finishes, and part on the frame
+    you let go;
+  - rolling keeps the hitbox's column and every kind of light, and only the
+    dipping side narrows;
+  - every frame stays inside the ship's 85% value budget, so bullet cores are still
+    the brightest pixels;
+  - it shatters into every pixel of its flight form;
+  - the lock throws two teal sparks each way and a sparkle at the tip, all gone
+    within 10 frames;
+  - nothing in the sprite atlas overlaps. The atlas is now 1024 × 512, to make
+    room for the ship's 25 frames.
+- **Screenshots:** every screenshot of the game is retaken with the new ship, and
+  [the transformation in play](docs/screenshots/pilgrim-forms.png) is new. Two keep
+  the old ship: v0.5's comparison with Shinjuku's grenade, and the retired Cathedral
+  mock-up.
+- Native and web builds are warning-free, and all 214 tests pass.
+
 ## [0.7.0] - 2026-10-11 - JAWSTHIC
 
 ### Added

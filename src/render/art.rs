@@ -6,7 +6,7 @@ use super::palette::{ASH, CORE, DUSK, INK, SLATE, SOOT};
 use super::ship::{self, ShipArt};
 use macroquad::prelude::*;
 
-const W: u16 = 512;
+const W: u16 = 1024;
 const H: u16 = 512;
 
 /// Packs images into an atlas in rows, with a pixel of space around each.
@@ -383,7 +383,8 @@ pub fn build() -> (Image, Rects) {
         discs[i] = p.add(&solid);
         stipple[i] = p.add(&dots);
     }
-    let life_icon = p.add(&grid_image(&rows(&["...C...", "..CAC..", ".CACAC.", "CACACAC", "CAACAAC", ".CA.AC.", "..S.S.."]), icon));
+    // the split sword in miniature: two blades, the crossbar and nacelles, the capsule
+    let life_icon = p.add(&grid_image(&rows(&["..C.C..", ".CA.AC.", ".CA.AC.", ".CA.AC.", "CAA.AAC", "S..C..S", "...A..."]), icon));
     let bomb_icon = p.add(&grid_image(&rows(&["..CCC..", ".C...C.", "C..A..C", "C.AAA.C", "C..A..C", ".C...C.", "..CCC.."]), icon));
     let ims = dummy_images();
     let mut dummy = [Rect::default(); 3];
@@ -421,17 +422,6 @@ impl Atlas {
                 dest_size: Some(vec2(src.w * scale as f32, src.h * scale as f32)),
                 ..Default::default()
             },
-        );
-    }
-
-    /// Draw a region mirrored left to right.
-    pub fn blit_flip(&self, src: Rect, x: i32, y: i32, tint: Color) {
-        draw_texture_ex(
-            &self.tex,
-            x as f32,
-            y as f32,
-            tint,
-            DrawTextureParams { source: Some(src), flip_x: true, ..Default::default() },
         );
     }
 
@@ -546,3 +536,4 @@ mod tests {
         }
     }
 }
+

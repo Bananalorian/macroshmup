@@ -30,6 +30,8 @@ pub const DUSK: Color = hex(0x363531);
 pub const SIGNAL: Color = hex(0xF83C30);
 /// Teal: the Pilgrim's engines and trails, shards, graze sparks, the hitbox dot.
 pub const TEAL: Color = hex(0x32DFB3);
+/// Teal at full charge: the laser's core, the Pilgrim's channels as it fires.
+pub const TEAL_HOT: Color = hex(0x8AF2D6);
 
 /// Enemy bullet cores: CREAM pushed to the brightest pixels on screen.
 pub const CORE: Color = hex(0xF4F1E6);
@@ -43,7 +45,7 @@ pub const INK: Color = hex(0x000000);
 pub fn hue_rims(h: Hue) -> (Color, Color) {
     match h {
         Hue::Red => (SIGNAL, EMBER),
-        Hue::Teal => (TEAL, hex(0x8AF2D6)),
+        Hue::Teal => (TEAL, TEAL_HOT),
         Hue::Violet => (hex(0xA65CFF), hex(0xCB98FF)),
         Hue::Amber => (hex(0xFFA62B), hex(0xFFD27A)),
         Hue::Blue => (hex(0x3F7DFF), hex(0x8DB4FF)),
