@@ -584,6 +584,11 @@ async fn amain() {
         sheet::export_fx(&mut renderer);
         return;
     }
+    #[cfg(not(target_arch = "wasm32"))]
+    if hooks.mockup {
+        sheet::export_mockup(&mut renderer);
+        return;
+    }
 
     // a frame to look at while the sounds are synthesized; it also draws enough to
     // create every batch buffer up front, so no explosion ever waits on one

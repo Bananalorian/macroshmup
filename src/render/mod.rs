@@ -8,6 +8,8 @@
 pub mod art;
 pub mod bg;
 pub mod bullets;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod cathedral;
 pub mod explode;
 pub mod font;
 pub mod foes;

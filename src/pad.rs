@@ -1,7 +1,9 @@
-//! Gamepads, ported from Last Train to Shinjuku. Desktop builds read controllers
-//! through gilrs; the web build reads the browser Gamepad API through a tiny JS
-//! plugin in web/template.html. Both are normalized to the W3C "standard" layout
-//! (Xbox naming below). The game never sends a controller anything: no rumble (it
+//! Gamepads, ported from Last Train to Shinjuku. On Windows the game reads Xbox-style
+//! controllers through XInput, the moment each frame needs them, like most PC games
+//! (gilrs's Windows.Gaming.Input path lagged a Bluetooth controller that every other
+//! game read fine). Linux and macOS read controllers through gilrs; the web build
+//! reads the browser Gamepad API through a tiny JS plugin in web/template.html. All
+//! are normalized to the W3C "standard" layout (Xbox naming below). The game never sends a controller anything: no rumble (it
 //! lagged a Bluetooth controller's input; it may come back later as its own feature).
 
 use macroquad::prelude::*;
@@ -132,7 +134,144 @@ mod web {
     }
 }
 
-#[cfg(not(target_arch = "wasm32"))]
+/// Windows: XInput, read on the spot. Connected controllers are read every frame (a
+/// cached state, about 10 microseconds); empty slots are checked once a second,
+/// since asking an empty slot is slow.
+#[cfg(windows)]
+mod native {
+    use super::{PadState, NB};
+
+    #[repr(C)]
+    #[derive(Clone, Copy, Default)]
+    struct Gamepad {
+        buttons: u16,
+        lt: u8,
+        rt: u8,
+        lx: i16,
+        ly: i16,
+        rx: i16,
+        ry: i16,
+    }
+
+    #[repr(C)]
+    #[derive(Clone, Copy, Default)]
+    struct State {
+        packet: u32,
+        pad: Gamepad,
+    }
+
+    #[link(name = "xinput1_4", kind = "raw-dylib")]
+    unsafe extern "system" {
+        fn XInputGetState(user: u32, state: *mut State) -> u32;
+    }
+
+    /// XInput's button bits, in the standard layout's order (the guide button isn't in XInput).
+    const MAP: [(u16, usize); 14] = [
+        (0x1000, 0),  // A
+        (0x2000, 1),  // B
+        (0x4000, 2),  // X
+        (0x8000, 3),  // Y
+        (0x0100, 4),  // LB
+        (0x0200, 5),  // RB
+        (0x0020, 8),  // back
+        (0x0010, 9),  // start
+        (0x0040, 10), // left stick
+        (0x0080, 11), // right stick
+        (0x0001, 12), // d-pad up
+        (0x0002, 13), // down
+        (0x0004, 14), // left
+        (0x0008, 15), // right
+    ];
+
+    pub struct Native {
+        connected: [bool; 4],
+        active: usize,
+        frame: u64,
+    }
+
+    fn axis(v: i16) -> f32 {
+        (v as f32 / 32767.0).clamp(-1.0, 1.0)
+    }
+
+    /// One controller's state in the standard layout (y pointing down).
+    fn standard(p: &Gamepad) -> PadState {
+        let mut s = PadState { connected: true, ..Default::default() };
+        s.axes = [axis(p.lx), -axis(p.ly), axis(p.rx), -axis(p.ry)];
+        for (bit, i) in MAP {
+            s.buttons[i] = if p.buttons & bit != 0 { 1.0 } else { 0.0 };
+        }
+        s.buttons[6] = p.lt as f32 / 255.0;
+        s.buttons[7] = p.rt as f32 / 255.0;
+        debug_assert_eq!(s.buttons.len(), NB);
+        s
+    }
+
+    fn busy(s: &PadState) -> bool {
+        s.buttons.iter().any(|b| *b > 0.5) || s.axes[0].hypot(s.axes[1]) > 0.3
+    }
+
+    impl Native {
+        pub fn new() -> Self {
+            Native { connected: [false; 4], active: 0, frame: 0 }
+        }
+
+        pub fn read(&mut self) -> PadState {
+            let recheck = self.frame % 60 == 0;
+            self.frame += 1;
+            let mut states: [Option<PadState>; 4] = [None; 4];
+            for slot in 0..4 {
+                if !self.connected[slot] && !recheck {
+                    continue;
+                }
+                let mut st = State::default();
+                // SAFETY: a plain call into xinput1_4.dll with a valid out-pointer
+                let ok = unsafe { XInputGetState(slot as u32, &mut st) } == 0;
+                self.connected[slot] = ok;
+                if ok {
+                    states[slot] = Some(standard(&st.pad));
+                }
+            }
+            // the controller in use: whichever is being touched, else the last one used
+            if let Some(i) = (0..4).find(|&i| states[i].as_ref().is_some_and(busy)) {
+                self.active = i;
+            } else if states[self.active].is_none() {
+                if let Some(i) = (0..4).find(|&i| states[i].is_some()) {
+                    self.active = i;
+                }
+            }
+            states[self.active].unwrap_or_default()
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn xinput_maps_to_the_standard_layout() {
+            let p = Gamepad { buttons: 0x1000 | 0x0200 | 0x0001, lt: 255, rt: 0, lx: 32767, ly: 32767, rx: 0, ry: -32768 };
+            let s = standard(&p);
+            assert!(s.connected);
+            assert_eq!((s.buttons[0], s.buttons[5], s.buttons[12], s.buttons[1]), (1.0, 1.0, 1.0, 0.0), "A, RB, d-pad up");
+            assert_eq!((s.buttons[6], s.buttons[7]), (1.0, 0.0), "the triggers are analog");
+            assert_eq!(s.axes[0], 1.0);
+            assert_eq!(s.axes[1], -1.0, "stick up is up the screen (y points down)");
+            assert_eq!(s.axes[3], 1.0);
+        }
+
+        #[test]
+        fn reading_with_or_without_a_controller_never_fails() {
+            let mut n = Native::new();
+            for _ in 0..3 {
+                let s = n.read();
+                assert!(s.axes.iter().all(|a| a.is_finite() && a.abs() <= 1.0));
+            }
+        }
+    }
+}
+
+/// Linux and macOS: gilrs.
+#[cfg(not(any(windows, target_arch = "wasm32")))]
 mod native {
     use super::{PadState, NB};
     use gilrs::{Axis, Button, GamepadId, Gilrs};
@@ -195,8 +334,8 @@ mod native {
 
 #[cfg(test)]
 mod tests {
-    /// Rumble is out for now: nothing may send a controller a motor command, and
-    /// gilrs runs without its force-feedback thread.
+    /// Rumble is out for now: nothing may send a controller a motor command (no
+    /// XInputSetState on Windows), and gilrs runs without its force-feedback thread.
     #[test]
     fn the_game_never_talks_to_a_controllers_motors() {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
@@ -216,7 +355,7 @@ mod tests {
             let src = std::fs::read_to_string(f).unwrap();
             // the game code only (this test names what it bans)
             let code = src.split("#[cfg(test)]").next().unwrap();
-            for banned in ["vibrationActuator", "XInputSetState", "SetVibration", "gilrs::ff", "navigator.vibrate"] {
+            for banned in ["vibrationActuator", "XInputSetState", "SetVibration", "gilrs::ff", "navigator.vibrate", "ff::Effect"] {
                 assert!(!code.contains(banned), "{} uses {banned}", f.display());
             }
         }

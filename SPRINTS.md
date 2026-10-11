@@ -416,7 +416,7 @@ You check: play it. Where is it boring? Where is it unfair?
 ### Sprint 6 — The boss · v0.7.0
 **Goal:** a four-phase boss worth the trip, and a death worth watching.
 
-*Proposal:* **the Cathedral**, a gothic hulk guarding the event horizon. An engraved monochrome hull with red stained-glass seams and a red core that glow brighter as it charges each attack. The Pilgrim keeps teal. Approve this or give your own concept before the sprint starts.
+*Proposal:* **the Cathedral**, a gothic hulk guarding the event horizon ([mock-up](docs/screenshots/cathedral-mockup.png), v0.6.5). An engraved monochrome hull with red stained-glass seams and a red core that glow brighter as it charges each attack. The Pilgrim keeps teal. Approve this or give your own concept before the sprint starts.
 
 Build
 - The boss framework: several parts with their own hurtboxes and HP, a segmented health bar, a phase timer, a phase-break cancel (bullets turn to shards), a short pause between phases. A timeout ends the phase with no bonus.

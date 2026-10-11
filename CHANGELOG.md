@@ -3,6 +3,32 @@
 Every version is one build sprint. Newest first. Versions are tagged in git, and
 each tag publishes a GitHub Release with downloads.
 
+## [0.6.5] - 2026-10-11 - XInput
+
+### Fixed
+- **Controller lag on Windows** (to be confirmed by Jason). His Xbox controller
+  lagged in this game over Bluetooth but not in other games, and not on the
+  keyboard. The desktop build read it through gilrs's Windows.Gaming.Input path:
+  a thread re-scanning every controller every 8 ms. Windows builds now read
+  Xbox-style controllers through XInput, like most PC games: on the spot, every
+  frame, from the driver's latest state (about 10 microseconds a read). Empty slots
+  are checked once a second, since asking an empty slot is slow. Linux and macOS
+  still use gilrs. On Windows, PlayStation controllers now need Steam Input or
+  DS4Windows, as in most PC games.
+
+### Added
+- **A mock-up of the Cathedral**, the boss proposed for Sprint 6
+  ([the mock-up](docs/screenshots/cathedral-mockup.png), or `PG_MOCKUP=1`): in play
+  at the event horizon, at rest, charging (its stained glass and core blaze red),
+  and in phase 2 with its wing turrets. Drawn by the game's own painter in the
+  bone white of Stage 1. It isn't in the game until Jason approves it.
+
+### Checked
+- Tests prove XInput's buttons, triggers and sticks map to the standard layout (stick
+  up is up the screen), and that reading with or without a controller never fails.
+  The guard against rumble still passes.
+- Not checked on the hardware: the controller was asleep when this was built.
+
 ## [0.6.4] - 2026-10-11 - Colors
 
 ### Changed

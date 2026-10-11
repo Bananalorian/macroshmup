@@ -3,6 +3,17 @@
 Session notes for Claude Code: what shipped, tuning that changed, known issues, what's next.
 Newest first.
 
+## v0.6.5 XInput, and the Cathedral mock-up - 2026-10-11
+
+Jason: lag happens only with the controller (keyboard fine); other games are fine with it
+over Bluetooth. So: Windows reads Xbox controllers via XInput (raw-dylib xinput1_4,
+`pad::native` cfg(windows): connected slots every frame, empty slots once a second, map to
+the standard layout); gilrs only on Linux/macOS (Cargo.toml target cfg). Not yet confirmed
+on hardware (controller asleep). Browser version still depends on the browser's gamepad code.
+He asked for a Cathedral mock-up: `render/cathedral.rs` (native-only for now; shapes with the
+foes.rs painter, which is now pub(crate), new STAINED material) and `sheet::export_mockup`
+(PG_MOCKUP=1) -> docs/screenshots/cathedral-mockup.png. Waiting on his approval for Sprint 6.
+
 ## v0.6.4 Colors (after v0.6.3 feedback) - 2026-10-11
 
 **Jason's calls:** "I don't want every bullet red; should be some teal and other colors"

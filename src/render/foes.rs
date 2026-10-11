@@ -76,11 +76,12 @@ impl FoeArt {
 
 /// Bone white, dark to light: grit, dark, shade, mid, highlight. The highlight is as
 /// bright as cream, so enemy bullet cores stay the brightest pixels on screen.
-const BONE: [Color; 5] = [rgb(0x3E3B33), rgb(0x6E6858), rgb(0x9D9682), rgb(0xC4BDA8), rgb(0xDDD6C2)];
-const OUTLINE: Color = rgb(0x121210);
+pub(crate) const BONE: [Color; 5] = [rgb(0x3E3B33), rgb(0x6E6858), rgb(0x9D9682), rgb(0xC4BDA8), rgb(0xDDD6C2)];
+pub(crate) const OUTLINE: Color = rgb(0x121210);
 const VOIDISH: Color = rgb(0x0B0B0A);
 const RECESS: Color = rgb(0x1E1D19);
 const EMBER_DIM: Color = rgb(0x6A1C17);
+const GLASS_DARK: Color = rgb(0x45120E);
 
 const fn rgb(c: u32) -> Color {
     Color::new(((c >> 16) & 0xFF) as f32 / 255.0, ((c >> 8) & 0xFF) as f32 / 255.0, (c & 0xFF) as f32 / 255.0, 1.0)
@@ -88,30 +89,32 @@ const fn rgb(c: u32) -> Color {
 
 // ---------------------------------------------------------------- shapes and materials
 
-const EMPTY: u8 = 0;
+pub(crate) const EMPTY: u8 = 0;
 /// Bone plating, facing the light.
-const PLATE: u8 = 1;
+pub(crate) const PLATE: u8 = 1;
 /// A dark recess.
-const RECESSED: u8 = 2;
+pub(crate) const RECESSED: u8 = 2;
 /// A black slot or lens.
-const SLOT: u8 = 3;
+pub(crate) const SLOT: u8 = 3;
 /// A weak point's red core (it glows when drawn).
-const CORE: u8 = 4;
+pub(crate) const CORE: u8 = 4;
 /// Plating turned away from the light.
-const SIDE: u8 = 5;
+pub(crate) const SIDE: u8 = 5;
 /// Vent lines.
-const GRILLE: u8 = 6;
+pub(crate) const GRILLE: u8 = 6;
 /// A pit in the plating.
-const CRATER: u8 = 7;
+pub(crate) const CRATER: u8 = 7;
 /// A red running light.
-const LIGHT: u8 = 8;
+pub(crate) const LIGHT: u8 = 8;
 /// The derelict's iris: aperture blades round its core.
-const IRIS: u8 = 9;
+pub(crate) const IRIS: u8 = 9;
+/// Stained glass: dark red panes in black leading (it blazes when its owner charges).
+pub(crate) const STAINED: u8 = 10;
 
 /// One shape, in pixels from the sprite's center pixel (y down); later shapes paint
 /// over earlier ones. `true` mirrors it left-right as well.
 #[derive(Clone)]
-enum P {
+pub(crate) enum P {
     Poly(Vec<(f32, f32)>, u8, bool),
     /// x0, y0, x1, y1, inclusive.
     Rect(f32, f32, f32, f32, u8, bool),
@@ -120,7 +123,7 @@ enum P {
     Ring(f32, f32, f32, f32, u8, bool),
 }
 
-fn poly(pts: &[(f32, f32)], m: u8, mirror: bool) -> P {
+pub(crate) fn poly(pts: &[(f32, f32)], m: u8, mirror: bool) -> P {
     P::Poly(pts.to_vec(), m, mirror)
 }
 
@@ -155,7 +158,7 @@ impl P {
 }
 
 /// The material of every pixel of a `w` x `h` sprite (odd sizes, so it has a center pixel).
-fn raster(w: i32, h: i32, shapes: &[P]) -> Vec<u8> {
+pub(crate) fn raster(w: i32, h: i32, shapes: &[P]) -> Vec<u8> {
     let (cx, cy) = (w / 2, h / 2);
     let mut m = vec![EMPTY; (w * h) as usize];
     for y in 0..h {
@@ -183,7 +186,7 @@ fn hash(x: i32, y: i32, seed: u32) -> f32 {
 /// Paint a material map in bone: an ink outline round the silhouette, a bright lip
 /// along each plate's top and left, shade along its bottom and right, faces lighter
 /// near the top, speckled and pitted like moon rock. `iris` is the iris's center.
-fn bone(w: i32, h: i32, m: &[u8], seed: u32, iris: (f32, f32)) -> Image {
+pub(crate) fn bone(w: i32, h: i32, m: &[u8], seed: u32, iris: (f32, f32)) -> Image {
     let mut img = Image::gen_image_color(w as u16, h as u16, Color::new(0.0, 0.0, 0.0, 0.0));
     let at = |x: i32, y: i32| if x < 0 || y < 0 || x >= w || y >= h { EMPTY } else { m[(y * w + x) as usize] };
     let plated = |k: u8| matches!(k, PLATE | SIDE | CRATER);
@@ -241,6 +244,10 @@ fn bone(w: i32, h: i32, m: &[u8], seed: u32, iris: (f32, f32)) -> Image {
                     GRILLE => if y % 2 == 0 { BONE[1] } else { OUTLINE },
                     LIGHT => SIGNAL,
                     CORE => EMBER_DIM,
+                    STAINED => {
+                        // leading wherever the pane meets a different pane of the grid
+                        if (x + y) % 5 == 0 || (x - y).rem_euclid(5) == 0 { OUTLINE } else if speck < 0.4 { GLASS_DARK } else { EMBER_DIM }
+                    }
                     IRIS => {
                         // aperture blades, curving round the core
                         let (dx, dy) = ((x - cx) as f32 - iris.0, (y - cy) as f32 - iris.1);

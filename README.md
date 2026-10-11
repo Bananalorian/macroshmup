@@ -96,6 +96,7 @@ Rust is pinned to 1.91.1 in `rust-toolchain.toml`, the same version CI uses.
 | `PG_PERF=1` | the performance overlay, a line every 30 s in the terminal, and a summary when the game closes |
 | `PG_SHEET=1` | save the ship's animation sheet and the enemy sheet to `./shots/` and quit |
 | `PG_FXSHEET=1` | save every explosion size at 4 moments and the black hole at the start and end of the stage |
+| `PG_MOCKUP=1` | save the boss proposal's mock-up (the Cathedral) to `./shots/` |
 | `PG_BOOM=<0-3>` | set off a small, medium, large or boss blast 30 frames in |
 | `PG_INVINCIBLE=1` | bullets can't hurt you |
 | `PG_BOMB=<frame>` / `PG_DIE=<frame>` | bomb, or get hit, on that frame |

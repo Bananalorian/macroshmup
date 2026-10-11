@@ -173,6 +173,107 @@ fn save_sheet(a: &Atlas, draw: fn(&Atlas), path: &str) {
 }
 
 
+// ---------------------------------------------------------------- the boss mock-up (PG_MOCKUP=1)
+
+/// The Cathedral proposal: in play (over the black hole at the end of the stage, with
+/// a few of its patterns and the Pilgrim), and at rest, charging, and in phase 2.
+/// Saves `./shots/cathedral_mockup.png`, 2x.
+pub fn export_mockup(r: &mut Renderer) {
+    use crate::render::cathedral;
+    use crate::sim::bullets::{Hue, Kind};
+    use std::f32::consts::TAU;
+    let cat = Texture2D::from_image(&cathedral::image());
+    cat.set_filter(FilterMode::Nearest);
+    let tur = Texture2D::from_image(&cathedral::turret());
+    tur.set_filter(FilterMode::Nearest);
+    let glass = cathedral::glass();
+    let (cw, ch) = cathedral::SIZE;
+    let draw_cat = |a: &Atlas, cx: i32, cy: i32, charge: f32, turrets: bool| {
+        draw_texture(&cat, (cx - cw / 2) as f32, (cy - ch / 2) as f32, WHITE);
+        if charge > 0.0 {
+            for &(x, y) in &glass {
+                a.fill(cx + x, cy + y, 1, 1, Color { a: 0.35 + 0.6 * charge, ..SIGNAL });
+            }
+            let (rx, ry) = cathedral::ROSE;
+            let rr = (3.0 + 4.0 * charge) as usize;
+            a.blit(a.r.discs[rr - 1], cx + rx as i32 - rr as i32 - 1, cy + ry as i32 - rr as i32 - 1, 1, Color { a: 0.9, ..SIGNAL });
+        }
+        if turrets {
+            for (tx, ty) in cathedral::TURRETS {
+                draw_texture(&tur, (cx + tx as i32 - 6) as f32, (cy + ty as i32 - 13) as f32, WHITE);
+                a.fill(cx + tx as i32 - 1, cy + ty as i32, 3, 3, Color { a: 0.6, ..SIGNAL });
+            }
+        }
+    };
+    let (w, h) = (16 + 270 + 24 + 240 + 16, 40 + 3 * 166 + 10);
+    let mut sheet = Image::gen_image_color(w as u16, h as u16, VOID);
+    label(&mut sheet, "THE CATHEDRAL  //  SPRINT 6 PROPOSAL  //  MOCK-UP", 16, 12, CREAM);
+    // in play: the playfield at the end of the stage
+    {
+        let lay = cell(270, 360);
+        r.parts = Particles::new();
+        r.fx = Fx::new();
+        r.begin(&lay);
+        r.stars.draw(&r.atlas, lay.field, STAGE_FRAMES, 1.0);
+        r.hole(lay.field, HOLE_X, HOLE_Y, scene::hole_radius(STAGE_FRAMES), scene::hole_bright(1.0), 5.0, 0.0);
+        let a = &r.atlas;
+        draw_cat(a, 135, 96, 0.8, true);
+        // a few of its patterns: a teal ring, violet spirals from the wing turrets, an amber fan
+        let bullet = |x: f32, y: f32, kind: Kind, hue: Hue, dx: f32, dy: f32| {
+            let src = a.r.bullets.frames[hue as usize][kind as usize][0][crate::render::bullets::turn(dx, dy)];
+            a.blit(src, (x - src.w * 0.5).round() as i32, (y - src.h * 0.5).round() as i32, 1, WHITE);
+        };
+        for k in 0..20 {
+            let ang = k as f32 * TAU / 20.0 + 0.1;
+            bullet(135.0 + ang.cos() * 74.0, 82.0 + ang.sin() * 74.0 + 40.0, Kind::Orb, Hue::Teal, 0.0, 1.0);
+        }
+        for side in [-1.0f32, 1.0] {
+            for k in 0..14 {
+                let t = k as f32 * 0.42;
+                let ang = t * side + if side > 0.0 { 1.3 } else { 1.8 };
+                let rr = 10.0 + k as f32 * 9.0;
+                bullet(135.0 + 78.0 * side + ang.cos() * rr, 136.0 + ang.sin() * rr, Kind::Rice, Hue::Violet, ang.cos(), ang.sin());
+            }
+        }
+        for k in 0..5 {
+            let ang = (90.0 + (k as f32 - 2.0) * 10.0f32).to_radians();
+            for j in 0..3 {
+                let d = 70.0 + j as f32 * 22.0;
+                bullet(135.0 + ang.cos() * d, 158.0 + ang.sin() * d, Kind::Needle, Hue::Red, ang.cos(), ang.sin());
+            }
+        }
+        let pose = Pose { pods: [(-POD_X, 0.0), (POD_X, 0.0)], frame: 4, ..Default::default() };
+        ship::draw(a, 150, 312, &pose);
+        r.post(&lay, &PostParams { field: lay.field, time: 5.0 });
+        let img = r.read_post(&lay);
+        paste(&mut sheet, &img, 16, 32);
+        label(&mut sheet, "IN PLAY: AT THE EVENT HORIZON, CHARGING", 16, (32 + 360 + 6) as u32, ASH);
+    }
+    // its states, at full size
+    for (i, (name, charge, turrets)) in [("AT REST", 0.0, false), ("CHARGING: GLASS AND CORE BLAZE", 1.0, false), ("PHASE 2: WING TURRETS", 0.5, true)].iter().enumerate() {
+        let lay = cell(240, 150);
+        r.parts = Particles::new();
+        r.fx = Fx::new();
+        r.begin(&lay);
+        draw_cat(&r.atlas, 120, 76, *charge, *turrets);
+        r.post(&lay, &PostParams { field: IRect::new(0, 0, 0, 0), time: 0.0 });
+        let img = r.read_post(&lay);
+        let y = 32 + i as u32 * 166;
+        label(&mut sheet, name, 16 + 270 + 30, y, CREAM);
+        paste(&mut sheet, &img, 16 + 270 + 24, y + 12);
+    }
+    let s = 2;
+    let mut big = Image::gen_image_color((w as u32 * s) as u16, (h as u32 * s) as u16, VOID);
+    for y in 0..h as u32 * s {
+        for x in 0..w as u32 * s {
+            big.set_pixel(x, y, sheet.get_pixel(x / s, h as u32 - 1 - y / s));
+        }
+    }
+    let _ = std::fs::create_dir_all("shots");
+    big.export_png("shots/cathedral_mockup.png");
+    println!("saved shots/cathedral_mockup.png");
+}
+
 // ---------------------------------------------------------------- the effects sheet (PG_FXSHEET=1)
 
 /// Write a label straight into a CPU image (the sheet is assembled on the CPU).

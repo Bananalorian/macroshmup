@@ -12,6 +12,7 @@
 //!   PG_PERF=1                          start with the performance overlay on
 //!   PG_SHEET=1                         save the ship's animation sheet and quit
 //!   PG_FXSHEET=1                       save the explosions and black hole sheet and quit
+//!   PG_MOCKUP=1                        save the boss proposal's mock-up and quit
 //!   PG_WAV=1                           dump every synthesized sound to ./shots/sfx/
 //!   PG_FRESH=1                         ignore and don't touch the save file
 //!   PG_MENU=1                          open the pause menu (for screenshots)
@@ -109,6 +110,8 @@ pub struct Hooks {
     pub sheet: bool,
     #[cfg_attr(target_arch = "wasm32", allow(dead_code))] // the sheets are native-only
     pub fx_sheet: bool,
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+    pub mockup: bool,
     pub boom: Option<usize>,
     pub invincible: bool,
     pub bomb_at: Option<u64>,
@@ -151,6 +154,7 @@ pub fn hooks() -> Hooks {
         auto: env("PG_AUTO").is_some(),
         sheet: env("PG_SHEET").is_some(),
         fx_sheet: env("PG_FXSHEET").is_some(),
+        mockup: env("PG_MOCKUP").is_some(),
         invincible: env("PG_INVINCIBLE").is_some(),
         bomb_at: env("PG_BOMB").and_then(|s| s.trim().parse().ok()),
         die_at: env("PG_DIE").and_then(|s| s.trim().parse().ok()),

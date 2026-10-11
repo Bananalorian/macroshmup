@@ -1,6 +1,6 @@
 [package]
 name = "pilgrim"
-version = "0.6.4"
+version = "0.6.5"
 description = "A vertical bullet-hell shmup: one small ship, a long way from home"
 repository = "https://github.com/Bananalorian/macroshmup"
 edition = "2024"
@@ -8,8 +8,9 @@ edition = "2024"
 [dependencies]
 macroquad = { version = "0.4", features = ["audio"] }
 
-# native gamepads (the web build reads the browser Gamepad API through a tiny JS plugin)
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+# gamepads on Linux and macOS (Windows reads XInput directly, see src/pad.rs; the web
+# build reads the browser Gamepad API through a tiny JS plugin)
+[target.'cfg(not(any(windows, target_arch = "wasm32")))'.dependencies]
 gilrs = "0.11"
 
 [profile.dev]
