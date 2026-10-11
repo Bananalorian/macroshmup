@@ -121,6 +121,17 @@ impl Pads {
         #[cfg(target_arch = "wasm32")]
         web::rumble(strong, weak, ms);
     }
+
+    /// Stop the motors now. Call this before the game exits: a controller holds the
+    /// last strength it was given, so quitting mid-rumble would leave it buzzing.
+    pub fn stop(&mut self) {
+        self.rumble_until = 0.0;
+        self.rumble_level = 0.0;
+        #[cfg(not(target_arch = "wasm32"))]
+        self.native.stop();
+        #[cfg(target_arch = "wasm32")]
+        web::rumble(0.0, 0.0, 1);
+    }
 }
 
 impl Pads {
@@ -242,6 +253,13 @@ mod native {
             if let Ok(e) = eff {
                 let _ = e.play();
                 self.effect = Some(e); // keep it alive until the next one replaces it
+            }
+        }
+
+        /// Stop the effect; gilrs writes zero to the motors on its next tick (50 ms).
+        pub fn stop(&mut self) {
+            if let Some(e) = self.effect.take() {
+                let _ = e.stop();
             }
         }
     }

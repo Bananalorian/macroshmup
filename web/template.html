@@ -126,6 +126,16 @@ miniquad_add_plugin({
     io.env.pg_vibrate = function (ms) {
       try { if (navigator.vibrate) navigator.vibrate(ms); } catch (e) {}
     };
+    // leaving or hiding the page stops any rumble at once
+    function stopRumble() {
+      var ps = pads();
+      for (var i = 0; i < ps.length; i++) {
+        var act = ps[i] && ps[i].vibrationActuator;
+        if (act && act.reset) { try { act.reset(); } catch (e) {} }
+      }
+    }
+    window.addEventListener("pagehide", stopRumble);
+    document.addEventListener("visibilitychange", function () { if (document.hidden) stopRumble(); });
     io.env.pg_pad_rumble = function (strong, weak, ms) {
       var p = pads()[active];
       var act = p && p.vibrationActuator;

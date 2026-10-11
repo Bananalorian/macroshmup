@@ -604,6 +604,10 @@ async fn amain() {
     let last_shot = hooks.shots.iter().copied().max().unwrap_or(0);
 
     let mut settings = settings;
+    // automated runs (screenshots, perf) never touch a real controller's motors
+    if scripted {
+        settings.rumble = storage::Rumble::Off;
+    }
     settings.view.autopilot = hooks.auto;
     settings.view.invincible = hooks.invincible;
     let mut game = Game::new(seed, hooks.scene, settings);
@@ -621,8 +625,13 @@ async fn amain() {
     let mut mode_known = false;
     let mut dip_skip = false;
     let mut frame: u64 = 0;
+    // closing the window comes through the loop, so the rumble can be stopped first
+    prevent_quit();
 
     loop {
+        if is_quit_requested() {
+            break;
+        }
         let t0 = miniquad::date::now();
         let alt = is_key_down(KeyCode::LeftAlt) || is_key_down(KeyCode::RightAlt);
         let fs_key = is_key_pressed(KeyCode::F11) || (alt && is_key_pressed(KeyCode::Enter));
@@ -773,6 +782,11 @@ async fn amain() {
         }
         next_frame().await;
     }
+    // a controller keeps the last strength it was given: zero it, and give the
+    // controller thread a couple of its 50 ms ticks to send that before we go
+    input.pads.stop();
+    #[cfg(not(target_arch = "wasm32"))]
+    std::thread::sleep(std::time::Duration::from_millis(150));
 }
 
 #[cfg(test)]

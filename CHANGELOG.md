@@ -3,6 +3,23 @@
 Every version is one build sprint. Newest first. Versions are tagged in git, and
 each tag publishes a GitHub Release with downloads.
 
+## [0.6.1] - 2026-10-11 - The rumble stops
+
+### Fixed
+- **A controller could keep rumbling after the game closed.** An Xbox-style
+  controller holds the last strength it was given, and the desktop game could quit
+  in the middle of a rumble (closing the window, or an automated test run ending),
+  leaving it buzzing until something else reset it. The game now zeroes the motors
+  and waits for that to reach the controller before it exits. The browser version
+  resets the rumble when you close or hide its tab.
+- Automated runs (`PG_SHOTS` screenshots and performance checks) never rumble a
+  real controller.
+
+### Checked
+- Closing the window mid-stage exits in under 0.3 s, motors zeroed first.
+- In the browser, with a recording stand-in controller: 15 rumbles while firing,
+  then a reset the moment the page goes away.
+
 ## [0.6.0] - 2026-10-11 - Stage 1
 
 Sprint 5: OUTER DISK, a stage of two and a half minutes, with enemies, a mid-boss

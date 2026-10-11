@@ -3,6 +3,18 @@
 Session notes for Claude Code: what shipped, tuning that changed, known issues, what's next.
 Newest first.
 
+## v0.6.1 The rumble stops (hotfix) - 2026-10-11
+
+Jason's controller kept rumbling (and Chrome/PC felt laggy; restart fixed it before).
+Cause: gilrs's ff thread writes the motor level every 50 ms and XInput has no timeout,
+so the process exiting mid-rumble leaves the controller buzzing. My PG_SHOTS + PG_AUTO runs
+did exactly that with his controller plugged in. Fixes: `Pads::stop()` + 150 ms wait at the
+end of amain; `prevent_quit()` so window close goes through the loop; scripted runs force
+Rumble Off; web template resets actuators on pagehide / hidden. To unstick a controller by
+hand: XInputSetState(slot, {0,0}) (P/Invoke from PowerShell) or just run the game once
+(gilrs writes zero while idle). The lag was not found on the machine afterwards (Chrome idle,
+NordVPN had a momentary spike); asked Jason where he feels it.
+
 ## v0.6.0 Stage 1 (Sprint 5) - 2026-10-11
 
 **Jason's calls (before the sprint):** mid-boss = the derelict hull (a wreck rising out of
