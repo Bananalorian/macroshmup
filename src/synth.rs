@@ -283,6 +283,43 @@ pub fn not_yet() -> Vec<f32> {
     b
 }
 
+/// The small blast: a short crack and thump.
+pub fn pop(seed: u32) -> Vec<f32> {
+    let mut b = buf(0.45);
+    let mut r = Rng::new(seed);
+    let (mut l1, mut l2) = (Lp::default(), Lp::default());
+    let mut ph = 0.0f32;
+    for (i, s) in b.iter_mut().enumerate() {
+        let t = i as f32 / SR;
+        let cut = 300.0 + 6000.0 * (-t * 14.0).exp();
+        let body = l2.run(l1.run(r.noise(), cut), cut) * (-t * 9.0).exp() * attack(t, 0.002) * 2.0;
+        ph += (50.0 + 90.0 * (-t * 16.0).exp()) / SR;
+        *s = body + (TAU * ph).sin() * (-t * 10.0).exp() * 0.9;
+    }
+    let mut b = reverb(&b, 0.25, 0.9, 0.55);
+    drive(&mut b, 1.6);
+    normalize(&mut b, 0.9);
+    b
+}
+
+/// The boss's death: two heavy blasts, the second rolling on and on.
+pub fn boss_blast(seed: u32) -> Vec<f32> {
+    let a = explosion(seed, true);
+    let late = explosion(seed + 1, true);
+    let gap = (0.35 * SR) as usize;
+    let mut b = vec![0.0; a.len().max(late.len() + gap) + (1.0 * SR) as usize];
+    for (i, s) in a.iter().enumerate() {
+        b[i] += s * 0.8;
+    }
+    for (i, s) in late.iter().enumerate() {
+        b[i + gap] += s;
+    }
+    let mut b = reverb(&b, 0.5, 2.2, 0.75);
+    drive(&mut b, 1.4);
+    normalize(&mut b, 0.95);
+    b
+}
+
 /// A graze: a tiny bright tick, quiet enough to hear dozens of.
 pub fn graze(seed: u32) -> Vec<f32> {
     let mut b = buf(0.045);
@@ -317,14 +354,16 @@ pub fn death(seed: u32) -> Vec<f32> {
 pub enum Id {
     Shot,
     Hit,
-    Break,
-    BigBreak,
     Bump,
     NotYet,
     Select,
     Beam,
     Graze,
     Death,
+    BlastSmall,
+    BlastMedium,
+    BlastLarge,
+    BlastBoss,
 }
 
 /// Every sound as (id, wav bytes). Variants share an id.
@@ -338,9 +377,11 @@ pub fn bank() -> Vec<(Id, Vec<u8>)> {
         v.push((Id::Hit, mono(tick(200 + k))));
     }
     for k in 0..2 {
-        v.push((Id::Break, mono(explosion(900 + k, false))));
+        v.push((Id::BlastSmall, mono(pop(860 + k))));
+        v.push((Id::BlastMedium, mono(explosion(900 + k, false))));
     }
-    v.push((Id::BigBreak, mono(explosion(950, true))));
+    v.push((Id::BlastLarge, mono(explosion(950, true))));
+    v.push((Id::BlastBoss, mono(boss_blast(970))));
     v.push((Id::Bump, mono(hit(300))));
     v.push((Id::NotYet, mono(not_yet())));
     v.push((Id::Select, mono(select())));
@@ -367,7 +408,7 @@ mod tests {
 
     #[test]
     fn nothing_clips() {
-        for b in [pilgrim_shot(1, 900.0), beam_hum(), not_yet(), tick(2), explosion(3, true), graze(4), death(5)] {
+        for b in [pilgrim_shot(1, 900.0), beam_hum(), not_yet(), tick(2), explosion(3, true), graze(4), death(5), pop(6), boss_blast(7)] {
             assert!(b.iter().all(|s| s.is_finite() && s.abs() <= 1.0));
         }
     }

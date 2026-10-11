@@ -4,9 +4,29 @@
 
 use super::art::Atlas;
 use super::layout::IRect;
-use super::palette::tone;
+use super::palette::{SIGNAL, TEAL, luma, tone};
 use crate::sim::rng::Rng;
-use crate::tune::{BG_MAX_VALUE, STAR_LAYERS, STAR_TWINKLE};
+use crate::tune::{BG_MAX_VALUE, STAR_LAYERS, STAR_TINT_SHARE, STAR_TWINKLE};
+use macroquad::color::Color;
+
+/// A star's color: the warm monochrome, or the odd red or teal one.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Tint {
+    Plain,
+    Red,
+    Teal,
+}
+
+/// A star's color at `value` brightness (the same luma whatever its tint).
+pub fn star_color(tint: Tint, value: f32) -> Color {
+    let pure = match tint {
+        Tint::Plain => return tone(value),
+        Tint::Red => SIGNAL,
+        Tint::Teal => TEAL,
+    };
+    let k = value / luma(pure);
+    Color::new(pure.r * k, pure.g * k, pure.b * k, 1.0)
+}
 
 /// The cosmetic seed for the starfield. Fixed, so the sky is the same every run.
 const SEED: u64 = 0x5747_4152_5321;
@@ -18,6 +38,7 @@ struct Star {
     v: f32,
     layer: u8,
     plus: bool,
+    tint: Tint,
     /// Twinkle phase and rate.
     phase: f32,
     rate: f32,
@@ -29,6 +50,7 @@ pub struct Drawn {
     pub y: i32,
     pub layer: usize,
     pub plus: bool,
+    pub tint: Tint,
     /// Brightness, 0..1 of white.
     pub value: f32,
 }
@@ -53,6 +75,12 @@ impl Starfield {
                     v: rng.f32(),
                     layer: layer as u8,
                     plus: rng.chance(l.plus_share),
+                    // the odd red or teal star, among the nearer layers
+                    tint: if layer >= 1 && rng.chance(STAR_TINT_SHARE) {
+                        if rng.chance(0.5) { Tint::Red } else { Tint::Teal }
+                    } else {
+                        Tint::Plain
+                    },
                     phase: rng.range(0.0, std::f32::consts::TAU),
                     rate: rng.range(0.02, 0.06),
                 });
@@ -85,6 +113,7 @@ impl Starfield {
                 y: rect.y + fall as i32,
                 layer: l,
                 plus: s.plus,
+                tint: s.tint,
                 value: (layer.value * (1.0 - STAR_TWINKLE * tw)).min(BG_MAX_VALUE),
             })
         })
@@ -93,7 +122,7 @@ impl Starfield {
     /// Draw the stars; `dim` scales their brightness (1 is full).
     pub fn draw(&self, atlas: &Atlas, rect: IRect, frame: u64, dim: f32) {
         for d in self.at(rect, frame) {
-            let c = tone(d.value * dim);
+            let c = star_color(d.tint, d.value * dim);
             if d.plus {
                 atlas.blit(atlas.r.plus, d.x - 1, d.y - 1, 1, c);
             } else {
@@ -164,6 +193,19 @@ mod tests {
             for d in s.at(IRect::new(0, 0, 640, 360), frame) {
                 assert!(luma(tone(d.value)) <= BG_MAX_VALUE + 0.005, "{d:?}");
             }
+        }
+    }
+
+    #[test]
+    fn the_odd_star_is_red_or_teal_and_still_dim() {
+        let s = field();
+        let all: Vec<Drawn> = s.at(IRect::new(0, 0, 640, 480), 0).collect();
+        let red = all.iter().filter(|d| d.tint == Tint::Red).count();
+        let teal = all.iter().filter(|d| d.tint == Tint::Teal).count();
+        assert!(red >= 1 && teal >= 1, "red {red}, teal {teal}");
+        assert!((red + teal) * 10 < all.len(), "only the odd one");
+        for t in [Tint::Plain, Tint::Red, Tint::Teal] {
+            assert!((luma(star_color(t, BG_MAX_VALUE)) - BG_MAX_VALUE).abs() < 0.01, "{t:?} keeps the value budget");
         }
     }
 

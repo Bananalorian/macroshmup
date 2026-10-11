@@ -2,6 +2,7 @@
 //! Ported from Last Train to Shinjuku: the browser build keeps it in localStorage
 //! through a tiny JS plugin in web/template.html; desktop builds keep a text file.
 
+use crate::render::post::ShakeSetting;
 use crate::sim::player::Tuning;
 use crate::tune::*;
 
@@ -26,6 +27,8 @@ impl Rumble {
 #[derive(Clone, Copy, Debug, PartialEq, Default)]
 pub struct View {
     pub pattern: usize,
+    /// The explosion size BOOM TEST sets off (0 small .. 3 boss).
+    pub boom: usize,
     pub autopilot: bool,
     pub slowmo: bool,
     pub invincible: bool,
@@ -42,12 +45,15 @@ pub struct Settings {
     /// The left stick: false snaps to 8 directions (the default), true is analog.
     pub analog: bool,
     pub muted: bool,
+    /// No full-screen flashes, and gentler aberration.
+    pub reduce_flash: bool,
+    pub shake: ShakeSetting,
     pub view: View,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Settings { tuning: Tuning::default(), touch_sens: TOUCH_SENS, rumble: Rumble::Full, analog: false, muted: false, view: View::default() }
+        Settings { tuning: Tuning::default(), touch_sens: TOUCH_SENS, rumble: Rumble::Full, analog: false, muted: false, reduce_flash: false, shake: ShakeSetting::Full, view: View::default() }
     }
 }
 
@@ -88,6 +94,14 @@ impl Settings {
                     }
                 }
                 "stick" => s.analog = v == "analog",
+                "reduce_flash" => s.reduce_flash = v == "1",
+                "shake" => {
+                    s.shake = match v {
+                        "off" => ShakeSetting::Off,
+                        "low" => ShakeSetting::Low,
+                        _ => ShakeSetting::Full,
+                    }
+                }
                 "muted" => s.muted = v == "1",
                 _ => {}
             }
@@ -101,15 +115,22 @@ impl Settings {
             Rumble::Low => "low",
             Rumble::Full => "full",
         };
+        let shake = match self.shake {
+            ShakeSetting::Off => "off",
+            ShakeSetting::Low => "low",
+            ShakeSetting::Full => "full",
+        };
         format!(
-            "speed={}\nfocus_ratio={}\nfocus_blend={}\ntouch_sens={}\nrumble={}\nstick={}\nmuted={}\n",
+            "speed={}\nfocus_ratio={}\nfocus_blend={}\ntouch_sens={}\nrumble={}\nstick={}\nmuted={}\nreduce_flash={}\nshake={}\n",
             self.tuning.speed,
             self.tuning.focus_ratio,
             self.tuning.focus_blend,
             self.touch_sens,
             rumble,
             if self.analog { "analog" } else { "8way" },
-            self.muted as u8
+            self.muted as u8,
+            self.reduce_flash as u8,
+            shake
         )
     }
 
@@ -180,6 +201,8 @@ mod tests {
             rumble: Rumble::Low,
             analog: true,
             muted: true,
+            reduce_flash: true,
+            shake: ShakeSetting::Low,
             view: View::default(),
         };
         assert_eq!(Settings::parse(&s.format()), s);

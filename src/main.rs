@@ -31,7 +31,9 @@ use input::{Input, Mode, Ui};
 use macroquad::miniquad;
 use macroquad::prelude::*;
 use menu::{ITEMS, Item};
-use render::Renderer;
+use render::explode::{Size, explode};
+use render::layout::IRect;
+use render::{PostParams, Renderer};
 use render::hud::{self, HudView};
 use render::layout::Layout;
 use sim::player::Controls;
@@ -53,6 +55,8 @@ struct Game {
     toast: Option<(String, u32)>,
     /// Debug: extra shots kept alive in the stage (PG_SCENE=shots:<n>).
     fill_shots: usize,
+    /// BOOM TEST asked for an explosion of this size.
+    boom: Option<Size>,
 }
 
 /// What a frame of menu input asked for.
@@ -62,6 +66,8 @@ enum MenuAct {
     Changed,
     Resume,
     Quit,
+    /// BOOM TEST: resume and set off an explosion.
+    Boom,
 }
 
 /// Apply one frame of input to the pause menu.
@@ -74,6 +80,7 @@ fn menu_input(sel: &mut usize, ui: &Ui, lay: &Layout, s: &mut Settings) -> MenuA
     let activate = |sel: usize, s: &mut Settings| match ITEMS[sel] {
         Item::Resume => MenuAct::Resume,
         Item::Quit => MenuAct::Quit,
+        Item::Boom => MenuAct::Boom,
         item => {
             menu::adjust(s, item, 1);
             MenuAct::Changed
@@ -101,7 +108,7 @@ fn menu_input(sel: &mut usize, ui: &Ui, lay: &Layout, s: &mut Settings) -> MenuA
 
 impl Game {
     fn new(seed: u64, req: Option<SceneReq>, settings: Settings) -> Game {
-        let mut g = Game { scene: Scene::Title { t: 0 }, seed, settings, toast: None, fill_shots: 0 };
+        let mut g = Game { scene: Scene::Title { t: 0 }, seed, settings, toast: None, fill_shots: 0, boom: None };
         match req {
             None | Some(SceneReq::Title) => {}
             Some(SceneReq::Stage(secs)) => {
@@ -233,6 +240,13 @@ impl Game {
                         input.release();
                         self.scene = Scene::Title { t: 0 };
                     }
+                    MenuAct::Boom => {
+                        if let Scene::Stage { menu, .. } = &mut self.scene {
+                            *menu = None;
+                        }
+                        input.release();
+                        self.boom = Some(Size::ALL[self.settings.view.boom % 4]);
+                    }
                 }
             }
         }
@@ -252,30 +266,37 @@ fn window_conf() -> Conf {
     }
 }
 
-/// Feed one tick's events to the particles, the rumble and the phone buzz.
-fn effects(w: &World, r: &mut Renderer, input: &mut Input, s: &Settings) {
+/// Feed one tick's events to the effects, the blasts' sounds, the rumble and the phone buzz.
+fn effects(w: &World, r: &mut Renderer, input: &mut Input, s: &Settings, audio: &mut Audio) {
     let p = &w.player;
+    let me = (p.x, p.y);
     if w.frame % 2 == 0 {
-        r.fx.trail(p.x, p.y + 23.0, p.thrust());
+        r.parts.trail(p.x, p.y + 23.0, p.thrust());
     }
     if w.frame % 4 == 0 {
         for (gx, gy) in p.pod_guns() {
-            r.fx.trail(gx, gy + 13.0, false);
+            r.parts.trail(gx, gy + 13.0, false);
         }
     }
     for e in &w.events {
         match *e {
-            Event::Hit { x, y, beam } if !beam || w.frame % 3 == 0 => r.fx.hit(x, y, beam),
-            Event::Break { x, y, big } => r.fx.burst(x, y, big),
-            Event::Graze { x, y } => r.fx.graze(x, y, p.x, p.y),
+            Event::Hit { x, y, beam } if !beam || w.frame % 3 == 0 => r.parts.hit(x, y, beam),
+            Event::Break { x, y, big } => {
+                // much bigger than what died
+                let size = if big { Size::Large } else { Size::Medium };
+                explode(&mut r.fx, &mut r.parts, x, y, size, me, s.reduce_flash, w.frame);
+                audio.blast(size);
+            }
+            Event::Graze { x, y } => r.parts.graze(x, y, p.x, p.y),
             Event::Death { x, y } => {
-                r.flash.trigger(w.frame);
-                r.fx.burst(x, y, true);
+                explode(&mut r.fx, &mut r.parts, x, y, Size::Large, me, s.reduce_flash, w.frame);
                 // every cancelled bullet pops (a sample of them on a crowded screen)
                 let step = (w.cancelled.len() / 600).max(1);
                 for &(cx, cy) in w.cancelled.iter().step_by(step) {
-                    r.fx.cancel(cx, cy);
+                    r.parts.cancel(cx, cy);
                 }
+                // the screen's been cancelled, so it may shake
+                r.fx.shake(tune::SHAKE_DEATH, w.hazards.bullets.len(), s.shake);
             }
             _ => {}
         }
@@ -290,6 +311,19 @@ fn effects(w: &World, r: &mut Renderer, input: &mut Input, s: &Settings) {
     }
     if let Some(k) = rumble::held(w).and_then(|k| rumble::scaled(k, s.rumble)) {
         input.pads.rumble(k.0, k.1, k.2);
+    }
+    // never shake while enemy bullets are live
+    if w.hazards.bullets.len() > 0 {
+        r.fx.calm();
+    }
+    // the stress scenes: thousands of particles and a blast every so often
+    if w.hazards.preset().fill > 0 {
+        r.parts.fill(tune::FX_STRESS_PARTICLES, tune::FIELD_W as f32, tune::FIELD_H as f32);
+        if w.frame % tune::FX_STRESS_EVERY == 0 {
+            let k = w.frame / tune::FX_STRESS_EVERY;
+            let (x, y) = (40.0 + (k * 97 % 190) as f32, 40.0 + (k * 53 % 140) as f32);
+            explode(&mut r.fx, &mut r.parts, x, y, Size::ALL[(k % 3) as usize + 1], me, s.reduce_flash, w.frame);
+        }
     }
 }
 
@@ -314,10 +348,16 @@ async fn amain() {
         debug::export_sheet(&renderer);
         return;
     }
+    #[cfg(not(target_arch = "wasm32"))]
+    if hooks.fx_sheet {
+        sheet::export_fx(&mut renderer);
+        return;
+    }
 
     // a frame to look at while the sounds are synthesized
     let lay = Renderer::layout();
     renderer.begin(&lay);
+    renderer.post(&lay, &PostParams { field: IRect::new(0, 0, lay.cw, lay.ch), time: 0.0 });
     hud::text(&renderer.atlas, "P I L G R I M", lay.cw / 2 - 38, lay.ch / 2 - 4, 1, 1, render::palette::ASH);
     renderer.end(&lay);
     next_frame().await;
@@ -331,6 +371,7 @@ async fn amain() {
 
     let mut settings = settings;
     settings.view.autopilot = hooks.auto;
+    settings.view.invincible = hooks.invincible;
     let mut game = Game::new(seed, hooks.scene, settings);
     let mut bot = sim::bot::Bot::new();
     if let (true, Scene::Stage { menu, .. }) = (hooks.menu, &mut game.scene) {
@@ -387,9 +428,17 @@ async fn amain() {
                     let (drag, bomb) = input.take();
                     let c = if game.settings.view.autopilot { bot.decide(world) } else { Controls { mv: held.mv, drag, fire: held.fire, focus: held.focus, bomb } };
                     world.tick(c);
+                    if hooks.boom.is_some() && world.frame == 30 {
+                        game.boom = hooks.boom.map(|i| Size::ALL[i]);
+                    }
+                    renderer.parts.tick();
                     renderer.fx.tick();
-                    renderer.flash.tick();
-                    effects(world, &mut renderer, &mut input, &game.settings);
+                    effects(world, &mut renderer, &mut input, &game.settings, &mut audio);
+                    if let Some(size) = game.boom.take() {
+                        let me = (world.player.x, world.player.y);
+                        explode(&mut renderer.fx, &mut renderer.parts, 135.0, 150.0, size, me, game.settings.reduce_flash, world.frame);
+                        audio.blast(size);
+                    }
                     audio.handle(world);
                     if world.events.contains(&Event::BombStub) {
                         game.toast = Some(("THE BOMB ARRIVES IN V0.5".into(), tune::TOAST_FRAMES));
@@ -404,11 +453,18 @@ async fn amain() {
         }
         audio.update(dt, game.paused());
 
+        // the scene, then the post pass, then the HUD on top
         renderer.begin(&lay);
+        let time = game.sim_frame() as f32 / tune::TICK_HZ as f32;
         match &game.scene {
-            Scene::Title { t } => hud::title(&renderer, &lay, *t, mode_known.then_some(input.mode)),
+            Scene::Title { t } => {
+                hud::title_bg(&renderer, &lay, *t);
+                renderer.post(&lay, &PostParams { field: IRect::new(0, 0, lay.cw, lay.ch), time });
+                hud::title(&renderer, &lay, *t, mode_known.then_some(input.mode));
+            }
             Scene::Stage { world, menu } => {
                 render::scene::draw(&renderer, &lay, world, game.settings.view.hitboxes);
+                renderer.post(&lay, &PostParams { field: lay.field, time });
                 let view = HudView {
                     settings: &game.settings,
                     mode: input.mode,
@@ -428,7 +484,7 @@ async fn amain() {
                 Scene::Stage { world, .. } => (world.shots.len(), world.hazards.bullets.len(), world.seed),
                 _ => (0, 0, game.seed),
             };
-            perf.draw(&renderer.atlas, &lay, game.sim_frame(), sim_seed, shots, bullets, renderer.fx.len());
+            perf.draw(&renderer.atlas, &lay, game.sim_frame(), sim_seed, shots, bullets, renderer.parts.len());
         }
         renderer.end(&lay);
         perf.record(dt, (miniquad::date::now() - t0) as f32, ticks);

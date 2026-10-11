@@ -3,6 +3,55 @@
 Session notes for Claude Code: what shipped, tuning that changed, known issues, what's next.
 Newest first.
 
+## v0.4.0 Light & particles (Sprint 3) - 2026-10-11
+
+**Jason's calls (after v0.3):** loves the patterns; keep all tuning options; hitbox dot stays
+ABOVE bullets (standard, Touhou); commit AGENTS.md (done in this sprint). He hadn't noticed
+graze sparks: made them bigger (7 teal sparks + a flare beside the hull). Controller pattern
+switch = LB (or Start -> PATTERN).
+
+**Shipped**
+- Pipeline (render/mod.rs): scene RT -> post pass into a second RT -> HUD drawn on top ->
+  integer upscale (+ optional gray material). Title also runs through it.
+- `render/post.rs`: POST_FRAG (pixel-locked via gl_FragCoord: shake, 4 shock rings, radial CA,
+  8-tap bloom onto dark pixels, vignette, grain; cap = CORE for core pixels, CORE*0.93 for the
+  rest), HOLE_FRAG (premultiplied, alpha = max(shadow, light) so it never exceeds its ceiling),
+  ADD_FRAG (additive particles). `Fx` state: shocks (max 4, oldest replaced), ca (decay 0.84),
+  shake (refuses while bullets live; Off/Low/Full; `calm()` each tick bullets exist), `Flash`.
+- In RT passes gl_FragCoord.y = 0.5 is the canvas TOP row (verified by screenshots).
+- `render/particles.rs` rewritten: cap 8000; kinds Spark/Ember/Shard/Ring/Spectral/Dust/Dot/
+  Cross/Core; two draw passes (normal, additive).
+- `render/explode.rs`: Size Small/Medium/Large/Boss from `tune::BLASTS`; CA scales with
+  distance to the Pilgrim (CA_RANGE 320); REDUCED_CA 0.35 and no flash with Reduce flashing.
+- Sounds: synth `pop` (small), `explosion` light/heavy (medium/large), `boss_blast`; Ids
+  BlastSmall..BlastBoss (Break/BigBreak removed). Blast sounds play from main's effects().
+- Settings (saved): reduce_flash, shake. View: boom (BOOM TEST size). Menu now 19 rows.
+- Starfield: Tint Plain/Red/Teal (4% of the two nearer layers), same luma.
+- Readback lesson: RT get_texture_data comes back top-down; `Image::export_png` flips rows
+  (expects bottom-up). Compose top-down, flip once when exporting.
+- Hooks: PG_FXSHEET, PG_BOOM=<0-3>, PG_INVINCIBLE. 137 tests.
+
+**Tuning (tune.rs)**: BLOOM .14, VIGNETTE .24, GRAIN .032; SHAKE_PX 4, decay .85, death .9;
+FLASH_GAP 20 frames, 8 frames long, alpha .35 (drawn under bullets). Hole at (135, 92),
+radius 11 -> 30 over STAGE_FRAMES 9000, tilt .18, brightness (0.30 - grain/2) * dim.
+BLASTS small/medium/large/boss: shock reach 34/64/110/190 px, CA 0.8/1.6/2.6/3.6 px.
+Stress presets also keep 6000 particles + a blast every 40 frames.
+
+**Verified**
+- 1080p desktop, every effect on: 2000 bullets + 6000 particles 60 fps, cpu 2.9 ms (with bot);
+  4000 bullets 2.7 ms. 500 player shots 60 fps.
+- Browser (Edge, RTX 2070) at phone size: stress 2000 + 6000 fx 60 fps, wasm cpu 2.0 ms;
+  shaders compile with no console errors. Real phone still unmeasured.
+- Grayscale: cores 241 even mid-flash; other max 224; background max 0.297 (fx sheet cells).
+- Crisp check passes at 1280/1920/390x844 and the 4x web phone.
+
+**Known issues / notes**
+- Death flash is a 35% cream wash for 8 frames; Reduce flashing removes it.
+- The hole's grooves still read a little ring-like at full size; ask Jason.
+
+**Next: Sprint 4, The special weapon** (v0.5.0): the bomb (Shinjuku's grenade scaled up),
+deathbomb, death, lives.
+
 ## v0.3.0 Danmaku engine (Sprint 2) - 2026-10-10
 
 **Jason's calls (after v0.2):** keep every tuning option so he can circle back; teal plume

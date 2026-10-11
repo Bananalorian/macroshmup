@@ -100,10 +100,20 @@ fn start_hint(mode: Option<Mode>) -> &'static str {
     }
 }
 
-/// The title: the name, the tagline, PRESS START.
+/// The title's background (the scene pass): stars and the black hole.
+pub fn title_bg(r: &Renderer, lay: &Layout, t: u64) {
+    let full = IRect::new(0, 0, lay.cw, lay.ch);
+    r.stars.draw(&r.atlas, full, t, 1.0);
+    let (cy, rad) = match lay.orient {
+        Orient::Landscape => (80.0, 17.0),
+        Orient::Portrait => (112.0, 15.0),
+    };
+    r.hole(full, lay.cw as f32 * 0.5, cy, rad, super::scene::hole_bright(1.0), t as f32 / 60.0);
+}
+
+/// The title: the name, the tagline, PRESS START (drawn over the post pass).
 pub fn title(r: &Renderer, lay: &Layout, t: u64, mode: Option<Mode>) {
     let a = &r.atlas;
-    r.stars.draw(a, IRect::new(0, 0, lay.cw, lay.ch), t, 1.0);
     let blink_on = t % (BLINK_FRAMES * 3) < BLINK_FRAMES * 2;
     let cx = lay.cw / 2;
     match lay.orient {

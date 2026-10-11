@@ -2,6 +2,7 @@
 //! tuning panel: speed, focus ratio and blend frames change the game the moment
 //! you resume (and are saved). The sandbox switches last for the session.
 
+use crate::render::post::ShakeSetting;
 use crate::storage::{Rumble, Settings};
 use crate::tune::*;
 
@@ -15,6 +16,9 @@ pub enum Item {
     Hitboxes,
     Gray,
     Fps,
+    Boom,
+    ReduceFlash,
+    Shake,
     Speed,
     Focus,
     Blend,
@@ -25,7 +29,7 @@ pub enum Item {
     Quit,
 }
 
-pub const ITEMS: [Item; 16] = [
+pub const ITEMS: [Item; 19] = [
     Item::Resume,
     Item::Pattern,
     Item::Autopilot,
@@ -34,6 +38,9 @@ pub const ITEMS: [Item; 16] = [
     Item::Hitboxes,
     Item::Gray,
     Item::Fps,
+    Item::Boom,
+    Item::ReduceFlash,
+    Item::Shake,
     Item::Speed,
     Item::Focus,
     Item::Blend,
@@ -55,6 +62,9 @@ impl Item {
             Item::Hitboxes => "HITBOXES",
             Item::Gray => "GRAYSCALE",
             Item::Fps => "SHOW FPS",
+            Item::Boom => "BOOM TEST",
+            Item::ReduceFlash => "REDUCE FLASH",
+            Item::Shake => "SHAKE",
             Item::Speed => "SPEED",
             Item::Focus => "FOCUS",
             Item::Blend => "BLEND",
@@ -87,6 +97,14 @@ pub fn value(s: &Settings, item: Item) -> String {
         Item::Hitboxes => on_off(v.hitboxes),
         Item::Gray => on_off(v.gray),
         Item::Fps => on_off(v.fps),
+        Item::Boom => crate::render::explode::Size::ALL[v.boom % 4].label().to_string(),
+        Item::ReduceFlash => on_off(s.reduce_flash),
+        Item::Shake => match s.shake {
+            ShakeSetting::Off => "OFF",
+            ShakeSetting::Low => "LOW",
+            ShakeSetting::Full => "FULL",
+        }
+        .to_string(),
         Item::Speed => format!("{:.2} PX", s.tuning.speed),
         Item::Focus => format!("{:.2}X", s.tuning.focus_ratio),
         Item::Blend => format!("{} F", s.tuning.focus_blend),
@@ -119,6 +137,16 @@ pub fn adjust(s: &mut Settings, item: Item, dir: i32) {
         Item::Hitboxes => v.hitboxes = !v.hitboxes,
         Item::Gray => v.gray = !v.gray,
         Item::Fps => v.fps = !v.fps,
+        Item::Boom => v.boom = (v.boom as i32 + dir).rem_euclid(4) as usize,
+        _ => {}
+    }
+    match item {
+        Item::ReduceFlash => s.reduce_flash = !s.reduce_flash,
+        Item::Shake => {
+            const ORDER: [ShakeSetting; 3] = [ShakeSetting::Off, ShakeSetting::Low, ShakeSetting::Full];
+            let i = ORDER.iter().position(|x| *x == s.shake).unwrap_or(2) as i32;
+            s.shake = ORDER[(i + dir).clamp(0, 2) as usize];
+        }
         _ => {}
     }
     let t = &mut s.tuning;
@@ -211,6 +239,23 @@ mod tests {
         }
         let saved = Settings::parse(&s.format());
         assert_eq!(saved.view, Default::default(), "the sandbox switches aren't saved");
+    }
+
+    #[test]
+    fn flashing_shake_and_the_boom_test_cycle() {
+        let mut s = Settings::default();
+        assert_eq!(value(&s, Item::ReduceFlash), "OFF");
+        adjust(&mut s, Item::ReduceFlash, 1);
+        assert!(s.reduce_flash);
+        for _ in 0..3 {
+            adjust(&mut s, Item::Shake, -1);
+        }
+        assert_eq!(s.shake, ShakeSetting::Off);
+        assert_eq!(value(&s, Item::Boom), "SMALL");
+        adjust(&mut s, Item::Boom, -1);
+        assert_eq!(value(&s, Item::Boom), "BOSS");
+        let saved = Settings::parse(&s.format());
+        assert!(saved.reduce_flash && saved.shake == ShakeSetting::Off, "the options are saved");
     }
 
     #[test]

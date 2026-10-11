@@ -17,18 +17,20 @@ the font and every sound are built when the game starts. Written in Rust on
 
 | | |
 |---|---|
-| ![Layered rings and aimed fans](docs/screenshots/layered.png) | ![On a phone](docs/screenshots/phone.png) |
-| ![The same in grayscale: bullet cores are the brightest pixels](docs/screenshots/layered-gray.png) | ![Large orbs splitting into rings](docs/screenshots/split.png) |
-| ![The pause menu: sandbox and tuning](docs/screenshots/tuning.png) | ![The title](docs/screenshots/title.png) |
+| ![A boss-sized blast: the shock ring bends the black hole](docs/screenshots/blast.png) | ![On a phone](docs/screenshots/phone.png) |
+| ![Layered rings and aimed fans](docs/screenshots/layered.png) | ![The same in grayscale: bullet cores are the brightest pixels](docs/screenshots/layered-gray.png) |
+| ![The title and the black hole](docs/screenshots/title.png) | ![The pause menu: sandbox, options and tuning](docs/screenshots/tuning.png) |
+
+![Every explosion size at 4 moments, and the black hole at the start and end of the stage](docs/screenshots/fx-sheet.png)
 
 ![The Pilgrim's animation sheet](docs/screenshots/pilgrim-sheet.png)
 
 ## Status
 
-**v0.3, Danmaku engine:** the bullets and the pattern sandbox. Fly against 13
-patterns (fans, rings, spirals, streams, cones, accelerating, pausing, curving,
-splitting and pulled bullets) plus 2,000- and 4,000-bullet stress scenes, with
-keyboard, controller and touch. A dodging bot can fly for you. A hit just resets
+**v0.4, Light & particles:** the black hole, a pixel-locked post pass (shock
+rings, the RGB split, bloom, grain), explosions in four sizes and thousands of
+particles, over the bullet engine and pattern sandbox from v0.3 (13 patterns plus
+stress scenes, keyboard, controller and touch, a dodging bot). A hit just resets
 the screen for now; lives, bombs and the real death arrive in v0.5.
 See [SPRINTS.md](SPRINTS.md) for the plan.
 
@@ -46,10 +48,11 @@ See [SPRINTS.md](SPRINTS.md) for the plan.
 | Fullscreen | F11 or Alt+Enter | | |
 
 The pause menu holds the sandbox switches (pattern, autopilot, slow-mo,
-invincible, hitboxes, grayscale, FPS) and the tuning panel: speed, focus ratio,
-blend frames, touch sensitivity, 8-way or analog stick, and rumble (off, low,
-full). On a keyboard, 1 to 6 change speed, focus and blend while you fly. The
-tuning is saved; the sandbox switches last for the session.
+invincible, hitboxes, grayscale, FPS, BOOM TEST), the options (reduce flashing,
+screen shake) and the tuning panel: speed, focus ratio, blend frames, touch
+sensitivity, 8-way or analog stick, and rumble (off, low, full). On a keyboard,
+1 to 6 change speed, focus and blend while you fly. Tuning and options are saved;
+the sandbox switches last for the session.
 
 ## Build
 
@@ -76,6 +79,9 @@ Rust is pinned to 1.91.1 in `rust-toolchain.toml`, the same version CI uses.
 | `PG_SIZE=1280x720` | window size |
 | `PG_PERF=1` | the performance overlay (and a summary when a `PG_SHOTS` run ends) |
 | `PG_SHEET=1` | save the ship's animation sheet to `./shots/` and quit |
+| `PG_FXSHEET=1` | save every explosion size at 4 moments and the black hole at the start and end of the stage |
+| `PG_BOOM=<0-3>` | set off a small, medium, large or boss blast 30 frames in |
+| `PG_INVINCIBLE=1` | bullets can't hurt you |
 | `PG_WAV=1` | dump every sound to `./shots/sfx/` |
 | `PG_MENU=1` | open the pause menu |
 | `PG_FRESH=1` | ignore the save file |

@@ -10,9 +10,12 @@
 //!   PG_SIZE=1280x720                   window size, for screenshots
 //!   PG_PERF=1                          start with the performance overlay on
 //!   PG_SHEET=1                         save the ship's animation sheet and quit
+//!   PG_FXSHEET=1                       save the explosions and black hole sheet and quit
 //!   PG_WAV=1                           dump every synthesized sound to ./shots/sfx/
 //!   PG_FRESH=1                         ignore and don't touch the save file
 //!   PG_MENU=1                          open the pause menu (for screenshots)
+//!   PG_BOOM=<0-3>                      set off a small/medium/large/boss blast 30 frames in
+//!   PG_INVINCIBLE=1                    bullets can't hurt you (as in the pause menu)
 //!
 //! F1 hitboxes, F2 grayscale, F3 quarter speed, F4 frame step (Enter resumes),
 //! F5 invincible, F7 next pattern, F8 performance overlay, F9 export the ship sheet.
@@ -99,6 +102,10 @@ pub struct Hooks {
     pub perf: bool,
     pub auto: bool,
     pub sheet: bool,
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))] // the sheets are native-only
+    pub fx_sheet: bool,
+    pub boom: Option<usize>,
+    pub invincible: bool,
     #[cfg_attr(target_arch = "wasm32", allow(dead_code))] // the sound dump is native-only
     pub wav: bool,
     pub menu: bool,
@@ -136,6 +143,9 @@ pub fn hooks() -> Hooks {
         perf: env("PG_PERF").is_some(),
         auto: env("PG_AUTO").is_some(),
         sheet: env("PG_SHEET").is_some(),
+        fx_sheet: env("PG_FXSHEET").is_some(),
+        invincible: env("PG_INVINCIBLE").is_some(),
+        boom: env("PG_BOOM").and_then(|s| s.trim().parse().ok()).filter(|&n: &usize| n < 4),
         wav: env("PG_WAV").is_some(),
         menu: env("PG_MENU").is_some(),
     }

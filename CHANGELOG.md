@@ -3,6 +3,51 @@
 Every version is one build sprint. Newest first. Versions are tagged in git, and
 each tag publishes a GitHub Release with downloads.
 
+## [0.4.0] - 2026-10-11 - Light & particles
+
+Sprint 3: the look of the reference art: shaders, particles, the RGB split.
+
+### Added
+- **The black hole**, drawn by a shader after the falling-figure image: the
+  shadow, a thin photon ring, the accretion disk seen nearly edge-on with its far
+  side lensed up over the top, the approaching side brighter, engraved stipple
+  shading, and stars smeared into arcs round the edge. It grows as you approach
+  (over the stage's 2.5 minutes), dims as bullets crowd in, and stays inside the
+  background's 30% value budget. It's on the title too.
+- **A post pass**, locked to the pixel grid: up to 4 shock rings that push the
+  picture outward, chromatic aberration that rests at zero, spikes with each blast
+  (harder the closer it is to you) and fades in about 0.3 s, bloom from bullet
+  cores, sparks and engines, a light vignette and film grain. The HUD sits on top,
+  untouched.
+- **Particles**, up to 8,000: additive spark streaks, embers, chips of debris with
+  red or teal fringes, rings, spectral streaks (red with hints of green and blue,
+  like the falling figure's), stipple dust and little sparkle crosses.
+- **Explosions** in four sizes (small, medium, large, boss), each much bigger than
+  what died, with a hot core, a shock ring, an aberration spike and its own sound.
+  The big ones flash the screen. Target dummies now go out with a medium or large
+  blast; the placeholder death with a large one.
+- **Grazing is easy to see**: seven teal sparks and a teal flare where the bullet
+  passed.
+- **The odd red or teal star** in the starfield.
+- **Options:** REDUCE FLASH (no full-screen flashes, gentler aberration) and SHAKE
+  (off, low, full), both saved, plus BOOM TEST to set off any explosion size.
+- `PG_FXSHEET=1` saves every explosion size at 4 moments and the black hole at the
+  start and end of the stage. `PG_BOOM=<0-3>` and `PG_INVINCIBLE=1` for screenshots.
+
+### Rules, enforced in code
+- No screen shake while enemy bullets are live: it only happens on deaths (and
+  later bombs and boss breaks) after the screen's been cancelled, and stops the
+  moment bullets reappear.
+- At most 3 full-screen flashes a second, and the flash draws under the bullets.
+- Only bullet cores can reach the brightest value on screen: however many sparks
+  pile up, everything else is capped a step below.
+
+### Checked
+- Every effect on, 2,000 bullets and 6,000 particles: 60 fps on desktop (2.9 ms of
+  CPU with the bot flying) and in a browser at phone size (2.0 ms).
+- Grayscale with blasts going off: bullet cores are the brightest pixels (241),
+  even mid-flash; nothing else passes 224. The background tops out at 0.297.
+
 ## [0.3.0] - 2026-10-10 - Danmaku engine
 
 Sprint 2: bullets that are beautiful, readable and fast, and the tools to design with them.

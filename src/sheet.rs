@@ -1,11 +1,20 @@
-//! The ship's animation sheet (PG_SHEET=1 or F9), laid out like Jason's reference
-//! sheet so the two can be compared side by side. Native only.
+//! Sheets for review, native only: the ship's animation sheet (PG_SHEET=1 or F9),
+//! laid out like Jason's reference sheet, and the effects sheet (PG_FXSHEET=1):
+//! every explosion size at 4 moments, and the black hole at the start and end of
+//! the stage.
 
 use crate::render::art::Atlas;
+use crate::render::explode::{Size, explode};
+use crate::render::font;
 use crate::render::hud::text;
+use crate::render::layout::{IRect, Layout, Orient};
 use crate::render::palette::{ASH, CREAM, DUSK, SIGNAL, SLATE, VOID};
+use crate::render::particles::Particles;
+use crate::render::post::Fx;
+use crate::render::scene;
 use crate::render::ship::{self, Pose};
-use crate::tune::{BUMP_FLASH, POD_X, POD_X_FOCUS};
+use crate::render::{PostParams, Renderer};
+use crate::tune::{BUMP_FLASH, HOLE_X, HOLE_Y, POD_X, POD_X_FOCUS, STAGE_FRAMES};
 use macroquad::prelude::*;
 
 const SHEET: (f32, f32) = (420.0, 312.0);
@@ -97,4 +106,97 @@ pub fn export(a: &Atlas) {
     let _ = std::fs::create_dir_all("shots");
     big.export_png("shots/pilgrim_sheet.png");
     println!("saved shots/pilgrim_sheet.png");
+}
+
+
+// ---------------------------------------------------------------- the effects sheet (PG_FXSHEET=1)
+
+/// Write a label straight into a CPU image (the sheet is assembled on the CPU).
+fn label(img: &mut Image, s: &str, x: u32, y: u32, c: Color) {
+    for (i, ch) in s.chars().enumerate() {
+        for gy in 0..font::GH {
+            for gx in 0..font::GW {
+                if font::bit(ch, gx, gy) {
+                    let (px, py) = (x + i as u32 * 7 + gx as u32, y + gy as u32);
+                    if px < img.width as u32 && py < img.height as u32 {
+                        img.set_pixel(px, py, c);
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn paste(dst: &mut Image, src: &Image, x: u32, y: u32) {
+    for sy in 0..src.height as u32 {
+        for sx in 0..src.width as u32 {
+            dst.set_pixel(x + sx, y + sy, src.get_pixel(sx, sy));
+        }
+    }
+}
+
+/// A layout for an off-screen cell `w` x `h`, the effects applying to all of it.
+fn cell(w: i32, h: i32) -> Layout {
+    Layout { orient: Orient::Portrait, cw: w, ch: h, field: IRect::new(0, 0, w, h), scale: 1, ox: 0, oy: 0 }
+}
+
+/// Every explosion size at 4 moments, and the black hole at the start and end of
+/// the stage, all through the real post pass. Saves `./shots/fx_sheet.png`, 2x.
+pub fn export_fx(r: &mut Renderer) {
+    const C: i32 = 180;
+    const MOMENTS: [u32; 4] = [2, 8, 18, 34];
+    let (w, h) = (16 + 4 * C + 24 + 2 * 270 + 16, 40 + 4 * C + 30);
+    let mut sheet = Image::gen_image_color(w as u16, h as u16, VOID);
+    label(&mut sheet, "EXPLOSIONS  //  SMALL MEDIUM LARGE BOSS  //  FRAMES 2 8 18 34", 16, 12, CREAM);
+    for (row, size) in Size::ALL.iter().enumerate() {
+        for (col, &m) in MOMENTS.iter().enumerate() {
+            let lay = cell(C, C);
+            r.parts = Particles::new();
+            r.fx = Fx::new();
+            let (cx, cy) = (C as f32 * 0.5, C as f32 * 0.5);
+            // the Pilgrim just below, so the aberration is felt
+            explode(&mut r.fx, &mut r.parts, cx, cy, *size, (cx, cy + 60.0), false, 100);
+            for _ in 0..m {
+                r.parts.tick();
+                r.fx.tick();
+            }
+            r.begin(&lay);
+            r.parts.draw(&r.atlas, 0, 0, false);
+            r.additive(true);
+            r.parts.draw(&r.atlas, 0, 0, true);
+            r.additive(false);
+            let flash = r.fx.flash.level();
+            if flash > 0.0 {
+                r.atlas.fill(0, 0, C, C, Color { a: 0.35 * flash, ..CREAM });
+            }
+            r.post(&lay, &PostParams { field: lay.field, time: m as f32 / 60.0 });
+            let img = r.read_post(&lay);
+            paste(&mut sheet, &img, (16 + col as i32 * C) as u32, (32 + row as i32 * C) as u32);
+        }
+        label(&mut sheet, size.label(), 20, (36 + row as i32 * C) as u32, ASH);
+    }
+    let hx = (16 + 4 * C + 24) as u32;
+    label(&mut sheet, "THE BLACK HOLE  //  START AND END OF THE STAGE", hx, 12, CREAM);
+    for (i, frame) in [0, STAGE_FRAMES].iter().enumerate() {
+        let lay = cell(270, 360);
+        r.parts = Particles::new();
+        r.fx = Fx::new();
+        r.begin(&lay);
+        r.stars.draw(&r.atlas, lay.field, *frame, 1.0);
+        r.hole(lay.field, HOLE_X, HOLE_Y, scene::hole_radius(*frame), scene::hole_bright(1.0), *frame as f32 / 60.0);
+        r.post(&lay, &PostParams { field: lay.field, time: 0.0 });
+        let img = r.read_post(&lay);
+        paste(&mut sheet, &img, hx + i as u32 * 270, 32);
+    }
+    // scale up 2x, bottom row first (export_png flips it back)
+    let s = 2;
+    let mut big = Image::gen_image_color((w as u32 * s) as u16, (h as u32 * s) as u16, VOID);
+    for y in 0..h as u32 * s {
+        for x in 0..w as u32 * s {
+            big.set_pixel(x, y, sheet.get_pixel(x / s, h as u32 - 1 - y / s));
+        }
+    }
+    let _ = std::fs::create_dir_all("shots");
+    big.export_png("shots/fx_sheet.png");
+    println!("saved shots/fx_sheet.png");
 }

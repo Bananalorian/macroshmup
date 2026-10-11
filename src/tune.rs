@@ -132,6 +132,73 @@ pub const MUZZLE_FRAMES: u32 = 4;
 pub const FLASH_GAP: u64 = 20;
 pub const FLASH_FRAMES: u32 = 8;
 
+// ------------------------------------------------------------------ light and particles
+
+/// The particle pool (cosmetic only, never allocates during play).
+pub const PARTICLE_CAP: usize = 8000;
+/// Chromatic aberration rests at zero, spikes with explosions, and decays by this
+/// factor each frame (to under 5% in 18 frames, about 0.3 s).
+pub const CA_DECAY: f32 = 0.84;
+/// Explosions this far from the Pilgrim (px) add no aberration; closer ones add more.
+pub const CA_RANGE: f32 = 320.0;
+/// "Reduce flashing" scales aberration spikes by this (and turns off screen flashes).
+pub const REDUCED_CA: f32 = 0.35;
+/// Shock rings: at most this many at once (Shinjuku's ring distortion).
+pub const SHOCK_MAX: usize = 4;
+/// Screen shake: px at full strength, decay per frame, and the "low" setting's share.
+pub const SHAKE_PX: f32 = 4.0;
+pub const SHAKE_DECAY: f32 = 0.85;
+pub const SHAKE_LOW: f32 = 0.5;
+/// Shake for the placeholder death (after the screen's been cancelled).
+pub const SHAKE_DEATH: f32 = 0.9;
+/// The post pass: bloom strength, vignette, film grain.
+pub const BLOOM: f32 = 0.14;
+pub const VIGNETTE: f32 = 0.24;
+pub const GRAIN: f32 = 0.032;
+
+/// One explosion size. Each is much bigger than what died.
+#[derive(Clone, Copy, Debug)]
+pub struct Blast {
+    pub sparks: u16,
+    pub embers: u16,
+    pub shards: u16,
+    pub streaks: u16,
+    pub dust: u16,
+    pub rings: u8,
+    /// How fast the debris flies (px per frame).
+    pub speed: f32,
+    /// The shock ring: how far it spreads (px), how hard it pushes (px), how long (frames).
+    pub shock: (f32, f32, u32),
+    /// Chromatic aberration spike (px) when it goes off right beside the Pilgrim.
+    pub ca: f32,
+    /// A full-screen flash (limited to 3 a second, off with Reduce flashing).
+    pub flash: bool,
+}
+
+/// Small, medium, large, boss.
+pub const BLASTS: [Blast; 4] = [
+    Blast { sparks: 14, embers: 6, shards: 10, streaks: 2, dust: 6, rings: 1, speed: 2.6, shock: (34.0, 1.5, 16), ca: 0.8, flash: false },
+    Blast { sparks: 30, embers: 14, shards: 22, streaks: 6, dust: 14, rings: 1, speed: 3.4, shock: (64.0, 2.5, 22), ca: 1.6, flash: false },
+    Blast { sparks: 60, embers: 26, shards: 40, streaks: 14, dust: 30, rings: 2, speed: 4.4, shock: (110.0, 3.5, 28), ca: 2.6, flash: true },
+    Blast { sparks: 120, embers: 50, shards: 80, streaks: 30, dust: 60, rings: 3, speed: 5.6, shock: (190.0, 5.0, 38), ca: 3.6, flash: true },
+];
+
+/// The stress presets also keep this many particles alive, with a blast every so often.
+pub const FX_STRESS_PARTICLES: usize = 6000;
+pub const FX_STRESS_EVERY: u64 = 40;
+
+// ------------------------------------------------------------------ the black hole
+// Drawn by a shader after Jason's falling-figure image. It grows as you approach.
+
+/// Where it hangs in the playfield (px), and its shadow's radius at the start and end of the stage.
+pub const HOLE_X: f32 = 135.0;
+pub const HOLE_Y: f32 = 92.0;
+pub const HOLE_R: (f32, f32) = (11.0, 30.0);
+/// How long the approach takes (the length of Stage 1, frames).
+pub const STAGE_FRAMES: u64 = 150 * 60;
+/// How open the accretion disk looks (0 is edge-on).
+pub const HOLE_TILT: f32 = 0.18;
+
 // ------------------------------------------------------------------ the pattern sandbox
 // Each preset is one or more guns. The sandbox cycles through them (F7, [ ], LB,
 // the NEXT button or the pause menu). Speeds are px per frame.
@@ -278,8 +345,8 @@ pub const HIT_SOUND_GAP: f64 = 0.06;
 pub const VOL_SHOT: f32 = 0.16;
 pub const VOL_HIT: f32 = 0.10;
 pub const VOL_BEAM: f32 = 0.22;
-pub const VOL_BREAK: f32 = 0.40;
-pub const VOL_BIG_BREAK: f32 = 0.65;
+/// Blasts: small, medium, large, boss.
+pub const VOL_BLAST: [f32; 4] = [0.30, 0.40, 0.60, 0.85];
 pub const VOL_UI: f32 = 0.35;
 pub const VOL_GRAZE: f32 = 0.07;
 pub const GRAZE_SOUND_GAP: f64 = 0.05;
@@ -308,6 +375,8 @@ pub const STAR_LAYERS: [StarLayer; 3] = [
 ];
 /// How far a star's brightness dips when it twinkles (fraction of its value).
 pub const STAR_TWINKLE: f32 = 0.35;
+/// The odd red or teal star, among the two nearer layers.
+pub const STAR_TINT_SHARE: f32 = 0.04;
 /// The background's brightness ceiling (art bible: about 30%).
 pub const BG_MAX_VALUE: f32 = 0.30;
 /// The background dims toward half that (15%) as the bullet count climbs to this.

@@ -13,8 +13,10 @@ fn mix(id: Id) -> (f32, f64) {
     match id {
         Id::Shot => (VOL_SHOT, SHOT_SOUND_GAP),
         Id::Hit => (VOL_HIT, HIT_SOUND_GAP),
-        Id::Break => (VOL_BREAK, 0.05),
-        Id::BigBreak => (VOL_BIG_BREAK, 0.2),
+        Id::BlastSmall => (VOL_BLAST[0], 0.04),
+        Id::BlastMedium => (VOL_BLAST[1], 0.05),
+        Id::BlastLarge => (VOL_BLAST[2], 0.15),
+        Id::BlastBoss => (VOL_BLAST[3], 0.5),
         Id::Bump => (0.3, 0.2),
         Id::NotYet => (VOL_UI, 0.15),
         Id::Select => (VOL_UI, 0.04),
@@ -92,8 +94,8 @@ impl Audio {
             match *e {
                 Event::Volley { .. } => self.play(Id::Shot, 1.0),
                 Event::Hit { beam, .. } => self.play(Id::Hit, if beam { 0.6 } else { 1.0 }),
-                Event::Break { big: false, .. } => self.play(Id::Break, 1.0),
-                Event::Break { big: true, .. } => self.play(Id::BigBreak, 1.0),
+                // blasts are played by the explosion kit, which knows their size
+                Event::Break { .. } => {}
                 Event::Bump => self.play(Id::Bump, 1.0),
                 Event::BombStub => self.play(Id::NotYet, 1.0),
                 Event::Graze { .. } => self.play(Id::Graze, 1.0),
@@ -101,6 +103,18 @@ impl Audio {
             }
         }
         self.beam_target = if w.player.beaming { 1.0 } else { 0.0 };
+    }
+
+    /// The blast that matches an explosion's size.
+    pub fn blast(&mut self, size: crate::render::explode::Size) {
+        use crate::render::explode::Size;
+        let id = match size {
+            Size::Small => Id::BlastSmall,
+            Size::Medium => Id::BlastMedium,
+            Size::Large => Id::BlastLarge,
+            Size::Boss => Id::BlastBoss,
+        };
+        self.play(id, 1.0);
     }
 
     /// Fade the beam hum toward where it should be. Call every display frame.

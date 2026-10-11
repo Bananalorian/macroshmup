@@ -1,5 +1,6 @@
-//! The playfield: target dummies, the Pilgrim's shots and beam, the Pilgrim, and
-//! the particles, in the art bible's draw order.
+//! The playfield, in the art bible's draw order: the background (stars and the
+//! black hole), enemies, the Pilgrim's shots, the Pilgrim, explosions and
+//! particles, then enemy bullets above everything but the HUD.
 
 use super::Renderer;
 use super::art::Atlas;
@@ -9,7 +10,7 @@ use super::ship::{self, Pose};
 use crate::sim::World;
 use crate::sim::geom::Rect as SimRect;
 use crate::sim::shots::ShotKind;
-use crate::tune::{AFTERIMAGE_MIN, AURA_R, BEAM_W, BG_DIM_AT, BG_DIM_MIN, HITBOX_R};
+use crate::tune::{AFTERIMAGE_MIN, AURA_R, BEAM_W, BG_DIM_AT, BG_DIM_MIN, BG_MAX_VALUE, GRAIN, HITBOX_R, HOLE_R, HOLE_X, HOLE_Y, STAGE_FRAMES};
 use macroquad::color::Color;
 
 /// Max opacity of the Pilgrim's shots, so they never read as enemy bullets.
@@ -19,12 +20,29 @@ fn snap(v: f32) -> i32 {
     v.round() as i32
 }
 
+/// How far the background dims for this many bullets (1 is not at all).
+pub fn dim_for(bullets: usize) -> f32 {
+    1.0 - (1.0 - BG_DIM_MIN) * (bullets as f32 / BG_DIM_AT).min(1.0)
+}
+
+/// The black hole's brightness ceiling: the background's budget, less room for the
+/// film grain, scaled down as bullets crowd in.
+pub fn hole_bright(dim: f32) -> f32 {
+    (BG_MAX_VALUE - GRAIN * 0.5) * dim
+}
+
+/// The black hole's shadow radius `frame`s into the stage: it grows as you approach.
+pub fn hole_radius(frame: u64) -> f32 {
+    let k = (frame as f32 / STAGE_FRAMES as f32).min(1.0);
+    HOLE_R.0 + (HOLE_R.1 - HOLE_R.0) * k
+}
+
 pub fn draw(r: &Renderer, lay: &Layout, w: &World, hitboxes: bool) {
     let a = &r.atlas;
     let (ox, oy) = (lay.field.x, lay.field.y);
-    let n = w.hazards.bullets.len() as f32;
-    let dim = 1.0 - (1.0 - BG_DIM_MIN) * (n / BG_DIM_AT).min(1.0);
+    let dim = dim_for(w.hazards.bullets.len());
     r.stars.draw(a, lay.field, w.frame, dim);
+    r.hole(lay.field, HOLE_X, HOLE_Y, hole_radius(w.frame), hole_bright(dim), w.frame as f32 / 60.0);
 
     // enemies
     for (i, d) in w.dummies.iter().enumerate() {
@@ -95,15 +113,19 @@ pub fn draw(r: &Renderer, lay: &Layout, w: &World, hitboxes: bool) {
     };
     ship::draw(a, px, py, &pose);
 
-    r.fx.draw(a, ox, oy);
-    // enemy bullets above everything but the HUD (and the hitbox dot, which is HUD)
-    super::bullets::draw_bullets(a, w, ox, oy);
-    ship::draw_hitbox(a, px, py, p.blend(&w.tuning), w.frame);
-    let flash = r.flash.level();
+    r.parts.draw(a, ox, oy, false);
+    r.additive(true);
+    r.parts.draw(a, ox, oy, true);
+    r.additive(false);
+    // a full-screen flash washes over everything but the bullets, so they stay readable
+    let flash = r.fx.flash.level();
     if flash > 0.0 {
         let f = lay.field;
         a.fill(f.x, f.y, f.w, f.h, Color { a: 0.35 * flash, ..CREAM });
     }
+    // enemy bullets above everything but the HUD (and the hitbox dot, which is HUD)
+    super::bullets::draw_bullets(a, w, ox, oy);
+    ship::draw_hitbox(a, px, py, p.blend(&w.tuning), w.frame);
 
     if hitboxes {
         let red = Color::new(1.0, 0.2, 0.2, 0.7);
@@ -176,5 +198,20 @@ fn draw_aura(a: &Atlas, x: i32, y: i32, frame: u64) {
         let ang = k as f32 / n as f32 * std::f32::consts::TAU - frame as f32 * 0.05;
         let (dx, dy) = ((ang.cos() * AURA_R).round() as i32, (ang.sin() * AURA_R).round() as i32);
         a.fill(x + dx, y + dy, 1, 1, Color { a: 0.35, ..TEAL });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_hole_grows_across_the_stage_and_the_sky_dims_with_bullets() {
+        assert_eq!(hole_radius(0), HOLE_R.0);
+        assert!(hole_radius(STAGE_FRAMES / 2) > HOLE_R.0);
+        assert_eq!(hole_radius(STAGE_FRAMES * 3), HOLE_R.1);
+        assert_eq!(dim_for(0), 1.0);
+        assert!((dim_for(100_000) - BG_DIM_MIN).abs() < 1e-6, "down to half: 30% becomes 15%");
+        assert!(hole_bright(1.0) + GRAIN * 0.5 <= BG_MAX_VALUE + 1e-6, "grain and all, the hole stays in budget");
     }
 }
