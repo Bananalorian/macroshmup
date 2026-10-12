@@ -3,6 +3,21 @@
 Session notes for Claude Code: what shipped, tuning that changed, known issues, what's next.
 Newest first.
 
+## The UX plan - 2026-10-12
+
+After v0.8.8 Jason laid out the game's direction: a shmup you play like Hades (and a bit of
+Devil May Cry): fast, juicy, twitchy, arcade; lots of fodder, fewer bullets, overpowered
+then overrun; a Slam (dash-strike chains, 3 links, slowdown to aim at the next target); a
+style rank; augments and a shield; CRT shaders; a Zero Ranger-like title; WARNING as a
+lottery; a living boss ("more movement... feel alive"); the laser flaring and wrapping
+round what it hits; more things to shoot; a pause button. Written into SPRINTS.md as
+Sprints 8-13 (Feel, the Slam, Style, the Swarm, Augments & shield, Arcade shell), all
+*proposal*; Music & mix, Tuning and 1.0 moved to 14-16. Decided: Feel first; the Slam on
+pad X / key C (bomb stays on B / key X); a rush gauge filled by kills; the ship's size kept,
+revisited in the Swarm sprint.
+
+**Next:** Sprint 8 (Feel) when he says go.
+
 ## v0.8.8 Back on track - 2026-10-12
 
 **Jason:** "you just made it worse. it was better with the ontrack file. revert to that... make

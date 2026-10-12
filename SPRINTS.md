@@ -470,7 +470,131 @@ You check: does the HUD look like your sheet?
 
 ---
 
-### Sprint 8 — Music & mix · v0.9.0
+### The UX plan (Jason, after v0.8.8) · *proposal*
+**The game in one line:** a shmup you play like Hades. You shred swarms, slam through
+the big ships, stay stylish, and get slowly overrun. Fast, juicy, twitchy, arcade.
+
+What changes from the bullet-hell base:
+- **Pressure from numbers, not bullet walls:** lots of fodder; fewer bullets, faster and
+  easier to read. The boss thins out too.
+- **Overpowered, then overrun:** fodder dies in a hit or two; waves stack faster than you
+  can clear them as a stage goes on.
+- **The Slam:** a dash-strike as the sword, chained from target to target (below).
+- **Style, Devil May Cry-like:** a D to SSS rank for playing with variety, multiplying the
+  score.
+- **Juice everywhere,** an arcade look, and a boss that feels alive.
+
+Decided (Jason, 2026-10-12): the Feel sprint comes first; the Slam goes on the
+controller's X (free today) and the keyboard's C, keeping the bomb on B (keyboard X);
+the Slam chain is limited by a rush gauge that kills fill; the ship keeps its size for
+now, revisited once the bullets are thinned.
+
+---
+
+### Sprint 8 — Feel · v0.9.0 · *proposal*
+**Goal:** everything already in the game feels juicy, and the boss feels alive.
+
+Build
+- **Juice:** hit-stop on big kills (a few frames), hit flashes and knockback on enemies,
+  more debris and sparks, crunchier kill sounds, kill pops scaled to the kill. Every
+  effect obeys the readability rules (no shake while enemy bullets are live, flash limits,
+  the Options toggles).
+- **The laser:** a flare where the beam hits, and the beam wrapping a little around what
+  it hits instead of stopping in a hard straight line.
+- **Fewer bullets:** a density pass over Stage 1 and the boss, fewer bullets on screen, the
+  ones left faster and clearer, with `PG_SIM` before and after.
+- **A living JAWSTHIC:**
+  - a wave running through its whole body, not just the tail;
+  - its head swaying, its jaw chomping between attacks;
+  - its eye tracking you;
+  - lunges and short charges between patterns;
+  - a flinch when it's hit hard.
+
+Done when
+- Side-by-side captures show each effect.
+- `PG_SIM` shows the bullet peaks down with the stage still fair.
+- The boss never sits still like a picture sliding around.
+
+---
+
+### Sprint 9 — The Slam · v0.10.0 · *proposal*
+**Goal:** press X and become the sword.
+
+Build
+- **The Slam:** X (keyboard C) dashes the ship into the nearest target. It's invincible
+  during the dash, hits hard (mid-size ships die outright, big ones lose a chunk), and
+  turns nearby bullets into shards.
+- **Chains:** on impact, time slows briefly. A reticle snaps to the next target in the
+  stick's direction, and X slams again. 3 links to start.
+- **The rush gauge:** kills fill it; a slam spends it.
+- **Feel:** a freeze on impact, a trail, a crunch, the sword form flashing.
+- The bot learns to slam, so `PG_SIM` covers it.
+
+Done when
+- Tests cover the dash, the invincibility, the chain targeting and the gauge.
+- Captures show a 3-link chain.
+
+---
+
+### Sprint 10 — Style · v0.11.0 · *proposal*
+**Goal:** play with variety and the game tells you you're good at it.
+
+Build
+- **The rank:** a style rank from D to SSS, rising with varied actions (kills, point-blank
+  hits, grazes, slam chains, kills in the slowdown) and falling over time, when you're
+  hit, and when you repeat yourself.
+- **What it does:** it multiplies the score.
+- **How it shows:** each new rank slams in like the boss grades; it sits near your focus
+  without covering dodge space.
+
+Done when
+- Tests cover gains, decay, repetition and the multiplier.
+- `PG_SIM` shows the rank spread.
+
+---
+
+### Sprint 11 — The Swarm · v0.12.0 · *proposal*
+**Goal:** lots of fodder, overpowered, then overrun.
+
+Build
+- **More fodder:** new popcorn types that rush you, swarm and dive, with Stage 1's waves
+  rebuilt around them, rising to an overrun.
+- **More to shoot:** destructible scenery in the disk (debris, satellites, monoliths)
+  that drops points.
+- The ship's size gets revisited here.
+
+Done when
+- `PG_SIM` shows kill counts up, bullets down, and a stage that's fair but crowded by
+  the end.
+
+---
+
+### Sprint 12 — Augments & shield · v0.13.0 · *proposal*
+**Goal:** two drones at your sides and a shield, the ship's kit growing.
+
+Build
+- **The augments:** one on either side, following the ship and firing with it.
+- **The shield:** it takes one hit, then recharges.
+- **How they're earned** gets decided before the sprint (start with them, style, or
+  pickups).
+
+---
+
+### Sprint 13 — Arcade shell · v0.14.0 · *proposal*
+**Goal:** it looks and feels like an arcade cabinet.
+
+Build
+- **The look:** CRT shaders (scanlines, a slight curve, bloom), each with an Options
+  toggle.
+- **The title:** stark and bold, in the spirit of Zero Ranger.
+- **WARNING:** more flare (hazard stripes, a siren), then a lottery. Three slot reels
+  land on a boss modifier, such as ×2 score, ENRAGED or GLITCHED: riskier, but worth more.
+- **Pause:** a clickable pause button for mouse (Esc, P, Start and touch already
+  pause), and menu polish.
+
+---
+
+### Sprint 14 — Music & mix · v0.15.0
 **Goal:** it sounds as good as it looks.
 
 Build
@@ -486,7 +610,7 @@ You check: listen with headphones.
 
 ---
 
-### Sprint 9 — Tuning · v0.10.0
+### Sprint 15 — Tuning · v0.16.0
 **Goal:** fair, hard, readable, smooth.
 
 Build
@@ -501,7 +625,7 @@ Done when
 
 ---
 
-### Sprint 10 — 1.0 · v1.0.0
+### Sprint 16 — 1.0 · v1.0.0
 **Goal:** ship it.
 
 Build
@@ -515,7 +639,7 @@ Done when
 ---
 
 ## Later (outside this plan)
-Stage 2 and beyond, power-ups, replays (if not done in Sprint 10), more ships, online leaderboards, rank, a second loop.
+Stage 2 and beyond, power-ups, replays (if not done in Sprint 16), more ships, online leaderboards, rank, a second loop.
 
 ## References
 - [Boghog's bullet hell shmup 101](https://shmups.wiki/library/Boghog%27s_bullet_hell_shmup_101): the design bible for this project
