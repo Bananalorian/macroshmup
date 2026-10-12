@@ -83,7 +83,7 @@ enemy bullets (big, slow ones below small, fast ones) → HUD.
 - All art is generated in code at startup, like Shinjuku. A debug key exports every sprite sheet as PNG so you can paint over it in Aseprite; a PNG placed back in `art/` replaces the coded version at build time.
 
 ### The Pilgrim
-**The split sword** (v0.7.1, from [your sheet](docs/reference/Split-sword%20starship_%20flight%20to%20laser.png)), about 31 × 44 px, bone white like Stage 1's enemies:
+**The split sword** (v0.7.1, from [your sheet](docs/reference/Split-sword%20starship_%20flight%20to%20laser.png)), about 25 × 36 px (a fifth smaller since v0.7.3), bone white like Stage 1's enemies:
 - **Flight form:** two blades, each with a teal channel and a red heart, an antenna on each bevelled top, a crossbar with an engine nacelle at each end, and a capsule below on struts.
 - **Laser form:** focus closes the blades into one broad sword over the focus blend, nearly as wide as the flight form, so the ship doesn't shrink (v0.7.2). The antennas fold, the nacelles tuck in, the channels merge into one core, and the beam fires from the tip.
 - **Hitbox:** in the gap between the blades' red hearts (on the single heart in the laser form).

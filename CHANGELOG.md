@@ -3,6 +3,38 @@
 Every version is one build sprint. Newest first. Versions are tagged in git, and
 each tag publishes a GitHub Release with downloads.
 
+## [0.7.3] - 2026-10-12 - A fifth smaller
+
+### Changed
+- **The Pilgrim is 20% smaller** with all its detail kept
+  ([its sheet](docs/screenshots/pilgrim-sheet.png),
+  [in play](docs/screenshots/pilgrim-forms.png)). It's now about 25 × 36 px,
+  down from 31 × 44. Every part is still there:
+  - the two blades, each with its 3-pixel teal channel, red heart and antenna;
+  - the crossbar, and the nacelles with their windows, beacons, nozzles and twin
+    flames;
+  - the capsule, with its window, keel light, strobes and struts.
+
+  The transformation still takes 5 frames to a broad sword, and the hitbox,
+  shots, speeds and beam haven't changed.
+- **The channel lights hold still in flight.** The dashes down both blades used to
+  flow, faster while you fired, and that fought the banking frames as you moved
+  side to side. Now they only flow up the sword while the laser fires. The
+  nacelles' and the capsule's windows no longer flicker either.
+- The engine trails and the lock's sparks come from the smaller ship's nozzles and
+  crossbar.
+
+### Checked
+- **Tests prove:**
+  - the ship is 24-26 px wide and 34-37 px tall;
+  - every frame keeps the hitbox's column and every kind of light at every bank;
+  - the transformation still closes, converges and tucks in frame by frame;
+  - in flight, firing or not and mid-transformation, the channel and window
+    lights don't change from frame to frame;
+  - the channel lights flow only while the laser fires.
+- Every screenshot is retaken. Native and web builds are warning-free, and all
+  216 tests pass.
+
 ## [0.7.2] - 2026-10-12 - Full screen
 
 ### Changed

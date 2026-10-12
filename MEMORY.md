@@ -3,6 +3,21 @@
 Session notes for Claude Code: what shipped, tuning that changed, known issues, what's next.
 Newest first.
 
+## v0.7.3 A fifth smaller - 2026-10-12
+
+**Jason:** "make the ship about 20% smaller while keeping the detail; everything about the
+function is perfect"; the flowing channel dashes while shooting "mess up the animation moving
+left and right", but he likes the flicker on the sword when it closes. Then go to the score
+sprint (he called it "sprint 6"; it's Sprint 7) with S/A/B grades that flare, arcade-like.
+
+**Shipped:** ship.rs rows are constants (TIP -17, SHOULDER -6, FOOT 5, ARCH -12,
+NACELLE_ROWS (6, 11), POD_ROWS (9, 17), `pub BAR`), KEYS rescaled (f0 inner -2 core -5 outer
+-9 nacelle -10 corner -11 antenna (-7,3); f4 inner 0 core 0 outer -7 nacelle -9 corner -8),
+NACELLE_W/POD_W 2, canvas 27x41. `dropped()` takes a plain nacelle column when the face has
+only one. Channel dashes static unless `pose.beaming` (then flow every frame, TEAL_HOT);
+windows a steady 0.7; `flicker()` removed. main.rs trails from `ship.nozzles[2]`, lock sparks
+at `ship::BAR`. Screenshot batch: scratchpad/shots.sh.
+
 ## v0.7.2 Full screen (square playfield, broad laser form) - 2026-10-12
 
 **Jason's feedback on v0.7.1:** "love the ship!!", but the laser form "gets too small, or

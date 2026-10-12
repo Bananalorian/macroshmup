@@ -579,10 +579,11 @@ fn effects(w: &World, r: &mut Renderer, s: &Settings, audio: &mut Audio, chains:
     let me = (p.x, p.y);
     foe_effects(w, r);
     let flying = matches!(w.life, Life::Alive | Life::Respawning { .. });
-    if flying && w.frame % 2 == 0 {
-        r.parts.trail(p.x, p.y + 23.0, p.thrust() || !w.alive());
-    }
     let ship = r.atlas.r.ship.frame(p.blend(&w.tuning), p.bank);
+    if flying && w.frame % 2 == 0 {
+        let (jx, jy) = ship.nozzles[2];
+        r.parts.trail(p.x + jx as f32, p.y + jy as f32 + 2.0, p.thrust() || !w.alive());
+    }
     if flying && w.frame % 4 == 0 {
         for &(nx, ny) in &ship.nozzles[..2] {
             r.parts.trail(p.x + nx as f32, p.y + ny as f32 + 3.0, false);
@@ -590,7 +591,7 @@ fn effects(w: &World, r: &mut Renderer, s: &Settings, audio: &mut Audio, chains:
     }
     // the blades lock into the laser form: sparks off the crossbar, a glint at the tip
     if flying && p.locked == 1 {
-        r.parts.lock(p.x, p.y + 9.0, p.y + render::ship::TIP as f32);
+        r.parts.lock(p.x, p.y + render::ship::BAR as f32, p.y + render::ship::TIP as f32);
     }
     // a bomb's cancelled bullets become teal shards that fly to you (a sample on a crowded screen)
     if w.cancel_shards {
