@@ -708,6 +708,53 @@ pub fn glitch(seed: u32) -> Vec<f32> {
     b
 }
 
+/// The crunch under a kill: a bit-crushed snap and a short low knock.
+pub fn crunch(seed: u32) -> Vec<f32> {
+    let mut b = buf(0.16);
+    let mut r = Rng::new(seed);
+    let mut hp = Hp::default();
+    let (mut hold, mut ph) = (0.0f32, 0.0f32);
+    let pitch = r.range(0.9, 1.1);
+    for (i, s) in b.iter_mut().enumerate() {
+        let t = i as f32 / SR;
+        // crushed to a few levels, sample-and-held
+        if i % 5 == 0 {
+            hold = (r.noise() * 3.0).round() / 3.0;
+        }
+        let snap = hp.run(hold, 700.0) * (-t * 45.0).exp() * 1.4;
+        ph += (55.0 + 160.0 * (-t * 25.0).exp()) * pitch / SR;
+        let knock = (TAU * ph).sin() * (-t * 30.0).exp() * attack(t, 0.001);
+        *s = snap + knock;
+    }
+    drive(&mut b, 2.2);
+    normalize(&mut b, 0.85);
+    b
+}
+
+/// Its jaws slamming shut on a lunge: stone on stone, a hard crack over a low thud,
+/// a gritty grind as the fangs seat.
+pub fn chomp(seed: u32) -> Vec<f32> {
+    let len = 0.35;
+    let mut b = buf(len);
+    let mut r = Rng::new(seed);
+    let (mut crack, mut grit) = (Bq::default(), Lp::default());
+    let mut ph = 0.0f32;
+    let pitch = r.range(0.92, 1.08);
+    for (i, s) in b.iter_mut().enumerate() {
+        let t = i as f32 / SR;
+        ph += (52.0 + 90.0 * (-t * 30.0).exp()) * pitch / SR;
+        let thud = (TAU * ph).sin() * (-t * 16.0).exp() * attack(t, 0.002);
+        let n = r.noise();
+        let snap = crack.bandpass(n, 2600.0 * pitch, 1.4) * (-t * 90.0).exp() * 2.2;
+        let grind = grit.run(n, 900.0) * (-((t - 0.03).abs()) * 40.0).exp() * 0.8;
+        *s = thud + snap + grind;
+    }
+    drive(&mut b, 1.6);
+    let mut b = reverb(&b, 0.18, 0.8, 0.4);
+    normalize(&mut b, 0.8);
+    b
+}
+
 /// The hole takes it: a long whoosh falling away, a tone sinking with it.
 pub fn swallowed(seed: u32) -> Vec<f32> {
     let len = 2.6;
@@ -755,6 +802,10 @@ pub enum Id {
     LaserCharge,
     LaserBeam,
     Glitch,
+    /// Its jaws snapping shut on a lunge.
+    Chomp,
+    /// The crunch under every kill.
+    Crunch,
     Swallowed,
     /// The score: a tally line's tick, a grade's slam, an extend's jingle.
     Tick,
@@ -862,6 +913,12 @@ pub fn bank() -> Vec<(Id, Vec<u8>)> {
     v.push((Id::LaserBeam, mono(laser_beam(1200))));
     for k in 0..3 {
         v.push((Id::Glitch, mono(glitch(1300 + k))));
+    }
+    for k in 0..2 {
+        v.push((Id::Chomp, mono(chomp(1450 + k))));
+    }
+    for k in 0..3 {
+        v.push((Id::Crunch, mono(crunch(1470 + k))));
     }
     v.push((Id::Swallowed, mono(swallowed(1400))));
     v.push((Id::Tick, mono(tally_tick())));

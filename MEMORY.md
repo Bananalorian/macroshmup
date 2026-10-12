@@ -3,6 +3,43 @@
 Session notes for Claude Code: what shipped, tuning that changed, known issues, what's next.
 Newest first.
 
+## v0.9.0 Feel (Sprint 8) - 2026-10-12
+
+**Jason:** "look at ... Lunar gothic mechanical shark with closed jaw.png. when the mouth opens and
+closes [it] cannot look disjointed ... needs to be a single shark. what you have is good, just
+refine it. also the edges need to feel like small particles are being taken off of it by the
+blackhole. like the particles that you absorb after a bomb. go" (go = Sprint 8).
+- **The mouth:** tools/trace_jawsthic.py splits FANGS off BODY (everything on/under the GUMS_UP
+  arch) and traces LIP and LOWER_LIP from the closed picture (CLOSED_SCALE 0.165/1.33, offset
+  CLOSED_AT (26,13): its pixel (x+26, y+13) is the body's (x,y)); the slit is found near SLIT,
+  the lower lip runs down to the shut jaw's gum line (GUMS_DOWN turned by JAW_SHUT about HINGE
+  (71,54)) plus CHIN. Its background mask closes cracks first (Max/MinFilter 25) or the flood
+  leaks along the slit. jawsthic.rs `Mouth::frame(k)`: jaw, body, fangs slid up by their own
+  height x (1-back), lower lip slid down and turned with the jaw, lip slid up; back =
+  open/LIPS.1 (0.4), lips slide LIPS.0 14 px. Open frame identical to v0.8.8.
+- **Specks:** `stripped()` drawn UNDER the shark (the hole is behind it); `strip_path` lifts
+  (JAWS_STRIP_LIFT 0.4 of life) then q^2 into the hole with a sin swirl (JAWS_STRIP_SWIRL 26);
+  JAWS_STRIP ([90,110,140,180],280), life 64; a third off the tail (`tail_rim`).
+- **Alive (sim/boss.rs):** `bend(lx)` (JAWS_BODY_WAVE (1.2, 2.6, 0.018)) is in `at()`, the tail
+  hangs off bend(root) and leaves along its slope; `behave()`: flinch (JAWS_FLINCH keep 0.95,
+  threshold 120, 8 px back, 4 up, cd 60; pain from hurt(), a fin break = MAX; no recoil while
+  lasing), chomps (JAWS_CHOMP; only fit in P3/breaks), lunges (JAWS_LUNGE_EVERY (300,180),
+  JAWS_LUNGE (6 back, 18 wind, 16 reach, 6 drop, 7 strike); no laser/turn may start mid-lunge;
+  Event::BossBite -> synth::chomp). `look` = player; render `gaze()` repaints the eye socket,
+  the pupil rolls white while `biting()`. Body drawn with `put_bent` (strips of columns).
+- **Juice:** main.rs `hitstop(events)` -> game.stop skips stage ticks (HITSTOP [0,2,4,6],
+  HITSTOP_BOSS 6); `Particles::impact` silhouettes (IMPACT [2,3,4,4]); `audio.kill` = blast +
+  synth::crunch (VOL_CRUNCH, CRUNCH_BY_SIZE); foes `jolt()`; chips in `Particles::hit`.
+- **Beam:** Beam.hit_box; scene.rs `draw_wrap`/`wrap_path`, bigger flare; `beam_spray`.
+- **Fewer bullets:** tune.rs guns thinned (rings x0.7 n, spirals/cones every x1.4, curtain
+  every 24, speeds +10-20%). PG_SIM: bot avg 80->52, peak 234->162; pacifist 101->66,
+  235->166; phases 24.4/24.2/26.4/23.3; score 3.28M; rank S 88 A 12 (was S 30 A 70).
+- Screenshot script: pilgrim-forms now frames 333-340 (the bot's focus moved); boss practice's
+  world clock starts at ~9450, so PG_BOMB needs that offset (PG_BOMB=9650 ~ screen frame 200).
+
+**Decision asked:** retune the rank thresholds now that the bot gets S 88%, or leave for Sprint 15.
+**Next:** Sprint 9 (the Slam) when he says go.
+
 ## The UX plan - 2026-10-12
 
 After v0.8.8 Jason laid out the game's direction: a shmup you play like Hades (and a bit of

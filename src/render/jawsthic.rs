@@ -12,13 +12,17 @@
 //! each step of its drop (put together with the body), every turn of every tail
 //! plate and fin.
 //!
+//! The atlas draws the head biting, lips pulled back off the gums. Shut, the lips
+//! of his closed-jaw picture close over them, one stone head with a slit for a
+//! mouth; as the jaw drops they pull back and the fangs slide down out of the gums.
+//!
 //! Every part faces right here. Coordinates are pixels from the body's pivot, y down.
 
 use super::art::Packer;
 use super::jaws_px::{self as px, Grid};
 use super::palette::{CORE as CORE_C, EMBER, INK as INK_C, SIGNAL};
 use crate::sim::boss::{Act, Boss, Laser};
-use crate::tune::{JAWS_BLASTS, JAWS_DEATH, JAWS_DORSAL_CORE, JAWS_FALL, JAWS_INTRO, JAWS_LASER, JAWS_SMEAR_LIFE, JAWS_SMEARS, JAWS_STRIP, JAWS_STRIP_LIFE, JAWS_STRIP_PULL};
+use crate::tune::{JAWS_BLASTS, JAWS_DEATH, JAWS_DORSAL_CORE, JAWS_FALL, JAWS_INTRO, JAWS_LASER, JAWS_SMEAR_LIFE, JAWS_SMEARS, JAWS_STRIP, JAWS_STRIP_LIFE, JAWS_STRIP_LIFT, JAWS_STRIP_SWIRL};
 use macroquad::prelude::{Color, DrawTextureParams, FilterMode, Image, Rect, Texture2D, draw_texture_ex, vec2};
 
 // Where the parts hang on the body (from its pivot, facing right): shared with the
@@ -213,9 +217,13 @@ fn round(p: Pt) -> (i32, i32) {
 // ---------------------------------------------------------------- the rig
 
 /// The jaw's frames, shut to wide open. Wide open is the atlas's pose; shut, it's
-/// turned up by `JAW_SHUT` radians so its fangs meet the upper row.
+/// turned up by `JAW_SHUT` radians (tools/trace_jawsthic.py fits the closed lips to
+/// it).
 pub const JAW_FRAMES: usize = 7;
 pub const JAW_SHUT: f32 = -0.55;
+/// How far the lips slide back (px), and how far open the jaw is when they're all
+/// the way back and the fangs all the way out.
+const LIPS: (f32, f32) = (14.0, 0.4);
 /// The tail's joints in the traced tail, root to the fin, on its centerline (Jason
 /// drew it rising toward the fin). Each plate runs from its joint back to the next
 /// one; the tail fin is everything behind the last. Each plate keeps a few columns
@@ -249,11 +257,65 @@ fn turn_of(a: f32, rest: f32, reach: f32) -> usize {
     ((((a - rest) / STEP).round() as i32).clamp(-h, h) + h) as usize
 }
 
-/// The body with the jaw dropped to frame `k` of `JAW_FRAMES`, put together.
-fn body_frame(body: &Frame, jaw: &Frame, k: usize) -> Frame {
-    let open = k as f32 / (JAW_FRAMES - 1) as f32;
-    let jaw = &turns(jaw, &[JAW_SHUT * (1.0 - open)])[0];
-    layered(&[(jaw, round(HINGE)), (body, (0, 0))])
+/// What's in a frame slid `dy` px down (up if negative), kept only where the frame
+/// was: a lip drawn back into the head, the fangs up into the gums.
+fn slid(f: &Frame, dy: i32) -> Frame {
+    let (w, h) = (f.img.width as i32, f.img.height as i32);
+    let mut img = Image::gen_image_color(w as u16, h as u16, Color::new(0.0, 0.0, 0.0, 0.0));
+    for y in 0..h {
+        for x in 0..w {
+            let sy = y - dy;
+            if f.img.get_pixel(x as u32, y as u32).a > 0.0 && (0..h).contains(&sy) {
+                let c = f.img.get_pixel(x as u32, sy as u32);
+                if c.a > 0.0 {
+                    img.set_pixel(x as u32, y as u32, c);
+                }
+            }
+        }
+    }
+    Frame { img, pivot: f.pivot }
+}
+
+/// The head's moving parts: the body (its fangs off), the jaw, the upper fangs (and
+/// how far they slide to be all the way up in the gums: their longest), and the
+/// closed lips, the lower one pivoting on the hinge.
+struct Mouth {
+    body: Frame,
+    jaw: Frame,
+    fangs: Frame,
+    reach: f32,
+    lip: Frame,
+    lower_lip: Frame,
+}
+
+impl Mouth {
+    fn new() -> Mouth {
+        let fangs = decode(&px::FANGS);
+        let reach = (0..fangs.img.width as u32).map(|x| (0..fangs.img.height as u32).filter(|&y| fangs.img.get_pixel(x, y).a > 0.0).count()).max().unwrap_or(0) as f32;
+        Mouth { body: decode(&px::BODY), jaw: decode(&px::JAW), fangs, reach, lip: decode(&px::LIP), lower_lip: decode(&px::LOWER_LIP) }
+    }
+
+    /// How far back the lips are at openness `open` (0 shut, 1 gone).
+    fn back(open: f32) -> f32 {
+        (open / LIPS.1).min(1.0)
+    }
+
+    /// The body with the jaw dropped to frame `k` of `JAW_FRAMES`, put together: the
+    /// jaw under the body, the fangs as far out as the lips are back, and the lips
+    /// (the lower one swung down with the jaw) drawn back as far.
+    fn frame(&self, k: usize) -> Frame {
+        let open = k as f32 / (JAW_FRAMES - 1) as f32;
+        let back = Mouth::back(open);
+        let jaw = &turns(&self.jaw, &[JAW_SHUT * (1.0 - open)])[0];
+        let fangs = slid(&self.fangs, -(self.reach * (1.0 - back)).round() as i32);
+        if back >= 1.0 {
+            return layered(&[(jaw, round(HINGE)), (&self.body, (0, 0)), (&fangs, (0, 0))]);
+        }
+        let d = (LIPS.0 * back).round() as i32;
+        let lower = &turns(&slid(&self.lower_lip, d), &[-JAW_SHUT * open])[0];
+        let lip = slid(&self.lip, -d);
+        layered(&[(jaw, round(HINGE)), (&self.body, (0, 0)), (&fangs, (0, 0)), (lower, round(HINGE)), (&lip, (0, 0))])
+    }
 }
 
 /// Where column `c` of the traced tail falls between its joints: the plate it's on
@@ -323,8 +385,10 @@ pub struct JawsFrames {
     /// The same for each tail plate and (last) the tail fin.
     pub tail_shards: [Vec<(i8, i8, Color)>; 6],
     /// Its outline along its back (-1) and its belly (1), every other column, from
-    /// the pivot (facing right): where the black hole strips particles off it.
+    /// the pivot (facing right): where the black hole strips specks off it. The
+    /// tail's the same, by column of the traced tail, rows from its centerline.
     pub rim: Vec<(i32, i32, i32)>,
+    pub tail_rim: Vec<(i32, i32, i32)>,
 }
 
 /// The topmost and bottommost pixel of every other column of `f`, from its pivot
@@ -339,6 +403,21 @@ fn rim(f: &Frame) -> Vec<(i32, i32, i32)> {
             if (x as f32) < HINGE.0 {
                 v.push((x, bottom - f.pivot.1, 1));
             }
+        }
+    }
+    v
+}
+
+/// The traced tail's top and bottom, every other column: (its column, the row from
+/// its centerline there, -1 the top or 1 the bottom).
+fn tail_rim(f: &Frame) -> Vec<(i32, i32, i32)> {
+    let mut v = vec![];
+    for c in (0..f.img.width as i32).step_by(2) {
+        let solid: Vec<i32> = (0..f.img.height as i32).filter(|&y| f.img.get_pixel(c as u32, y as u32).a > 0.0).collect();
+        if let (Some(&top), Some(&bottom)) = (solid.first(), solid.last()) {
+            let rest = along_tail(c).2.round() as i32;
+            v.push((c, top - rest, -1));
+            v.push((c, bottom - rest, 1));
         }
     }
     v
@@ -378,9 +457,9 @@ impl JawsArt {
     /// texture's image, and where each frame is in it.
     fn sheet() -> (Image, JawsFrames) {
         let mut p = Packer::sized(2048, 1024);
-        let (body, jaw) = (decode(&px::BODY), decode(&px::JAW));
-        let shut = body_frame(&body, &jaw, 0);
-        let bodies: Vec<Frame> = (0..JAW_FRAMES).map(|k| body_frame(&body, &jaw, k)).collect();
+        let mouth = Mouth::new();
+        let bodies: Vec<Frame> = (0..JAW_FRAMES).map(|k| mouth.frame(k)).collect();
+        let shut = bodies[0].clone();
         let parts = tail_parts();
         let tail = Frame { pivot: JOINTS[0], ..decode(&px::TAIL) };
         let dorsal = decode(&px::DORSAL);
@@ -447,6 +526,7 @@ impl JawsArt {
             fin_shards: sample(&decode(&px::PECTORAL), 2),
             tail_shards,
             rim: rim(&shut),
+            tail_rim: tail_rim(&tail),
         };
         (p.img, frames)
     }
@@ -470,6 +550,34 @@ fn put(tex: &Texture2D, s: Sprite, x: i32, y: i32, tint: Color, clip: Option<i32
         draw_texture_ex(tex, (left + shift) as f32, row as f32, tint, DrawTextureParams { source: Some(src), dest_size: Some(vec2(src.w, src.h)), ..Default::default() });
         row = end;
     }
+}
+
+/// `put`, bent: each column of `s` moved down `bend(its x from the pivot, facing
+/// right)` px (the sprite faces `facing`), so the body swims without its stone ever
+/// being resampled. Columns bent alike go in one strip.
+#[allow(clippy::too_many_arguments)]
+fn put_bent(tex: &Texture2D, s: Sprite, x: i32, y: i32, tint: Color, clip: Option<i32>, bands: &[(i32, i32, i32)], facing: f32, bend: &impl Fn(f32) -> f32) {
+    let w = s.r.w as i32;
+    let dy = |c: i32| bend(facing * (c - s.pivot.0) as f32).round() as i32;
+    let mut c0 = 0;
+    while c0 < w {
+        let d = dy(c0);
+        let mut c1 = c0 + 1;
+        while c1 < w && dy(c1) == d {
+            c1 += 1;
+        }
+        let strip = Sprite { r: Rect::new(s.r.x + c0 as f32, s.r.y, (c1 - c0) as f32, s.r.h), pivot: (s.pivot.0 - c0, s.pivot.1) };
+        put(tex, strip, x, y + d, tint, clip, bands);
+        c0 = c1;
+    }
+}
+
+/// Which way its eye looks from `eye` toward `you`: its pupil's step from the middle
+/// of the socket, -1 to 1 each way.
+pub fn gaze(eye: Pt, you: Pt) -> (i32, i32) {
+    let (dx, dy) = (you.0 - eye.0, you.1 - eye.1);
+    let d = dx.hypot(dy).max(1.0);
+    (((dx / d) * 1.45).round().clamp(-1.0, 1.0) as i32, ((dy / d) * 1.45).round().clamp(-1.0, 1.0) as i32)
 }
 
 /// A cosmetic hash of a few numbers, 0..1 (glitches pick bands and shifts with it).
@@ -552,12 +660,17 @@ pub fn draw(r: &super::Renderer, b: &Boss, ox: i32, oy: i32, frame: u64) {
     }
     let gone = |piece: usize| blown > piece;
 
+    let joints = b.tail();
+    // under it all, the specks the hole is stripping off it (the hole is behind it,
+    // so they vanish behind its stone as they fall in)
+    if !gone(8) {
+        stripped(a, b, &art.rim, if gone(0) { &[] } else { &art.tail_rim }, &joints, (bx, by), (ox, oy), clip, k, frame);
+    }
     // back to front: the far fin, the tail fin, the tail, the dorsal fin, the body, the near fin
     if !gone(7) {
         let (x, y) = swing(FAR_FIN_AT);
         put(tex, art.far[f][turn_of(-paddle, 0.0, PADDLE)], x, y, Color::new(k * 0.72, k * 0.72, k * 0.74, 1.0), clip, &bands);
     }
-    let joints = b.tail();
     // the tail, fin and all: one image, each column slid up or down to where the
     // sim's tail runs now, so it swims as one piece and its pixels are never
     // resampled; the fin rides the last joint. The blasts take the fin first (or its
@@ -584,22 +697,40 @@ pub fn draw(r: &super::Renderer, b: &Boss, ox: i32, oy: i32, frame: u64) {
         put(tex, art.dorsal[f], dx, dy, tint, clip, &bands);
     }
     let body = art.body[f][jaw];
-    put(tex, body, bx, by, tint, clip, &bands);
+    let bend = |lx: f32| b.bend(lx);
+    put_bent(tex, body, bx, by, tint, clip, &bands, b.facing, &bend);
+    // where a pixel of the body (from its pivot, facing right) is drawn now
+    let mirror = |(x, y): (i32, i32)| (bx + if flip { -x } else { x }, by + y + b.bend(x as f32).round() as i32);
+    // its eye follows you, and rolls back white as it bites: the socket, then the
+    // red diamond in it looking your way
+    let (ex, ey) = mirror(round(EYE));
+    let (gx, gy) = gaze(((ex - ox) as f32, (ey - oy) as f32), b.look);
+    if clip.is_none_or(|c| ey + 3 < c) {
+        let dim = |c: Color| Color::new(c.r * k, c.g * k, c.b * k, 1.0);
+        let pupil = if b.biting() { RAMP[4] } else { SIGNAL };
+        for dy in -3i32..=3 {
+            for dx in -3i32..=3 {
+                let d = dx.abs() + dy.abs();
+                if d <= 3 {
+                    a.fill(ex + dx, ey + dy, 1, 1, dim(OUTLINE));
+                }
+                if (dx - gx).abs() + (dy - gy).abs() <= 1 {
+                    a.fill(ex + dx, ey + dy, 1, 1, dim(pupil));
+                }
+            }
+        }
+    }
     let (fx, fy) = swing(PECTORAL_AT);
     let near = if fins_out[0] { art.stump[f] } else { art.pectoral[f][turn_of(paddle, 0.0, PADDLE)] };
     if !gone(7) {
         put(tex, near, fx, fy, tint, clip, &bands);
     }
     smears(a, b, &joints, (ox, oy), clip, k, frame, |i| !gone(if i == 5 { 0 } else { 5 - i }) && !(i == 5 && fins_out[1]));
-    if !gone(8) {
-        stripped(a, b, &art.rim, (bx, by), (ox, oy), clip, k, frame);
-    }
     if clip.is_some_and(|c| c < by - 60) {
         return;
     }
 
     // the glows: lit windows before they fire, the turrets' cores, the eye, the jaws
-    let mirror = |(x, y): (i32, i32)| (bx + if flip { -x } else { x }, by + y);
     let charges = b.charges();
     for (w, glass) in art.windows.iter().enumerate() {
         let c = charges.windows[w];
@@ -633,9 +764,10 @@ pub fn draw(r: &super::Renderer, b: &Boss, ox: i32, oy: i32, frame: u64) {
     // the dorsal fin's window: a red light, steady
     let (wx, wy) = swing(JAWS_DORSAL_CORE);
     a.fill(wx, wy, 1, 2, Color { a: 0.6 * k, ..SIGNAL });
-    let (ex, ey) = swing(EYE);
     let pulse = 0.55 + 0.35 * ((frame as f32) * 0.08).sin();
-    a.blit(a.r.discs[1], ex - 3, ey - 3, 1, Color { a: pulse * 0.6 * k, ..SIGNAL });
+    if !b.biting() {
+        a.blit(a.r.discs[1], ex + gx - 3, ey + gy - 3, 1, Color { a: pulse * 0.6 * k, ..SIGNAL });
+    }
     if b.jaw > 0.25 {
         // the crosshair in its mouth, hotter as a shot comes
         let (mx, my) = px(b.muzzle(crate::sim::boss::Muzzle::Mouth));
@@ -662,7 +794,7 @@ pub fn draw(r: &super::Renderer, b: &Boss, ox: i32, oy: i32, frame: u64) {
     if flash || !bands.is_empty() || b.fins.iter().any(|q| q.flash > 0) {
         r.additive(true);
         if flash {
-            put(tex, body, bx, by, Color::new(0.45, 0.05, 0.03, 0.2), clip, &[]);
+            put_bent(tex, body, bx, by, Color::new(0.45, 0.05, 0.03, 0.2), clip, &[], b.facing, &bend);
         }
         for (i, q) in b.fins.iter().enumerate() {
             if q.flash > 0 && q.alive() {
@@ -679,8 +811,8 @@ pub fn draw(r: &super::Renderer, b: &Boss, ox: i32, oy: i32, frame: u64) {
             }
         }
         if !bands.is_empty() {
-            put(tex, body, bx - 2, by, Color::new(0.6, 0.05, 0.03, 0.34), clip, &bands);
-            put(tex, body, bx + 2, by, Color::new(0.04, 0.45, 0.34, 0.28), clip, &bands);
+            put_bent(tex, body, bx - 2, by, Color::new(0.6, 0.05, 0.03, 0.34), clip, &bands, b.facing, &bend);
+            put_bent(tex, body, bx + 2, by, Color::new(0.04, 0.45, 0.34, 0.28), clip, &bands, b.facing, &bend);
         }
         r.additive(false);
     }
@@ -732,12 +864,27 @@ fn smears(a: &super::art::Atlas, b: &Boss, joints: &[(f32, f32, f32); 6], (ox, o
     }
 }
 
-/// The black hole taking it apart: torn bits of it lifting off its back and belly and
-/// swept away toward the hole, fading as they go, smeared like its tail's glitches
-/// (stone chips, red and teal scanlines) with a few lone sparks. Some always, more as
-/// it weakens, a storm through a turn and its end.
+/// Where a speck the hole strips off it is, `u` (0 to 1) into its life: off `start`
+/// on its outline it lifts `lift` px out (`side` -1 up, 1 down), easing to a stop;
+/// then the hole at `hole` takes it, faster and faster, swirling `swirl` px round on
+/// the way in, the way a bomb's shards fly to you.
+fn strip_path(start: Pt, side: f32, lift: f32, swirl: f32, hole: Pt, u: f32) -> Pt {
+    let l = (u / JAWS_STRIP_LIFT).clamp(0.0, 1.0);
+    let p = (start.0, start.1 + side * lift * (1.0 - (1.0 - l) * (1.0 - l)));
+    let q = ((u - JAWS_STRIP_LIFT) / (1.0 - JAWS_STRIP_LIFT)).clamp(0.0, 1.0).powi(2);
+    let (dx, dy) = (hole.0 - p.0, hole.1 - p.1);
+    let d = dx.hypot(dy).max(1.0);
+    let w = swirl * (std::f32::consts::PI * q).sin();
+    (p.0 + dx * q - dy / d * w, p.1 + dy * q + dx / d * w)
+}
+
+/// The black hole taking it apart: specks lifting off its outline (its back, its
+/// belly, its tail) and falling into the hole like the shards a bomb sends to you, a
+/// short trail behind each, reddening and dimming as they near it. Bone mostly, some
+/// red, a little teal. Some always, more as it weakens, a storm through a turn and
+/// its end.
 #[allow(clippy::too_many_arguments)]
-fn stripped(a: &super::art::Atlas, b: &Boss, rim: &[(i32, i32, i32)], (bx, by): (i32, i32), (ox, oy): (i32, i32), clip: Option<i32>, k: f32, frame: u64) {
+fn stripped(a: &super::art::Atlas, b: &Boss, rim: &[(i32, i32, i32)], tail_rim: &[(i32, i32, i32)], joints: &[(f32, f32, f32); 6], (bx, by): (i32, i32), (ox, oy): (i32, i32), clip: Option<i32>, k: f32, frame: u64) {
     if rim.is_empty() {
         return;
     }
@@ -752,47 +899,40 @@ fn stripped(a: &super::art::Atlas, b: &Boss, rim: &[(i32, i32, i32)], (bx, by): 
     for s in 0..n as u64 {
         let t = frame + s * 17;
         let (age, id) = (t % life, t / life * 64 + s);
-        let (rx, ry, side) = rim[(noise(id, 1) * rim.len() as f32) as usize % rim.len()];
-        let start = ((bx + (b.facing * rx as f32) as i32) as f32, (by + ry) as f32);
-        // where it is `a` frames into its life: lifting off its back or belly into the
-        // open, then swept sideways into the hole's pull (the hole sits behind the
-        // fish, so a pull straight at it would drag the specks back across the stone)
-        let at = |a: f32| {
-            let u = a / life as f32;
-            // off the back they fly well clear; off the belly they drop only a little,
-            // so they never crowd the player's space
-            let lift = if side < 0 { -(3.0 + noise(id, 2) * 4.0) * (1.0 + 8.0 * u.sqrt()) } else { (2.0 + noise(id, 2) * 3.0) * (1.0 + 6.0 * u.sqrt()) };
-            let pull = u * u * JAWS_STRIP_PULL;
-            (start.0 + (hole.0 - start.0) * pull - b.facing * 5.0 * u, start.1 + lift)
+        // a third off the tail, where it is now; the rest off the body
+        let (start, side) = if !tail_rim.is_empty() && noise(id, 6) < 0.3 {
+            let (c, dy, side) = tail_rim[(noise(id, 1) * tail_rim.len() as f32) as usize % tail_rim.len()];
+            let (i, t, _) = along_tail(c);
+            let y = joints[i].1 + (joints[i + 1].1 - joints[i].1) * t;
+            ((ox as f32 + joints[0].0.round() + b.facing * (c - JOINTS[0].0) as f32, oy as f32 + y.round() + dy as f32), side)
+        } else {
+            let (rx, ry, side) = rim[(noise(id, 1) * rim.len() as f32) as usize % rim.len()];
+            ((bx as f32 + b.facing * rx as f32, (by + ry) as f32 + b.bend(rx as f32).round()), side)
         };
+        let (lift, swirl) = (3.0 + noise(id, 2) * 9.0, (noise(id, 4) - 0.5) * 2.0 * JAWS_STRIP_SWIRL);
+        let at = |a: f32| strip_path(start, side as f32, lift, swirl, hole, a / life as f32);
         let (x, y) = at(age as f32);
         if clip.is_some_and(|c| y as i32 >= c) {
             continue;
         }
-        let fade = (1.0 - age as f32 / life as f32) * k;
+        // falling in, it reddens and goes out
+        let u = age as f32 / life as f32;
+        let q = ((u - JAWS_STRIP_LIFT) / (1.0 - JAWS_STRIP_LIFT)).clamp(0.0, 1.0);
         let kind = noise(id, 3);
-        let (xi, yi) = (x.round() as i32, y.round() as i32);
-        if kind >= 0.9 {
-            // a lone spark, a streak behind it back along the way it came
-            for (back, alpha) in [(2u64, 0.55), (4, 0.4), (6, 0.28), (8, 0.18), (10, 0.1)] {
-                let (tx, ty) = at(age.saturating_sub(back) as f32);
-                a.fill(tx.round() as i32, ty.round() as i32, 1, 1, Color { a: alpha * fade, ..RAMP[5] });
-            }
-            a.fill(xi, yi, 1, 1, Color { a: 0.9 * fade, ..RAMP[5] });
-            continue;
+        let base = if kind < 0.7 { RAMP[5 - (kind < 0.25) as usize] } else if kind < 0.92 { SIGNAL } else { TEAL };
+        let red = q * q;
+        let c = Color::new(base.r + (SIGNAL.r - base.r) * red, base.g + (SIGNAL.g - base.g) * red, base.b + (SIGNAL.b - base.b) * red, 1.0);
+        let fade = k * (1.0 - q.powi(4));
+        // the head, and a trail back the way it came, longer as it speeds up
+        let (px0, py0) = at(age as f32 - 1.0);
+        let v = (x - px0).hypot(y - py0).max(0.01);
+        let (ux, uy) = ((x - px0) / v, (y - py0) / v);
+        let len = (1.0 + v * 1.5).min(5.0) as i32;
+        for s in 1..=len {
+            let m = 0.5 * (1.0 - s as f32 / (len + 1) as f32);
+            a.fill((x - ux * s as f32).round() as i32, (y - uy * s as f32).round() as i32, 1, 1, Color { a: m * fade, ..c });
         }
-        // torn like the tail's smears, stretching as the hole pulls it sideways: its
-        // head leads, the rest of it trails back the way it came
-        let len = 2 + (noise(id, 4) * 5.0 + 4.0 * age as f32 / life as f32) as i32;
-        let left = if hole.0 > start.0 { xi - len + 1 } else { xi };
-        if kind < 0.5 {
-            // a chip of stone, its dark edge under it
-            a.fill(left, yi, len, 2, Color { a: 0.85 * fade, ..RAMP[4 + (kind < 0.2) as usize] });
-            a.fill(left, yi + 2, len, 1, Color { a: 0.7 * fade, ..OUTLINE });
-        } else {
-            let c = if kind < 0.75 { SIGNAL } else { TEAL };
-            a.fill(left, yi, len, 1, Color { a: 0.6 * fade, ..c });
-        }
+        a.fill(x.round() as i32, y.round() as i32, 1, 1, Color { a: 0.95 * fade, ..c });
     }
 }
 
@@ -914,18 +1054,104 @@ mod tests {
         assert!(bright > 0.3, "only {:.0}% of it is bright", bright * 100.0);
     }
 
-    /// Shut, the jaw's stone closes the mouth under the fangs; wide open, the dark of
-    /// the mouth sits where the crosshair goes.
+    /// Shut, the jaw's stone closes the mouth; wide open, the dark of the mouth sits
+    /// where the crosshair goes.
     #[test]
     fn the_jaw_shuts_on_its_fangs_and_opens_on_the_dark() {
-        let (body, jaw) = (decode(&px::BODY), decode(&px::JAW));
-        let (shut, open) = (body_frame(&body, &jaw, 0), body_frame(&body, &jaw, JAW_FRAMES - 1));
+        let mouth = Mouth::new();
+        let (shut, open) = (mouth.frame(0), mouth.frame(JAW_FRAMES - 1));
         let mouth = round(JAWS_MOUTH);
         assert!(at(&shut, mouth).is_some(), "shut, the mouth is closed");
         let cross = round((JAWS_MOUTH.0 + JAWS_MOUTH_OPEN.0, JAWS_MOUTH.1 + JAWS_MOUTH_OPEN.1));
         let dark = at(&open, cross).map(luma);
         assert!(dark.is_some_and(|l| l < 0.15), "open, the crosshair sits in the dark of the mouth: {dark:?}");
         assert!(at(&open, (mouth.0, mouth.1 + 14)).is_some(), "open, the jaw hangs below");
+    }
+
+    /// Shut, it's one stone head like the closed-jaw picture: from the corner of the
+    /// mouth to the snout, every column is solid from the brow to the chin (no gap
+    /// between the jaws), not a fang shows, and the gums show only as specks in the
+    /// slit.
+    #[test]
+    fn shut_its_lips_close_over_its_fangs() {
+        let mouth = Mouth::new();
+        let shut = mouth.frame(0);
+        let gum = |c: Color| ['S', 'G', 'g'].into_iter().any(|k| color(k) == Some(c));
+        let mut specks = 0;
+        for x in 22..=66 {
+            let rows: Vec<i32> = (-20..40).filter(|&y| at(&shut, (x, y)).is_some()).collect();
+            let (top, bottom) = (rows[0], *rows.last().unwrap());
+            assert!(bottom - top + 1 == rows.len() as i32, "column {x}: a gap between the jaws");
+            specks += rows.iter().filter(|&&y| at(&shut, (x, y)).is_some_and(gum)).count();
+        }
+        assert!(specks < 12, "{specks} px of gum show");
+        // the fangs are all the way up in the gums
+        let up = slid(&mouth.fangs, -mouth.reach as i32);
+        assert!(up.img.get_image_data().iter().all(|p| p[3] == 0), "a fang shows");
+    }
+
+    /// As the jaw drops, the lips pull back for good: from `LIPS.1` open on, every
+    /// frame is the atlas's open mouth, the fangs all out where they were traced.
+    #[test]
+    fn the_lips_pull_back_as_it_opens() {
+        let mouth = Mouth::new();
+        let mut was = 0.0;
+        for k in 0..JAW_FRAMES {
+            let back = Mouth::back(k as f32 / (JAW_FRAMES - 1) as f32);
+            assert!(back >= was, "frame {k}");
+            was = back;
+        }
+        assert_eq!(Mouth::back(0.0), 0.0);
+        let open = mouth.frame(JAW_FRAMES - 1);
+        for y in 0..mouth.fangs.img.height as i32 {
+            for x in 0..mouth.fangs.img.width as i32 {
+                let c = mouth.fangs.img.get_pixel(x as u32, y as u32);
+                if c.a > 0.0 {
+                    let p = (x - mouth.fangs.pivot.0, y - mouth.fangs.pivot.1);
+                    assert_eq!(at(&open, p), Some(c), "wide open, the fang at {p:?} is out");
+                }
+            }
+        }
+    }
+
+    /// A speck the hole strips off it lifts off its outline first (out, never back
+    /// across its stone), hangs, then falls into the hole faster and faster.
+    #[test]
+    fn a_stripped_speck_lifts_off_then_falls_in() {
+        let (start, hole) = ((100.0, 50.0), (60.0, 90.0));
+        for (side, swirl) in [(-1.0, 10.0), (1.0, -10.0)] {
+            let at = |u: f32| strip_path(start, side, 5.0, swirl, hole, u);
+            assert_eq!(at(0.0), start);
+            let lifted = at(JAWS_STRIP_LIFT);
+            assert!((lifted.1 - start.1) * side > 4.9 && lifted.0 == start.0, "it lifts straight out: {lifted:?}");
+            let end = at(1.0);
+            assert!((end.0 - hole.0).abs() < 0.01 && (end.1 - hole.1).abs() < 0.01, "it ends in the hole");
+            let step = |u: f32| {
+                let (a, b) = (at(u), at(u + 0.01));
+                (b.0 - a.0).hypot(b.1 - a.1)
+            };
+            let mut was = 0.0;
+            for i in 0..10 {
+                let u = JAWS_STRIP_LIFT + (1.0 - JAWS_STRIP_LIFT) * (0.05 + i as f32 * 0.09);
+                assert!(step(u) > was, "faster and faster: {u}");
+                was = step(u);
+            }
+        }
+    }
+
+    /// Its eye looks your way: straight down at you below it, across at you beside
+    /// it, never out of its socket.
+    #[test]
+    fn its_eye_follows_you() {
+        assert_eq!(gaze((100.0, 50.0), (100.0, 300.0)), (0, 1));
+        assert_eq!(gaze((100.0, 50.0), (20.0, 50.0)), (-1, 0));
+        assert_eq!(gaze((100.0, 50.0), (300.0, 250.0)), (1, 1));
+        assert_eq!(gaze((100.0, 50.0), (100.0, 50.0)), (0, 0));
+        for a in 0..32 {
+            let t = a as f32 / 32.0 * std::f32::consts::TAU;
+            let (x, y) = gaze((0.0, 0.0), (t.cos() * 80.0, t.sin() * 80.0));
+            assert!(x.abs() + y.abs() <= 2 && x.abs() <= 1 && y.abs() <= 1);
+        }
     }
 
     /// Every angle the sim can paddle a fin to has a turned frame.
@@ -978,7 +1204,7 @@ mod tests {
     #[ignore]
     fn jawsthic_sheet() {
         let bg = Color::new(0.03, 0.035, 0.027, 1.0);
-        let (body, jaw) = (decode(&px::BODY), decode(&px::JAW));
+        let mouth = Mouth::new();
         let shark = |img: &mut Image, x: i32, y: i32, open: usize, phase: f32, left: bool| {
             let face = |f: &Frame| if left { mirrored(f) } else { f.clone() };
             let put = |img: &mut Image, f: &Frame, p: Pt| {
@@ -1022,10 +1248,10 @@ mod tests {
                 put(img, &face(&col), ((c - JOINTS[0].0) as f32 + JAWS_TAIL_ROOT.0, y));
             }
             put(img, &face(&decode(&px::DORSAL)), DORSAL_AT);
-            put(img, &face(&body_frame(&body, &jaw, open)), (0.0, 0.0));
+            put(img, &face(&mouth.frame(open)), (0.0, 0.0));
             put(img, &face(&decode(&px::PECTORAL)), PECTORAL_AT);
         };
-        let (w, h) = (900u16, 560u16);
+        let (w, h) = (900u16, 680u16);
         let mut sheet = Image::gen_image_color(w, h, bg);
         // big: 2x, jaw open
         let mut big = Image::gen_image_color(260, 140, bg);
@@ -1041,6 +1267,22 @@ mod tests {
             let (col, row) = (k % 3, k / 3);
             let x = 10 + col as i32 * 296 + if left { 100 } else { 190 };
             shark(&mut sheet, x, 352 + row as i32 * 128, open, ph, left);
+        }
+        // the jaw shutting to wide open, frame by frame: the head of each
+        for k in 0..JAW_FRAMES {
+            let f = mouth.frame(k);
+            let (x0, y0) = (15 + k as i32 * 126, 610);
+            for y in -30..60 {
+                for x in -5..85 {
+                    let (sx, sy) = (x + f.pivot.0, y + f.pivot.1);
+                    if sx >= 0 && sy >= 0 && sx < f.img.width as i32 && sy < f.img.height as i32 {
+                        let c = f.img.get_pixel(sx as u32, sy as u32);
+                        if c.a > 0.0 {
+                            sheet.set_pixel((x0 + x) as u32, (y0 + y) as u32, c);
+                        }
+                    }
+                }
+            }
         }
         let _ = std::fs::create_dir_all("shots");
         let mut out = Image::gen_image_color(w * 2, h * 2, bg);

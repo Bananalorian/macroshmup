@@ -209,8 +209,20 @@ pub struct Boss {
     pub bombed: [bool; 3],
     /// How far its jaw has dropped, 0 shut to 1 wide.
     pub jaw: f32,
-    /// The tail's wave, radians.
+    /// The tail's wave, radians (the body swims on it too).
     pub swim: f32,
+    /// Where you are, for its eye to follow.
+    pub look: (f32, f32),
+    /// The damage it's taken lately; frames into a flinch (0: not flinching), and
+    /// before it may flinch again.
+    pain: f32,
+    pub flinch: u32,
+    flinch_cd: u32,
+    /// Frames into a lunge (0: not lunging), when the next comes, and when it next
+    /// chomps (frames into the act).
+    pub lunge: u32,
+    next_lunge: u32,
+    next_chomp: u32,
     pub laser: Option<Laser>,
     next_laser: u32,
     next_turn: u32,
@@ -247,6 +259,13 @@ impl Boss {
             bombed: [false; 3],
             jaw: 0.0,
             swim: 0.0,
+            look: (0.0, 0.0),
+            pain: 0.0,
+            flinch: 0,
+            flinch_cd: 0,
+            lunge: 0,
+            next_lunge: 0,
+            next_chomp: 0,
             laser: None,
             next_laser: 0,
             next_turn: 0,
@@ -280,13 +299,55 @@ impl Boss {
         let (_, _, _, turns) = JAWS_PHASES[p as usize - 1];
         self.next_turn = if turns > 0 { turns } else { u32::MAX };
         self.next_laser = JAWS_LASER_EVERY.1;
+        self.lunge = 0;
+        self.next_lunge = self.later(JAWS_LUNGE_EVERY, 1);
+        self.next_chomp = self.later((JAWS_CHOMP.0, JAWS_CHOMP.1), 2);
         let spin = self.spin + 37.0 * p as f32;
         self.guns = JAWS_GUNS[p as usize - 1].iter().map(|g| Gunner { muzzle: g.muzzle, e: Emitter::new(g.gun, BOSS_ID, spin), enraged: g.enraged }).collect();
     }
 
-    /// Facing-right px from its pivot to playfield px.
+    /// Facing-right px from its pivot to playfield px, its body's swim bend and all.
     pub fn at(&self, (lx, ly): (f32, f32)) -> (f32, f32) {
-        (self.x + self.facing * lx, self.y + ly)
+        (self.x + self.facing * lx, self.y + ly + self.bend(lx))
+    }
+
+    /// How far its body at `lx` (px from its pivot, facing right) is bent down now
+    /// (up if negative): a wave rolling from its snout, which sways a little, back to
+    /// where its tail joins, which swings more, on the tail's beat.
+    pub fn bend(&self, lx: f32) -> f32 {
+        let (head, root, k) = JAWS_BODY_WAVE;
+        let snout = JAWS_MOUTH.0 + 22.0;
+        let t = ((snout - lx) / (snout - JAWS_TAIL_ROOT.0)).clamp(0.0, 1.0);
+        (head + (root - head) * t * t) * (self.swim + (lx - JAWS_TAIL_ROOT.0) * k).sin()
+    }
+
+    /// `t` frames from now plus a share of `extra` picked by the fight's seed and `n`.
+    fn later(&self, (every, extra): (u32, u32), n: u32) -> u32 {
+        let h = (self.spin.to_bits() ^ (self.t + n).wrapping_mul(0x9E37_79B9) ^ (self.phase as u32).wrapping_mul(0x85EB_CA6B)).wrapping_mul(0xC2B2_AE35);
+        self.t + every + (h >> 8) % extra.max(1)
+    }
+
+    /// Mid-lunge: drawing back, striking (biting), or easing home.
+    fn lunge_offset(&self) -> f32 {
+        let (back, wind, reach, _, strike) = JAWS_LUNGE;
+        let t = self.lunge as f32;
+        let (w, s) = (wind as f32, strike as f32);
+        if self.lunge == 0 {
+            0.0
+        } else if t <= w {
+            -back * (t / w).powi(2)
+        } else if t <= w + s {
+            let u = (t - w) / s;
+            -back + (reach + back) * (1.0 - (1.0 - u) * (1.0 - u))
+        } else {
+            reach
+        }
+    }
+
+    /// Biting: the strike of a lunge, and a moment after.
+    pub fn biting(&self) -> bool {
+        let (_, wind, _, _, strike) = JAWS_LUNGE;
+        self.lunge > wind && self.lunge <= wind + strike + 8
     }
 
     pub fn muzzle(&self, m: Muzzle) -> (f32, f32) {
@@ -309,12 +370,14 @@ impl Boss {
         let mut out = [(0.0, 0.0, 0.0); 6];
         let (mut lx, mut ly) = JAWS_TAIL_ROOT;
         let lean = (self.vy * 0.05).clamp(-0.1, 0.1);
-        let mut wave = 0.0;
+        // it hangs where the body's bent to, and leaves it the way the body runs
+        let root = self.bend(lx);
+        let mut wave = (self.bend(lx + 1.0) - root).atan();
         for (i, joint) in out.iter_mut().enumerate() {
             wave += JAWS_BEND[i] * (self.swim - i as f32 * 0.6).sin() + lean * 0.3;
             // the plate's own slope as drawn, the whole tail's sweep, the wave
             let ang = JAWS_TAIL_ART[i] + JAWS_TAIL_TILT + wave;
-            let (x, y) = self.at((lx, ly));
+            let (x, y) = (self.x + self.facing * lx, self.y + ly + root);
             *joint = (x, y, ang);
             if let Some(&(len, _)) = JAWS_TAIL.get(i) {
                 lx -= len * ang.cos();
@@ -416,6 +479,7 @@ impl Boss {
         if self.act != Act::Fight {
             return Hurt::Nothing;
         }
+        self.pain += dmg;
         if p > 0 {
             let r = self.rect(p);
             let fin = &mut self.fins[p - 1];
@@ -431,6 +495,7 @@ impl Boss {
             }
             fin.hp = 0.0;
             events.push(Event::FinBreak { x: (r.x0 + r.x1) * 0.5, y: (r.y0 + r.y1) * 0.5, fin: p as u8 - 1 });
+            self.pain = f32::MAX;
             // breaking a turret tears a chunk out of the phase's health
             let (hi, lo) = (floor(self.phase - 1), floor(self.phase));
             self.hp = (self.hp - (hi - lo) * JAWS_FIN_BLOW).max(lo);
@@ -540,15 +605,91 @@ impl Boss {
         }
     }
 
+    /// Frames before its mouth next fires (or it's firing now: 0).
+    fn mouth_due(&self) -> u32 {
+        if self.laser.is_some() {
+            return 0;
+        }
+        self.guns.iter().filter(|g| g.muzzle == Muzzle::Mouth).map(|g| if g.e.since < 12 { 0 } else { g.e.until_next() }).min().unwrap_or(u32::MAX)
+    }
+
     fn jaw_wanted(&self) -> f32 {
         let open = match self.act {
             Act::Intro => (JAWS_INTRO[2] + 8..JAWS_INTRO[3]).contains(&self.t),
-            Act::Fight => self.turn == 0 && (self.laser.is_some() || self.guns.iter().any(|g| g.muzzle == Muzzle::Mouth && (g.e.until_next() <= JAWS_JAW_LEAD || g.e.since < 12))),
+            Act::Fight => self.turn == 0 && self.mouth_due() <= JAWS_JAW_LEAD,
             Act::Break => self.t < 40,
             Act::Dying | Act::Falling => true,
             Act::Gone => false,
         };
-        if open { 1.0 } else { 0.0 }
+        if open || self.flinch > 0 && self.flinch < 10 {
+            return 1.0;
+        }
+        if self.act != Act::Fight {
+            return 0.0;
+        }
+        // a lunge: jaws open as it draws back, snapping shut as it strikes
+        let (_, wind, _, _, strike) = JAWS_LUNGE;
+        if self.lunge > 0 && self.lunge <= wind + strike {
+            return if self.lunge <= wind + strike / 2 { 1.0 } else { 0.0 };
+        }
+        // between attacks, two quick snaps
+        let (_, _, wide, snap) = JAWS_CHOMP;
+        let since = self.t.wrapping_sub(self.next_chomp);
+        if since < 4 * snap && (since / snap) % 2 == 0 { wide } else { 0.0 }
+    }
+
+    /// Its body: chomping and lunging between attacks, flinching when hit hard.
+    fn behave(&mut self, events: &mut Vec<Event>) {
+        let (keep, hard, back, up, rest) = JAWS_FLINCH;
+        self.flinch_cd = self.flinch_cd.saturating_sub(1);
+        if self.flinch > 0 {
+            self.flinch += 1;
+            if self.flinch > 24 {
+                self.flinch = 0;
+            }
+        }
+        if self.pain > hard && self.flinch_cd == 0 && matches!(self.act, Act::Fight | Act::Break) {
+            // it recoils (not while it holds still for its laser), and its tail lashes
+            (self.flinch, self.flinch_cd, self.pain) = (1, rest, 0.0);
+            if self.laser.is_none() {
+                self.x -= self.facing * back;
+                self.y -= up;
+            }
+            self.swim += 1.2;
+        }
+        self.pain = if self.pain == f32::MAX { 0.0 } else { self.pain * keep };
+        if self.act != Act::Fight {
+            return;
+        }
+        let (_, wind, reach, drop, strike) = JAWS_LUNGE;
+        let quiet = self.turn == 0 && self.laser.is_none();
+        // a chomp waits for the mouth to be quiet
+        let chomp = 4 * JAWS_CHOMP.3;
+        if self.t == self.next_chomp && (!quiet || self.mouth_due() < chomp + JAWS_JAW_LEAD) {
+            self.next_chomp += 30;
+        } else if self.t >= self.next_chomp + chomp {
+            self.next_chomp = self.later((JAWS_CHOMP.0, JAWS_CHOMP.1), 2);
+        }
+        if self.lunge == 0 {
+            if self.t >= self.next_lunge && quiet {
+                self.lunge = 1;
+            }
+            return;
+        }
+        // drawing back, then striking forward and down, then home (the drift eases it)
+        let before = self.lunge_offset();
+        self.lunge += 1;
+        let d = self.lunge_offset() - before;
+        self.x += self.facing * d;
+        self.y += d / reach.max(1.0) * drop;
+        if self.lunge == wind + strike && self.mouth_due() > JAWS_JAW_LEAD {
+            let (x, y) = self.muzzle(Muzzle::Mouth);
+            events.push(Event::BossBite { x, y });
+        }
+        if self.lunge > wind + strike + 40 {
+            self.lunge = 0;
+            self.next_lunge = self.later(JAWS_LUNGE_EVERY, 1);
+        }
     }
 
     /// One frame.
@@ -565,6 +706,7 @@ impl Boss {
             f.flash_cd = f.flash_cd.saturating_sub(1);
         }
         let (x0, y0) = (self.x, self.y);
+        self.look = player;
         match self.act {
             Act::Intro => {
                 let (x, y, facing, _) = intro_pose(self.t);
@@ -610,6 +752,7 @@ impl Boss {
             }
             Act::Gone => {}
         }
+        self.behave(events);
         (self.vx, self.vy) = (self.x - x0, self.y - y0);
         self.jaw += (self.jaw_wanted() - self.jaw) * JAWS_JAW_SPEED;
         let pace = if self.turn > 0 || self.act == Act::Falling { JAWS_SWIM.1 } else { JAWS_SWIM.0 };
@@ -623,7 +766,7 @@ impl Boss {
             return;
         }
         // now and then it turns round (never mid-laser)
-        if self.t >= self.next_turn && self.turn == 0 && self.laser.is_none() {
+        if self.t >= self.next_turn && self.turn == 0 && self.laser.is_none() && self.lunge == 0 {
             self.turn = JAWS_TURN;
             self.next_turn = self.t + turns;
             events.push(Event::BossTurn);
@@ -670,7 +813,7 @@ impl Boss {
             }
             return;
         }
-        if self.t >= self.next_laser && self.turn == 0 {
+        if self.t >= self.next_laser && self.turn == 0 && self.lunge == 0 {
             let (mx, my) = self.at((JAWS_MOUTH.0 + JAWS_MOUTH_OPEN.0, JAWS_MOUTH.1 + JAWS_MOUTH_OPEN.1));
             let aim = (player.1 - my).atan2(player.0 - mx).to_degrees();
             // right of the jaws (under 90 degrees), it sweeps right, toward that wall
@@ -848,6 +991,79 @@ mod tests {
         assert_eq!(ev.iter().filter(|e| matches!(e, Event::BossBlast { last: true, .. })).count(), 1);
         assert_eq!(b.act, Act::Gone);
         assert_eq!(hz.bullets.len(), 0, "it fires nothing while it dies");
+    }
+
+    /// Its whole body swims on the tail's beat: its snout sways a little, where the
+    /// tail joins swings more, and the tail hangs off the body wherever it's bent.
+    #[test]
+    fn it_swims_its_whole_body() {
+        let (mut hz, mut ev) = (Hazards::new(0, 1), vec![]);
+        let mut b = Boss::at_phase(0.0, 1);
+        let (snout, root) = (JAWS_MOUTH.0 + 22.0, JAWS_TAIL_ROOT.0);
+        let (mut s, mut r) = ((f32::MAX, f32::MIN), (f32::MAX, f32::MIN));
+        for _ in 0..200 {
+            b.step(&mut hz, (135.0, 300.0), &mut ev);
+            let (bs, br) = (b.bend(snout), b.bend(root));
+            (s, r) = ((s.0.min(bs), s.1.max(bs)), (r.0.min(br), r.1.max(br)));
+            let j = b.tail()[0];
+            assert!((j.1 - (b.y + JAWS_TAIL_ROOT.1 + br)).abs() < 1e-3, "the tail hangs off the bent body");
+        }
+        let (head, tail) = (s.1 - s.0, r.1 - r.0);
+        assert!(head > 1.5 && head <= 2.0 * JAWS_BODY_WAVE.0 + 0.01, "the snout sways {head} px");
+        assert!(tail > 4.0 && tail > head * 1.8, "where the tail joins swings {tail} px");
+    }
+
+    /// Between attacks it lives: it chomps while its mouth is quiet (never while
+    /// it's about to fire), and now and then it draws back and lunges, biting.
+    #[test]
+    fn it_chomps_and_lunges_between_attacks() {
+        let (mut hz, mut ev) = (Hazards::new(0, 1), vec![]);
+        let mut b = Boss::at_phase(0.0, 3);
+        let (mut chomps, mut lunges) = (0, 0);
+        let (mut was, mut start_x, mut far) = (0.0f32, 0.0f32, 0.0f32);
+        for _ in 0..JAWS_PHASES[2].1 * TICK_HZ - 1 {
+            b.step(&mut hz, (135.0, 300.0), &mut ev);
+            if b.lunge == 0 && b.mouth_due() > JAWS_JAW_LEAD + 12 && was < 0.25 && b.jaw >= 0.25 {
+                chomps += 1;
+            }
+            was = b.jaw;
+            if b.lunge == 1 {
+                start_x = b.x;
+                lunges += 1;
+            }
+            if b.lunge > 0 {
+                far = far.max(b.facing * (b.x - start_x));
+                assert!(b.laser.is_none() && b.turn == 0, "never mid-laser or mid-turn");
+            }
+        }
+        assert!(chomps >= 6, "{chomps} chomps");
+        assert!(lunges >= 4, "{lunges} lunges");
+        assert!(far > JAWS_LUNGE.2 * 0.6, "it lunged {far} px forward");
+        assert!(ev.iter().any(|e| matches!(e, Event::BossBite { .. })), "and bit");
+    }
+
+    /// Hit hard (a bomb, a fin snapping off) it flinches: it recoils and its jaw drops.
+    #[test]
+    fn a_hard_hit_makes_it_flinch() {
+        let (mut hz, mut ev) = (Hazards::new(0, 1), vec![]);
+        let mut b = Boss::at_phase(0.0, 1);
+        run(&mut b, 30, &mut hz, &mut ev);
+        assert_eq!(b.flinch, 0);
+        b.hurt(0, 5.0, &mut ev);
+        b.step(&mut hz, (135.0, 300.0), &mut ev);
+        assert_eq!(b.flinch, 0, "a shot doesn't");
+        let (x, y) = (b.x, b.y);
+        b.hurt(0, BOMB_DAMAGE, &mut ev);
+        b.step(&mut hz, (135.0, 300.0), &mut ev);
+        assert!(b.flinch > 0 && b.facing * (b.x - x) < -2.0 && b.y < y, "a bomb does: it recoils");
+        run(&mut b, 8, &mut hz, &mut ev);
+        assert!(b.jaw > 0.5, "its jaw drops");
+        // a fin snapping off
+        let mut b = Boss::at_phase(0.0, 2);
+        run(&mut b, 90, &mut hz, &mut ev);
+        b.hurt(1, JAWS_FIN_HP, &mut ev);
+        b.step(&mut hz, (135.0, 300.0), &mut ev);
+        assert!(b.flinch > 0, "a fin breaking does");
     }
 
     #[test]

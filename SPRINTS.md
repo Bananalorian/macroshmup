@@ -491,7 +491,7 @@ now, revisited once the bullets are thinned.
 
 ---
 
-### Sprint 8 — Feel · v0.9.0 · *proposal*
+### Sprint 8 — Feel · v0.9.0
 **Goal:** everything already in the game feels juicy, and the boss feels alive.
 
 Build

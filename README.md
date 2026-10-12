@@ -38,6 +38,12 @@ the font and every sound are built when the game starts. Written in Rust on
 
 ![Jason's JAWSTHIC beside the redraw at game size, traced from his sprite atlas](docs/screenshots/jawsthic-vs-art.png)
 
+![Jason's closed-jaw picture, then JAWSTHIC's jaw shut to wide open: the lips close over the fangs and pull back as it bites](docs/screenshots/jawsthic-jaw.png)
+
+![A lunge: it draws back, jaws wide, strikes forward and down, its eye rolling back white, and bites](docs/screenshots/jawsthic-lunge.png)
+
+![The beam flaring where it lands, its light wrapping round the boss's belly](docs/screenshots/beam-wrap.png)
+
 ![JAWSTHIC's sheet: in play, at rest, charging, in each phase, glitching, facing either way](docs/screenshots/jawsthic-sheet.png)
 
 ![The derelict's death: the wreck burns, blasts ripple across it, then it goes up](docs/screenshots/derelict-death.png)
@@ -64,6 +70,14 @@ the font and every sound are built when the game starts. Written in Rust on
 
 ## Status
 
+**v0.9, feel:** JAWSTHIC is one living shark. Its lips close over its fangs when it
+shuts, like Jason's closed-jaw picture, and pull back as it bites. A wave runs
+through its whole body, its eye follows you, and it chomps, lunges and flinches.
+Specks of it peel off and fall into the black hole. Big kills land with hit-stop,
+an impact frame and a crunch, and enemies jolt and chip when hit. The beam flares
+and wraps round what it hits. There are about a third fewer bullets on screen,
+and the ones left are faster.
+
 **v0.8, score & shell:** a complete arcade loop. Kills score, double point-blank;
 cancelled bullets pay as shards; grazes add up. Each of the boss's phases ends on a
 grade (S, A, B or C) that slams in with its bonus. The stage ends in a tally that
@@ -85,7 +99,7 @@ animates by moving whole parts, so both blades keep their white edges when it ba
 **v0.7, the boss:** JAWSTHIC, a great white carved from moon rock with a gothic
 cathedral for a body, from Jason's concept, redrawn in v0.8.5 from his sprite atlas:
 cracked flagstones, a red diamond eye, two rows of fangs, lancet windows, a segmented
-tail (swimming as one piece, its fin with it, and hittable since v0.8.8) trailing glitch smears, the black hole stripping bits off its back and belly.
+tail (swimming as one piece, its fin with it, and hittable since v0.8.8) trailing glitch smears, the black hole stripping specks off its outline.
 It fires stars and crystal shards among its orbs and rice (v0.8.6). Its fin cuts
 through the black hole's disk before it breaches. It fights in four phases, each with a timer: TEETH, FINS, GLITCH and EVENT
 HORIZON. Each phase's bar drains from both ends in to a gem that turns green, yellow,

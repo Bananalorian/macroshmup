@@ -102,6 +102,8 @@ struct Game {
     /// BOOM TEST asked for an explosion of this size.
     boom: Option<Size>,
     chains: Vec<Chain>,
+    /// Hit-stop: ticks the stage holds still for (a big kill just landed).
+    stop: u32,
 }
 
 /// What a frame of menu input asked for.
@@ -165,6 +167,7 @@ impl Game {
             fill_shots: 0,
             boom: None,
             chains: vec![],
+            stop: 0,
         };
         match req {
             None | Some(SceneReq::Title) => {}
@@ -533,6 +536,32 @@ fn boss_effects(w: &World, r: &mut Renderer) {
     }
 }
 
+/// How big a kill's blast is.
+fn kill_size(kind: EnemyKind) -> Size {
+    match kind {
+        EnemyKind::Drone | EnemyKind::Courier | EnemyKind::Usher => Size::Small,
+        EnemyKind::Gunship | EnemyKind::Buoy => Size::Medium,
+        EnemyKind::Heavy | EnemyKind::Hull => Size::Large,
+    }
+}
+
+/// Hit-stop: how many ticks the stage holds still after this tick's events. Big
+/// kills land with a moment's freeze; fodder never stops the flow; a boss phase
+/// breaking, a turret or a weak point snapping off, hold longest.
+fn hitstop(events: &[Event]) -> u32 {
+    events
+        .iter()
+        .map(|e| match *e {
+            Event::Kill { kind, .. } => tune::HITSTOP[kill_size(kind) as usize],
+            Event::Break { big, .. } => tune::HITSTOP[if big { 2 } else { 1 }],
+            Event::PartBreak { .. } | Event::FinBreak { .. } => tune::HITSTOP[2],
+            Event::BossBreak { .. } => tune::HITSTOP_BOSS,
+            _ => 0,
+        })
+        .max()
+        .unwrap_or(0)
+}
+
 /// JAWSTHIC's moments: the breach, the roar, phases breaking, turns, fins snapping
 /// off, the laser, and its death in a chain of blasts ending in a white-out.
 fn boss_moments(w: &World, r: &mut Renderer, s: &Settings, audio: &mut Audio) {
@@ -582,6 +611,13 @@ fn boss_moments(w: &World, r: &mut Renderer, s: &Settings, audio: &mut Audio) {
                 explode(&mut r.fx, &mut r.parts, x, y, Size::Medium, me, s.reduce_flash, w.frame);
                 r.parts.smoke(x, y, 8, 20.0);
                 audio.blast(Size::Medium);
+            }
+            Event::BossBite { x, y } => {
+                // the fangs meeting: chips of stone and sparks off the jaws
+                for _ in 0..3 {
+                    r.parts.hit(x, y, false);
+                }
+                r.parts.smoke(x, y, 3, 10.0);
             }
             Event::LaserFire => {
                 if let Some(l) = b.laser {
@@ -734,7 +770,14 @@ fn effects(w: &World, r: &mut Renderer, s: &Settings, audio: &mut Audio, chains:
     }
     for e in &w.events {
         match *e {
-            Event::Hit { x, y, beam } if !beam || w.frame % 3 == 0 => r.parts.hit(x, y, beam),
+            Event::Hit { x, y, beam } => {
+                if !beam || w.frame % 3 == 0 {
+                    r.parts.hit(x, y, beam);
+                }
+                if beam {
+                    r.parts.beam_spray(x, y);
+                }
+            }
             Event::Break { x, y, big } => {
                 // much bigger than what died
                 let size = if big { Size::Large } else { Size::Medium };
@@ -784,18 +827,16 @@ fn effects(w: &World, r: &mut Renderer, s: &Settings, audio: &mut Audio, chains:
             // much bigger than what died, and it shatters into its own pixels
             Event::Kill { x, y, kind } => {
                 let art = &r.atlas.r.foes;
-                let (size, pixels) = match kind {
-                    EnemyKind::Drone => (Size::Small, &art.drone.pixels),
-                    EnemyKind::Courier => (Size::Small, &art.courier.pixels),
-                    EnemyKind::Usher => (Size::Small, &art.usher.pixels),
-                    EnemyKind::Gunship => (Size::Medium, &art.gunship.pixels),
-                    EnemyKind::Buoy => (Size::Medium, &art.buoy[0].pixels),
-                    EnemyKind::Heavy => (Size::Large, &art.heavy.pixels),
-                    EnemyKind::Hull => (Size::Large, &art.pod.pixels),
-                };
+                let size = kill_size(kind);
+                let pixels = if kind == EnemyKind::Hull { &art.pod.pixels } else { &art.sprite(kind, w.frame).pixels };
+                // its impact frame: lit bone-bright a moment (not the derelict's hull)
+                if kind != EnemyKind::Hull {
+                    let sil = art.sprite(kind, w.frame).sil;
+                    r.parts.impact(sil, ((x - sil.w * 0.5).round() as i32, (y - sil.h * 0.5).round() as i32), tune::IMPACT[size as usize]);
+                }
                 r.parts.shatter(x, y, pixels);
                 explode(&mut r.fx, &mut r.parts, x, y, size, me, s.reduce_flash, w.frame);
-                audio.blast(size);
+                audio.kill(size);
                 if !kind.fodder() {
                     r.parts.smoke(x, y, if kind.heavy() { 14 } else { 5 }, if kind.heavy() { 34.0 } else { 16.0 });
                 }
@@ -1017,6 +1058,12 @@ async fn amain() {
         for _ in 0..ticks {
             // the bomb's slow-motion dip: half the ticks run while it lasts; the boss's
             // death: a quarter
+            if let Scene::Stage { menu: None, over: None, .. } = &game.scene {
+                if game.stop > 0 {
+                    game.stop -= 1;
+                    continue;
+                }
+            }
             if let Scene::Stage { world, menu: None, .. } = &game.scene {
                 if world.slow > 0 {
                     slow_n += 1;
@@ -1096,6 +1143,7 @@ async fn amain() {
                         audio.blast(size);
                     }
                     audio.handle(world);
+                    game.stop = game.stop.max(hitstop(&world.events));
                     if world.events.contains(&Event::NoBomb) {
                         game.toast = Some(("NO BOMBS LEFT".into(), tune::TOAST_FRAMES / 2));
                     }
@@ -1207,6 +1255,20 @@ async fn amain() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Big kills land with a moment's freeze, fodder never stops the flow, a bomb's
+    /// many kills stop once (as long as the biggest), and no stop feels like lag.
+    #[test]
+    fn big_kills_land_with_a_hitstop() {
+        let kill = |kind| Event::Kill { x: 0.0, y: 0.0, kind };
+        assert_eq!(hitstop(&[kill(EnemyKind::Drone), kill(EnemyKind::Courier), kill(EnemyKind::Usher)]), 0);
+        assert!(hitstop(&[kill(EnemyKind::Gunship)]) > 0);
+        assert!(hitstop(&[kill(EnemyKind::Heavy)]) > hitstop(&[kill(EnemyKind::Gunship)]));
+        assert_eq!(hitstop(&[kill(EnemyKind::Drone), kill(EnemyKind::Heavy), kill(EnemyKind::Gunship)]), hitstop(&[kill(EnemyKind::Heavy)]));
+        assert!(hitstop(&[Event::BossBreak { x: 0.0, y: 0.0, timeout: false }]) >= hitstop(&[kill(EnemyKind::Heavy)]));
+        assert_eq!(hitstop(&[Event::Graze { x: 0.0, y: 0.0 }]), 0);
+        assert!(tune::HITSTOP.iter().chain([&tune::HITSTOP_BOSS]).all(|&f| f <= 8));
+    }
 
     fn ui() -> Ui {
         Ui::default()

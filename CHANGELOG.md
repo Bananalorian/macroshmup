@@ -3,6 +3,79 @@
 Every version is one build sprint. Newest first. Versions are tagged in git, and
 each tag publishes a GitHub Release with downloads.
 
+## [0.9.0] - 2026-10-12 - Feel
+
+### JAWSTHIC, one living shark
+- **Its mouth shuts like your closed-jaw picture**
+  ([shut to wide open, beside your picture](docs/screenshots/jawsthic-jaw.png)).
+  The atlas draws its head biting, lips pulled back off the gums, so shut it used
+  to grin, two rows of fangs crossed over a separate jaw. Now the lips from "Lunar
+  gothic mechanical shark with closed jaw.png", traced at game size, close over
+  them: one stone head with a slit for a mouth. As the jaw drops, the lips pull
+  back and the fangs slide down out of the gums. From 40% open on it's the atlas's
+  open mouth, exactly as before.
+- **The black hole strips it the way a bomb strips bullets.** Specks lift off its
+  outline (its back, its belly, its tail), hang a moment, then fall into the hole
+  faster and faster, a short trail behind each, reddening and dimming as they near
+  it. They're drawn behind it, so they vanish behind its stone as they fall in.
+- **It's alive** ([a lunge](docs/screenshots/jawsthic-lunge.png)):
+  - a slow wave runs through its whole body on the tail's beat: the snout sways a
+    little, its back end swings more, and the tail hangs off wherever the body's
+    bent (its hurtboxes and guns move with it);
+  - its eye follows you;
+  - between attacks it chomps, two quick snaps (in phase 3 and between phases; in
+    the others its jaw is already busy, opening for every volley);
+  - every 5 to 8 seconds it draws back with its jaws wide, then lunges forward and
+    down, its eye rolling back white, and snaps them shut: a new stone-on-stone
+    chomp, sparks and dust;
+  - hit hard (a bomb, a fin snapping off) it flinches: it recoils, its jaw drops,
+    its tail lashes.
+
+### Juice
+- **Hit-stop:** a big kill holds the game still for a moment: 2 frames for a
+  gunship or a buoy, 4 for a heavy or the derelict, 6 when a boss phase breaks.
+  Popcorn never stops the flow.
+- **Impact frames:** every kill but the derelict's hull flashes bone-bright for a
+  frame or two before it shatters, and a crunch lands under its blast.
+- **Hits:** enemies jolt back a pixel as they flash, and chips fly off them.
+- **The beam:** a flare where it lands, swelling and shrinking round a hot core;
+  teal sparks spraying out along what it hits; and its light wrapping round the
+  target, out along its underside and up its sides, instead of stopping dead
+  ([close up](docs/screenshots/beam-wrap.png)).
+
+### Fewer bullets
+- Rings and the flower have about a third fewer bullets; spirals and sprinkles fire
+  less often; phase 3's curtain rows are further apart. Everything left flies 10 to
+  20% faster. Aimed fans and needle bursts keep their shape, just faster.
+- **PG_SIM=200, before and after:**
+  - bullets on screen with the bot: average 80 → 52, peak 234 → 162;
+  - with the pacifist: average 101 → 66, peak 235 → 166.
+
+### Checked
+- **Tests prove:**
+  - shut, its lips close over its fangs (one solid head, no gap between the jaws,
+    only specks of gum); wide open, every fang is out where it was traced;
+  - a stripped speck lifts straight off, then falls into the hole faster and faster;
+  - its whole body swims and the tail hangs off it; it chomps and lunges between
+    attacks (never mid-laser or mid-turn) and bites; a bomb or a broken fin makes it
+    flinch; its eye follows you;
+  - big kills stop, popcorn doesn't, and no stop is longer than 8 frames;
+  - impact frames last their frames; shots chip, the beam sprays sideways, and the
+    beam wraps round the box it stopped on; a hit enemy jolts back;
+  - the chomp and the crunch are clean sounds.
+- **Captures:** the lunge, shut to wide open beside your picture, and the beam's
+  wrap. Every screenshot is retaken.
+- **PG_SIM=200:**
+  - the stage is cleared 100% with no deaths;
+  - JAWSTHIC is destroyed in every run, its phases a median 24.4 / 24.2 / 26.4 /
+    23.3 s;
+  - the derelict is destroyed in 100% of runs (was 92%);
+  - the median score is 3.28M (was 3.10M), and both extends come in every run;
+  - with fewer bullets the bot does better: the stage rank is S 88% A 12% (was
+    S 30% A 70%).
+- Native and web builds are warning-free, and all 254 tests pass in both debug (as
+  CI runs them) and release.
+
 ## [0.8.8] - 2026-10-12 - Back on track
 
 ### Changed

@@ -82,6 +82,8 @@ pub enum Event {
     BossBreach { x: f32, y: f32 },
     /// It roared, in position: the fight is about to begin.
     BossRoar { x: f32, y: f32 },
+    /// JAWSTHIC's jaws snapped shut at `(x, y)`, lunging.
+    BossBite { x: f32, y: f32 },
     /// Phase `n` (1-4) began.
     BossPhase(u8),
     /// One of phase 2's fin turrets broke off (`fin` 0 the dorsal, 1 the pectoral).
@@ -155,7 +157,9 @@ pub struct Beam {
     pub top: f32,
     /// Where its hitbox starts (low on the ship, like the shots).
     pub bottom: f32,
+    /// What it stopped on, and that thing's box (its light wraps round it).
     pub hit: Option<Target>,
+    pub hit_box: Option<Rect>,
 }
 
 impl Beam {
@@ -799,7 +803,7 @@ impl World {
         // it stops at the nearest thing in its lane
         let hit = self.boxes.iter().filter(|b| b.1.overlaps(&lane)).max_by(|a, b| a.1.y1.total_cmp(&b.1.y1)).copied();
         let top = hit.map_or(0.0, |b| b.1.y1.min(bottom));
-        self.beam = Some(Beam { x: px, top, bottom, hit: hit.map(|b| b.0) });
+        self.beam = Some(Beam { x: px, top, bottom, hit: hit.map(|b| b.0), hit_box: hit.map(|b| b.1) });
         if let Some((t, _)) = hit {
             self.events.push(Event::Hit { x: px, y: top, beam: true });
             self.hurt(t, BEAM_DMG);
@@ -1082,6 +1086,7 @@ mod tests {
         }
         let beam = w.beam.unwrap();
         assert_eq!(beam.hit, Some(Target::Boss(0)), "the beam stops on the tail");
+        assert!(beam.hit_box.is_some_and(|r| (r.y1 - beam.top).abs() < 1e-3 && r.x0 < beam.x + BEAM_W * 0.5 && r.x1 > beam.x - BEAM_W * 0.5), "on the box it stopped on (its light wraps round it): {beam:?}");
         assert!(w.boss.as_ref().unwrap().hp < hp, "and hurts the boss");
     }
 

@@ -593,6 +593,12 @@ pub fn emerged(e: &Enemy) -> f32 {
     if e.kind == EnemyKind::Hull { (e.t as f32 / HULL_EMERGE as f32).min(1.0) } else { 1.0 }
 }
 
+/// Hit, an enemy jolts back (up, the way the shots push) a pixel while it flashes;
+/// not the derelict's hull, which is too big to be pushed.
+pub fn jolt(e: &Enemy) -> i32 {
+    (e.parts[0].flash > 0 && e.kind != EnemyKind::Hull) as i32
+}
+
 /// The hit flash: on bone white a white flash wouldn't show, so they flush red (the
 /// big ones only faintly, or the screen's middle would keep turning red).
 fn flash(a: &Atlas, sil: Rect, x: i32, y: i32) {
@@ -609,7 +615,7 @@ pub fn draw(a: &Atlas, w: &World, ox: i32, oy: i32) {
     for kind in [EnemyKind::Hull, EnemyKind::Heavy, EnemyKind::Buoy, EnemyKind::Gunship, EnemyKind::Usher, EnemyKind::Drone, EnemyKind::Courier] {
         for e in w.foes.list.iter().filter(|e| e.kind == kind && e.alive()) {
             let s = art.sprite(kind, f);
-            let (x, y) = (ox + snap(e.x - s.r.w * 0.5), oy + snap(e.y - s.r.h * 0.5));
+            let (x, y) = (ox + snap(e.x - s.r.w * 0.5), oy + snap(e.y - s.r.h * 0.5) - jolt(e));
             let k = emerged(e);
             let tint = Color::new(k, k, k, 1.0);
             a.blit(s.r, x, y, 1, tint);
@@ -777,6 +783,20 @@ pub fn draw_figure(a: &Atlas, ox: i32, oy: i32, k: f32, hole: (f32, f32)) {
 mod tests {
     use super::*;
     use crate::render::palette::{CORE as BULLET_CORE, luma};
+
+    /// Hit, it jolts back a pixel while it flashes, then settles; the hull never does.
+    #[test]
+    fn a_hit_enemy_jolts_back() {
+        let hover = crate::sim::enemy::Path::Hover { from: (100.0, -20.0), at: (100.0, 80.0), enter: 50, stay: 9999, sway: 0.0 };
+        for (kind, moves) in [(EnemyKind::Gunship, 1), (EnemyKind::Heavy, 1), (EnemyKind::Hull, 0)] {
+            let mut e = Enemy::new(1, kind, 0, hover, 0.0);
+            assert_eq!(jolt(&e), 0);
+            e.hurt(0, 1.0);
+            assert_eq!(jolt(&e), moves, "{kind:?}");
+            e.parts[0].flash = 0;
+            assert_eq!(jolt(&e), 0);
+        }
+    }
 
     fn brightest(img: &Image) -> f32 {
         img.get_image_data().iter().filter(|p| p[3] > 0).map(|p| luma(Color::from_rgba(p[0], p[1], p[2], 255))).fold(0.0, f32::max)

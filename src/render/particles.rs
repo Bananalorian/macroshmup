@@ -71,12 +71,14 @@ struct P {
 
 pub struct Particles {
     list: Vec<P>,
+    /// Kills' impact frames: (silhouette, top-left, frames left, of).
+    impacts: Vec<(macroquad::math::Rect, (i32, i32), u8, u8)>,
     rng: Rng,
 }
 
 impl Particles {
     pub fn new() -> Particles {
-        Particles { list: Vec::with_capacity(PARTICLE_CAP), rng: Rng::new(0xC0FFEE) }
+        Particles { list: Vec::with_capacity(PARTICLE_CAP), impacts: Vec::new(), rng: Rng::new(0xC0FFEE) }
     }
 
     pub fn len(&self) -> usize {
@@ -95,8 +97,20 @@ impl Particles {
         self.push(P { x, y, vx: angle.cos() * speed, vy: angle.sin() * speed, life, max: life, kind, color, drag, extra });
     }
 
+    /// A kill's impact frame: the silhouette `sil` of what died, its top-left corner
+    /// at `at`, lit bone-bright for `frames` frames before it's gone.
+    pub fn impact(&mut self, sil: macroquad::math::Rect, at: (i32, i32), frames: u8) {
+        if frames > 0 && self.impacts.len() < 64 {
+            self.impacts.push((sil, at, frames, frames));
+        }
+    }
+
     /// Advance a frame. `target` is the Pilgrim, which teal shards fly to.
     pub fn tick(&mut self, target: (f32, f32)) {
+        for i in &mut self.impacts {
+            i.2 -= 1;
+        }
+        self.impacts.retain(|i| i.2 > 0);
         for p in &mut self.list {
             p.x += p.vx;
             p.y += p.vy;
@@ -170,6 +184,25 @@ impl Particles {
             let life = self.rng.range(5.0, 10.0);
             let c = if self.rng.chance(0.3) { Color { a: 0.8, ..SIGNAL } } else { CREAM };
             self.spawn(Kind::Spark, x, y, a, s, life, c, 0.9);
+        }
+        // now and then a chip knocked off what was hit
+        if !beam && self.rng.chance(0.5) {
+            let a = self.rng.range(0.6, 2.55) + std::f32::consts::PI;
+            let s = self.rng.range(0.6, 1.6);
+            let life = self.rng.range(10.0, 18.0);
+            let c = if self.rng.chance(0.5) { ASH } else { CREAM };
+            self.spawn(Kind::Shard, x, y, a, s, life, c, 0.92);
+        }
+    }
+
+    /// Where the beam lands: teal sparks spraying out sideways along what it hit.
+    pub fn beam_spray(&mut self, x: f32, y: f32) {
+        for side in [0.0, std::f32::consts::PI] {
+            let a = side + self.rng.range(-0.35, 0.15) * if side == 0.0 { 1.0 } else { -1.0 };
+            let s = self.rng.range(1.2, 2.8);
+            let life = self.rng.range(5.0, 11.0);
+            let c = if self.rng.chance(0.3) { CREAM } else { TEAL };
+            self.spawn(Kind::Spark, x, y, a, s, life, c, 0.88);
         }
     }
 
@@ -371,6 +404,11 @@ impl Particles {
 
     /// Draw one of the two passes (normal, then additive), offset by the playfield's corner.
     pub fn draw(&self, a: &Atlas, ox: i32, oy: i32, additive: bool) {
+        if !additive {
+            for &(sil, (x, y), left, of) in &self.impacts {
+                a.blit(sil, ox + x, oy + y, 1, Color { a: 0.95 * (left as f32 / of as f32).sqrt(), ..CREAM });
+            }
+        }
         for p in self.list.iter().filter(|p| p.kind.additive() == additive) {
             let k = p.life as f32 / p.max as f32;
             let (x, y) = (ox + p.x.round() as i32, oy + p.y.round() as i32);
@@ -475,6 +513,41 @@ fn disc(a: &Atlas, set: &[macroquad::math::Rect; 16], x: i32, y: i32, r: f32, c:
 mod tests {
     use super::*;
     use crate::tune::BLASTS;
+
+    /// Shots knock chips off what they hit (the beam doesn't); where the beam lands,
+    /// sparks spray out sideways along what it hit.
+    #[test]
+    fn hits_chip_and_the_beam_sprays_sideways() {
+        let mut p = Particles::new();
+        for _ in 0..20 {
+            p.hit(50.0, 50.0, false);
+        }
+        assert!(p.list.iter().filter(|q| q.kind == Kind::Shard).count() >= 4, "chips fly");
+        let mut p = Particles::new();
+        for _ in 0..20 {
+            p.hit(50.0, 50.0, true);
+        }
+        assert_eq!(p.list.iter().filter(|q| q.kind == Kind::Shard).count(), 0, "the beam burns, it doesn't chip");
+        let mut p = Particles::new();
+        for _ in 0..20 {
+            p.beam_spray(50.0, 50.0);
+        }
+        assert_eq!(p.len(), 40);
+        assert!(p.list.iter().all(|q| q.vx.abs() > q.vy.abs()), "sideways");
+        assert!(p.list.iter().filter(|q| q.vx < 0.0).count() == 20, "both ways");
+    }
+
+    #[test]
+    fn a_kills_impact_frame_lasts_its_frames() {
+        let mut p = Particles::new();
+        p.impact(macroquad::math::Rect::new(0.0, 0.0, 8.0, 8.0), (10, 10), 3);
+        for left in [2, 1] {
+            p.tick((0.0, 0.0));
+            assert_eq!(p.impacts.len(), 1, "{left} left");
+        }
+        p.tick((0.0, 0.0));
+        assert!(p.impacts.is_empty());
+    }
 
     #[test]
     fn the_pool_is_capped_and_never_grows() {

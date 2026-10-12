@@ -34,6 +34,8 @@ fn mix(id: Id) -> (f32, f64) {
         Id::LaserCharge => (VOL_LASER, 0.3),
         Id::LaserBeam => (VOL_LASER, 0.3),
         Id::Glitch => (VOL_GLITCH, 0.12),
+        Id::Chomp => (VOL_CHOMP, 0.15),
+        Id::Crunch => (VOL_CRUNCH, 0.04),
         Id::Swallowed => (VOL_SWALLOWED, 2.0),
         Id::Tick => (VOL_TICK, 0.03),
         Id::Slam => (VOL_SLAM, 0.3),
@@ -150,6 +152,7 @@ impl Audio {
                 Event::BossArrive => self.play(Id::Approach, 1.0),
                 Event::BossBreach { .. } => self.music_target = 1.0,
                 Event::BossRoar { .. } => self.play(Id::Roar, 1.0),
+                Event::BossBite { .. } => self.play(Id::Chomp, 1.0),
                 Event::LaserWarn => self.play(Id::LaserCharge, 1.0),
                 Event::LaserFire => self.play(Id::LaserBeam, 1.0),
                 Event::BossTurn | Event::BossBreak { .. } => self.play(Id::Glitch, 1.0),
@@ -166,6 +169,12 @@ impl Audio {
             }
         }
         self.beam_target = if w.player.beaming { 1.0 } else { 0.0 };
+    }
+
+    /// A kill: the blast that matches its size, a crunch under it.
+    pub fn kill(&mut self, size: crate::render::explode::Size) {
+        self.blast(size);
+        self.play(Id::Crunch, CRUNCH_BY_SIZE[size as usize]);
     }
 
     /// The blast that matches an explosion's size.

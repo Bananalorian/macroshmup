@@ -7,21 +7,28 @@ writes src/render/jaws_px.rs: each part as rows of palette letters, its pivot, a
 what the game reads off it (the windows' glass). The game rotates and mirrors the
 parts itself.
 
+The closed mouth comes from "Lunar gothic mechanical shark with closed jaw.png" (the
+same pose as his composed picture): its lips, traced at the body's scale, close over
+the atlas's open-mouthed head, and the game pulls them back as the jaw drops.
+
 Each part is cut out of the atlas (its largest solid piece, holes kept), shrunk
 smoothly, given back the contrast the shrink takes, its cracks kept from the
 full-size art, every pixel snapped to the boss's palette with an ordered dither
 between stone tones, and outlined. Then the hand pass: the eye drawn crisp, the
 crosshair painted in the jaw taken out (the game draws its own), and the
-pectoral's stump broken off.
+pectoral's stump broken off. Last, the mouth: the upper fangs split off the body
+(they slide up into the gums as it shuts), and the closed lips traced.
 """
 
+import math
 import os
 import sys
 
-from PIL import Image
+from PIL import Image, ImageFilter
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ATLAS = os.path.join(ROOT, "docs", "reference", "stage 1 bosss", "Right-facing shark boss sprite atlas.png")
+CLOSED = os.path.join(ROOT, "docs", "reference", "stage 1 bosss", "Lunar gothic mechanical shark with closed jaw.png")
 OUT = os.path.join(ROOT, "src", "render", "jaws_px.rs")
 
 # The boss palette (carve-era tones, kept): letter -> color.
@@ -279,6 +286,128 @@ def stump(g, pivot, reach):
     return out
 
 
+# The mouth. The atlas's head is drawn biting, its lips pulled back off its gums;
+# shut, the lips close over them as in the closed-jaw picture.
+# - The upper gums' arch, in the body: what's on and under it is the fangs.
+# - The lower gums' line, in the jaw (as traced, wide open).
+# - The jaw hangs from HINGE (the body's pivot plus JAWS_HINGE in tune.rs) and
+#   shuts at JAW_SHUT (jawsthic.rs).
+# - The closed picture is the composed one's pose: at CLOSED_SCALE its pixel
+#   (x + 26, y + 13) is the body's (x, y) (the eyes, the snout and the windows meet).
+# - Its slit runs from the mouth's corner to the snout, near SLIT; the lips cover
+#   MOUTH's columns, and from column CHIN on, the lower one reaches a pixel further
+#   down per column, over the jaw's front gum.
+GUMS_UP = [(103, 48), (108, 43), (113, 39), (118, 36), (123, 32), (128, 30), (134, 29), (140, 28), (146, 31), (151, 32), (157, 35)]
+GUMS_DOWN = [(0, 6), (28, 15), (31, 17), (37, 27), (44, 35), (48, 39), (51, 42), (55, 46), (58, 47), (62, 49), (66, 50), (70, 51), (75, 51), (79, 50), (86, 47)]
+HINGE = (71, 54)
+JAW_SHUT = -0.55
+CLOSED_SCALE = 0.165 / 1.33
+CLOSED_AT = (26, 13)
+SLIT = ((100, 47), (152, 32))
+MOUTH = (98, 158)
+CHIN = 143
+
+
+def along(pts, x):
+    """The polyline `pts`'s height at column x (None off its ends)."""
+    for (x0, y0), (x1, y1) in zip(pts, pts[1:]):
+        if x0 <= x <= x1:
+            return y0 + (y1 - y0) * (x - x0) / max(1e-6, x1 - x0)
+    return None
+
+
+def fangs(body):
+    """The upper gums and fangs, taken off the body: everything on or under the arch."""
+    h, w = len(body), len(body[0])
+    out = [[None] * w for _ in range(h)]
+    for x in range(w):
+        a = along(GUMS_UP, x)
+        if a is None:
+            continue
+        for y in range(h):
+            if body[y][x] is not None and y >= a - 0.5:
+                out[y][x], body[y][x] = body[y][x], None
+    return out
+
+
+def closed_mouth(box):
+    """The closed picture's head over the body's pixels `box` (x0, y0, x1, y1),
+    traced like the atlas: a grid in the body's pixels, None off its head."""
+    im = Image.open(CLOSED).convert("RGB")
+    x0, y0, x1, y1 = box
+    src = (round((x0 + CLOSED_AT[0]) / CLOSED_SCALE), round((y0 + CLOSED_AT[1]) / CLOSED_SCALE), round((x1 + CLOSED_AT[0]) / CLOSED_SCALE), round((y1 + CLOSED_AT[1]) / CLOSED_SCALE))
+    crop = im.crop(src)
+    W, H = crop.size
+    # the space round the head: the black reached from the box's edges, its cracks
+    # and its slit (black lines running out to the edge of the head) closed first
+    solid = crop.convert("L").point(lambda v: 255 if v >= 12 else 0).filter(ImageFilter.MaxFilter(25)).filter(ImageFilter.MinFilter(25))
+    cp = solid.load()
+    out = [[False] * W for _ in range(H)]
+    st = [(x, y) for x in range(W) for y in (0, H - 1)] + [(x, y) for y in range(H) for x in (0, W - 1)]
+    st = [(x, y) for x, y in st if cp[x, y] == 0]
+    for x, y in st:
+        out[y][x] = True
+    while st:
+        x, y = st.pop()
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            nx, ny = x + dx, y + dy
+            if 0 <= nx < W and 0 <= ny < H and not out[ny][nx] and cp[nx, ny] == 0:
+                out[ny][nx] = True
+                st.append((nx, ny))
+    g = trace(crop.convert("RGBA"), CLOSED_SCALE)
+    f = 1.0 / CLOSED_SCALE
+    for ty in range(len(g)):
+        for tx in range(len(g[0])):
+            block = [out[y][x] for y in range(int(ty * f), min(H, int((ty + 1) * f) + 1)) for x in range(int(tx * f), min(W, int((tx + 1) * f) + 1))]
+            if block and sum(block) > 0.6 * len(block):
+                g[ty][tx] = None
+    return g
+
+
+def lips(body, jaw_pivot):
+    """The closed lips, in the body's pixels: the upper one from the gums' arch down
+    to the slit, the lower one from under the slit down over the shut jaw's gums."""
+    x0, x1 = MOUTH
+    y0, y1 = 15, 80
+    ref = closed_mouth((x0, y0, x1, y1))
+    at = lambda x, y: ref[y - y0][x - x0] if 0 <= y - y0 < len(ref) and 0 <= x - x0 < len(ref[0]) else None
+    (sx0, sy0), (sx1, sy1) = SLIT
+    guess = lambda x: sy0 + (x - sx0) * (sy1 - sy0) / (sx1 - sx0)
+    # the slit: the darkest pixel near the line, steadied over 5 columns
+    dark = {"o": 0, "x": 1, "v": 1, "g": 1, "0": 2, "1": 3}
+    raw = {x: min(range(round(guess(x)) - 3, round(guess(x)) + 4), key=lambda y: dark.get(at(x, y), 9) + abs(y - guess(x)) * 0.4) for x in range(x0, x1)}
+    slit = {}
+    for x in raw:
+        near = sorted(raw[c] for c in range(x - 2, x + 3) if c in raw)
+        slit[x] = near[len(near) // 2]
+    # the jaw's gums, shut, in the body's pixels
+    c, s = math.cos(JAW_SHUT), math.sin(JAW_SHUT)
+    gums = sorted((HINGE[0] + c * (x - jaw_pivot[0]) - s * (y - jaw_pivot[1]), HINGE[1] + s * (x - jaw_pivot[0]) + c * (y - jaw_pivot[1])) for x, y in GUMS_DOWN)
+    h, w = len(body), len(body[0])
+    up, down = [[None] * w for _ in range(h)], [[None] * w for _ in range(h)]
+    for x in range(x0, x1):
+        if at(x, slit[x]) is None:
+            continue
+        a = along(GUMS_UP, x)
+        if a is not None:
+            for y in range(math.ceil(a - 0.5), slit[x] + 1):
+                if body[y][x] is None:
+                    up[y][x] = at(x, y)
+        j = along(gums, x)
+        if j is not None:
+            for y in range(slit[x] + 1, min(h, round(j) + 3 + max(0, x - CHIN))):
+                down[y][x] = at(x, y)
+    return up, down
+
+
+def cropped(g, pivot):
+    """A grid cut down to what's in it, and where `pivot` falls in the cut."""
+    ys = [y for y, r in enumerate(g) if any(c is not None for c in r)]
+    xs = [x for x in range(len(g[0])) if any(r[x] is not None for r in g)]
+    gx0, gy0 = min(xs), min(ys)
+    return [r[gx0:max(xs) + 1] for r in g[gy0:max(ys) + 1]], (pivot[0] - gx0, pivot[1] - gy0)
+
+
 def windows(g, pivot):
     """Each lancet window's glass, pixels from the body's pivot: the dark inside it."""
     out = []
@@ -312,7 +441,7 @@ def emit(parts, glass):
         "}",
         "",
     ]
-    names = {"body": "BODY", "jaw": "JAW", "tail": "TAIL", "dorsal": "DORSAL", "pec_near": "PECTORAL", "pec_far": "FAR_FIN", "stump": "STUMP"}
+    names = {"body": "BODY", "fangs": "FANGS", "lip": "LIP", "lower_lip": "LOWER_LIP", "jaw": "JAW", "tail": "TAIL", "dorsal": "DORSAL", "pec_near": "PECTORAL", "pec_far": "FAR_FIN", "stump": "STUMP"}
     for key, (g, pivot) in parts.items():
         lines.append(f"pub const {names[key]}: Grid = Grid {{")
         lines.append(f"    pivot: ({pivot[0]}, {pivot[1]}),")
@@ -342,7 +471,15 @@ def main():
     even_tail(parts["tail"][0], parts["body"][0], 7)
     unpaint_crosshair(parts["jaw"][0], 46, 16, 70, 38)
     parts["stump"] = (stump(parts["pec_near"][0], PARTS["pec_near"][2], 17), PARTS["pec_near"][2])
-    emit(parts, windows(parts["body"][0], PARTS["body"][2]))
+    glass = windows(parts["body"][0], PARTS["body"][2])
+    # the mouth: the fangs come off the body, and the upper lip fills where they were
+    body = parts["body"][0]
+    teeth = fangs(body)
+    up, down = lips(body, PARTS["jaw"][2])
+    parts["fangs"] = cropped(teeth, PARTS["body"][2])
+    parts["lip"] = cropped(up, PARTS["body"][2])
+    parts["lower_lip"] = cropped(down, HINGE)
+    emit(parts, glass)
     print(f"wrote {OUT}", file=sys.stderr)
 
 

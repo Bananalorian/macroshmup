@@ -146,6 +146,9 @@ pub fn draw(r: &Renderer, lay: &Layout, w: &World, hitboxes: bool, show_dot: boo
     let shown = matches!(w.life, Life::Alive | Life::Struck { .. } | Life::Respawning { .. });
     if let Some(b) = w.beam {
         draw_beam(a, ox, oy, b.x, b.top, p.y + ship::TIP as f32, w.frame);
+        if let Some(r) = b.hit_box {
+            draw_wrap(a, ox, oy, b.x, b.top, r, w.frame);
+        }
         draw_aura(a, px, py, w.frame);
     }
 
@@ -314,11 +317,54 @@ pub fn draw_beam(a: &Atlas, ox: i32, oy: i32, x: f32, top: f32, nose: f32, frame
         a.fill(cx - 3, y, 6, 2, Color { a: 0.3, ..TEAL_HOT });
         y -= step;
     }
-    // where it lands
+    // where it lands: a flare, swelling and shrinking, a hot core in it
     if top > 0.0 {
-        let flare = if frame % 4 < 2 { 0.6 } else { 0.4 };
-        a.blit(a.r.sparkle, cx - 3, top_px - 3, 1, Color { a: flare, ..TEAL_HOT });
+        let big = frame % 6 < 3;
+        let s = 1 + big as i32;
+        let flare = if big { 0.55 } else { 0.7 };
+        a.blit(a.r.sparkle, cx - 3 * s - (s - 1), top_px - 3 * s - (s - 1), s, Color { a: flare, ..TEAL_HOT });
+        let r = 2 + (frame % 3 == 0) as usize;
+        a.blit(a.r.discs[r - 1], cx - r as i32 - 1, top_px - r as i32 - 1, 1, Color { a: 0.75, ..TEAL_HOT });
         a.fill(cx - half, top_px - 1, 2 * half, 2, Color { a: 0.4, ..TEAL });
+    }
+}
+
+/// A point `t` (0 to 1) along the beam's light wrapping round what it hit, on side
+/// `side` (-1 left, 1 right): from where it lands at `(x, top)`, out along the
+/// underside `reach` px, curling `up` px up the side.
+pub fn wrap_path(x: f32, top: f32, side: f32, reach: f32, up: f32, t: f32) -> (f32, f32) {
+    let a = t * std::f32::consts::FRAC_PI_2 * 1.2;
+    (x + side * reach * a.min(std::f32::consts::FRAC_PI_2).sin(), top - up * (1.0 - a.cos()))
+}
+
+/// The beam doesn't stop dead on what it hits: its light runs out along the
+/// underside both ways and curls up the sides, brightest where it lands, bright
+/// dashes crawling outward.
+fn draw_wrap(a: &Atlas, ox: i32, oy: i32, x: f32, top: f32, hit: SimRect, frame: u64) {
+    let up = ((hit.y1 - hit.y0) * 0.45).clamp(3.0, 12.0);
+    for side in [-1.0f32, 1.0] {
+        let edge = if side < 0.0 { x - hit.x0 } else { hit.x1 - x };
+        let reach = (edge + 2.0).clamp(BEAM_W * 0.5 + 2.0, 30.0);
+        let n = (reach * 1.8) as i32;
+        let crawl = (frame as i32 * 2) % 9;
+        let mut last = (i32::MIN, i32::MIN);
+        for k in 0..=n {
+            let t = k as f32 / n as f32;
+            let (px, py) = wrap_path(x, top, side, reach, up, t);
+            let p = (ox + px.round() as i32, oy + py.round() as i32);
+            if p == last {
+                continue;
+            }
+            last = p;
+            let fade = 1.0 - t * 0.85;
+            let dash = (k + crawl) % 9 < 3;
+            let c = if dash { TEAL_HOT } else { TEAL };
+            a.fill(p.0, p.1, 1, 1, Color { a: (if dash { 0.75 } else { 0.5 }) * fade, ..c });
+            // thick where it lands
+            if t < 0.35 {
+                a.fill(p.0, p.1 + 1, 1, 1, Color { a: 0.3 * fade, ..TEAL });
+            }
+        }
     }
 }
 
@@ -338,6 +384,24 @@ fn draw_aura(a: &Atlas, x: i32, y: i32, frame: u64) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The beam's light wraps round what it hits: from where it lands, out along the
+    /// underside, curling up the side, never back down or past its reach.
+    #[test]
+    fn the_beam_wraps_round_what_it_hits() {
+        for side in [-1.0, 1.0] {
+            let at = |t: f32| wrap_path(100.0, 50.0, side, 20.0, 8.0, t);
+            assert_eq!(at(0.0), (100.0, 50.0));
+            let mut was = at(0.0);
+            for k in 1..=20 {
+                let p = at(k as f32 / 20.0);
+                assert!((p.0 - 100.0) * side >= (was.0 - 100.0) * side - 1e-4 && p.1 <= was.1 + 1e-4, "outward and up");
+                assert!((p.0 - 100.0).abs() <= 20.0 + 1e-4);
+                was = p;
+            }
+            assert!(was.1 < 50.0 - 5.0, "it curls up the side");
+        }
+    }
 
     #[test]
     fn the_hole_grows_across_the_stage_and_the_sky_dims_with_bullets() {
