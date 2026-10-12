@@ -3,6 +3,40 @@
 Every version is one build sprint. Newest first. Versions are tagged in git, and
 each tag publishes a GitHub Release with downloads.
 
+## [0.8.8] - 2026-10-12 - Back on track
+
+### Changed
+- **The tail is your traced one again**, as in v0.8.6
+  ([beside your picture](docs/screenshots/jawsthic-vs-art.png)). v0.8.7's drawn
+  tail and its whole-shark tidy-up are reverted: you said they made it worse.
+- **Its thick part is even.** The traced tail narrows to a small end cap right
+  where it meets the body, so the thick part pinched and bulged at the joint. Now
+  its top and bottom edges run in a straight, even taper from the tail fin's
+  collar to the body's own height at the joint. The traced rings are kept:
+  gaps along the edge take the stone beside them, and seams carry through.
+- **The tail fin moves with the tail, never on its own.** The whole tail, fin and
+  all, is one image. As it swims, each column slides to where the tail runs, and
+  the fin rides the end of it.
+
+### Kept from v0.8.7
+- **Your laser and shots hit the tail:** every tail plate, and the tail fin outside
+  phase 2, takes hits as the body. To keep the fight as long as it was, phases 2-4
+  take a little less damage (0.8, 0.8 and 0.42 of a shot).
+- The far pectoral hangs from under the throat.
+
+### Checked
+- **Tests prove:**
+  - the tail bends as one piece, every column moving with its joints;
+  - the fin's columns all ride the last joint;
+  - the beam stops on the tail and hurts the boss.
+- **PG_SIM=200:** the stage is cleared 100% with no misses or deaths, and JAWSTHIC is
+  destroyed in 100% of runs, its phases a median 24.2 / 24.4 / 28.1 / 23.2 s. The
+  median score is 3.10M, both extends come in every run, and the rank is A 70% and
+  S 30%.
+- Play frames at 1080p show the tail swimming in one piece with the fin riding it.
+  Every screenshot is retaken. Native and web builds are warning-free, and all 242
+  tests pass in both debug (as CI runs them) and release.
+
 ## [0.8.7] - 2026-10-12 - One tail
 
 ### Changed

@@ -3,6 +3,29 @@
 Session notes for Claude Code: what shipped, tuning that changed, known issues, what's next.
 Newest first.
 
+## v0.8.8 Back on track - 2026-10-12
+
+**Jason:** "you just made it worse. it was better with the ontrack file. revert to that... make
+the thick tail even and the tail fins actually should not move seperately. please get this
+correct. I am having anxiety with this." He showed the v0.8.6-era traced tail as the good one.
+So v0.8.7's drawn tail AND its cleanup pass are reverted (`git checkout v0.8.6` of
+tools/trace_jawsthic.py, jaws_px.rs, jawsthic.rs, tune.rs), then:
+- `even_tail()` in the tool: tail columns EVEN_FROM 45..EVEN_TO 79 get a straight top/bottom
+  from the tail's height at 45 to the body's height at its cut (body col 7, mapped via
+  ROOT_IN_BODY (8,36) / ROOT_IN_TAIL (80,46)); fills take the nearest stone (never lights),
+  seam columns carry 'x', the old traced outline pixels are replaced, new outline + lit top.
+- jawsthic.rs: `tail: [Sprite; 2]` = the whole traced TAIL (fin included), pivot JOINTS[0];
+  drawn column by column with `along_tail` (clamped; fin columns ride joint 5) so the fin never
+  turns on its own. Phase 2 fin flash draws the fin columns red.
+- Kept from v0.8.7: `Boss::tail_boxes` (laser hits the tail) + test; FAR_FIN_AT (24,19).
+- JAWS_PHASES damage P2 0.8, P3 0.8, P4 0.42 (0.40 timed out 1/200; 0.44 too quick).
+  PG_SIM: 3.10M, extends 100/100, A 70 S 30, phases 24.2/24.4/28.1/23.2, 100% destroyed.
+
+**Lesson:** when he likes a version, change the least possible on top of it; a full redraw
+of something he already liked cost a release and his patience.
+
+**Next:** his list of other fixes before Sprint 8.
+
 ## v0.8.7 One tail - 2026-10-12
 
 **Jason** (/loop): "the thick part of the tail is not one piece. keep the tail movement... the
