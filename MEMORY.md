@@ -3,6 +3,26 @@
 Session notes for Claude Code: what shipped, tuning that changed, known issues, what's next.
 Newest first.
 
+## v0.8.4 Your sprites - 2026-10-12
+
+**Jason** sent new ship art (docs/reference/ship/: "Modular sword spacecraft sprite atlas.png":
+two blades, two nacelles, capsule, two struts; "Closed Swordship Firing Animation Strip.png": 6
+laser-form frames) and asked "will this work?". A straight shrink to game size is mud (tested),
+so he OK'd a pixel-by-pixel redraw. ship.rs is now parts-based: `blade(plates, antenna)` and
+`sword([plates; 2])` generate pixels (`Px = (x, y, letter)`; letters o 0-4 c v h b k s n),
+`NACELLE`/`POD` are grids, `compose(form, bank)` lays them on a `Canvas`, `paint` colors them,
+`lights` finds the light letters. `FORM` table: inner -3/-2/-1/0/0, plates 2/1/0/0/2 (form 4 =
+the sword's shoulders), antenna 4/3/1/0/0, nacelle -11/-11/-10/-10/-10. Banking (`rolled`):
+the dipping side folds `steps` plates and tucks its nacelle in by `steps`; nothing is cut.
+TIP -22 (was -21), FOOT 6, BAR 8 (was 9), CORNER TIP+7, PLATES [-7, 0], SHOULDERS [-4, 2],
+NACELLE_TOP 7, POD_TOP 10. Speckle is hashed in each part's own coordinates so it moves with
+the part. 29 x 45 flight; sword 15 wide at the base = the closed blades (test). Channels still
+dark in flight (his art shows them lit; asked him). Committed his reference moves (ship/,
+"stage 1 bosss/") and relinked SPRINTS/CLAUDE/AGENTS. New screenshot pilgrim-vs-art.png
+(before | his art | now, flight then laser). 238 tests.
+
+**Next:** Sprint 8 (Music & mix, v0.9.0) when he says go.
+
 ## v0.8.3 Clean sides - 2026-10-12
 
 **Jason:** "the ship teal outlines when moving are gone now!!! and the muddy sides have not
@@ -20,7 +40,7 @@ Forms 2-4 (laser) roll exactly as before. Test `rolling_keeps_the_white_down_the
 The dipping side is still a tone darker (`dip` in `paint`), which he called clean on the laser.
 Channels stay dark in flight (v0.8.1). 237 tests.
 
-**Next (Jason asked):** redraw the Pilgrim from his new sprites in `docs/reference/ship/`
+**Then (done in v0.8.4):** redraw the Pilgrim from his new sprites in `docs/reference/ship/`
 ("Closed Swordship Firing Animation Strip.png": 6 laser-form frames; "Modular sword spacecraft
 sprite atlas.png": blades, nacelles, capsule, struts; plus the split-sword ref, which he moved
 there along with jawsthic.jpg into `docs/reference/stage 1 bosss/`; those moves are still

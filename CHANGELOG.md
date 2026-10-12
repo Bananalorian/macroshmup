@@ -3,6 +3,56 @@
 Every version is one build sprint. Newest first. Versions are tagged in git, and
 each tag publishes a GitHub Release with downloads.
 
+## [0.8.4] - 2026-10-12 - Your sprites
+
+### Changed
+- **The Pilgrim is redrawn from your new sprites**, pixel by pixel at game size:
+  the parts atlas and the firing strip in `docs/reference/ship/`, following your
+  split-sword sheet for how the parts go together
+  ([before, your art, now](docs/screenshots/pilgrim-vs-art.png): flight form, then
+  laser form). Your art is about ten times the ship's size on screen, and a straight
+  shrink turns it to mud, so each part is drawn again in the game's palette with a
+  1 px outline, like the enemies:
+  - **the blades:** a 45° bevelled top running down from the tip, the antenna on it,
+    three columns of white stone, then the channel near the inner edge with its red
+    heart and the vents below it, and two plates stepping out down the outer edge;
+  - **the sword:** your long point with a seam down it, two stepped shoulders, one
+    channel;
+  - **the engines and the capsule:** rounded, with dark windows of teal lights, a red
+    beacon on each engine, red strobes and a keel light on the capsule, on struts.
+  The ship is 29 × 45 px in flight. Its sword is 15 px across at the base, slimmer
+  than before and closer to yours, with the engines tucked in beside it.
+- **It animates by moving whole parts, never by cutting pixels.** Focusing slides
+  the blades together a pixel a frame while their plates and antennas fold away and
+  the engines tuck in ([the transformation in play](docs/screenshots/pilgrim-forms.png)).
+  The closed blades are exactly as wide as the sword's base, so they lock into it
+  without a jump. Banking folds the dipping side's plates (the sword's shoulders)
+  and tucks its engine in, so the white stone down every edge stays whole
+  ([every frame](docs/screenshots/pilgrim-sheet.png)).
+- Kept: the thrusters, the beam, the bullets, the afterimages and the lights' timing.
+  The channels stay dark in flight, as in v0.8.1. The review sheets light every
+  channel so you can see them.
+- Your reference art is committed in its new folders, `docs/reference/ship/` and
+  `docs/reference/stage 1 bosss/`, and the docs link there.
+
+### Checked
+- **Tests prove:**
+  - the ship is symmetric, 27-31 px wide and 42-48 px tall, with the tips on top and
+    the capsule at the bottom;
+  - the hitbox sits between the hearts in flight and on the heart in the laser form,
+    with one point above it;
+  - frame by frame the gap closes, the antennas fold, the engines tuck in, and the
+    channels become one;
+  - the closed blades match the sword's base row for row;
+  - banked either way, on every frame, at least three columns of stone stay between
+    the outline and the channel, two of them white;
+  - every kind of light survives a roll, and the center column never moves.
+- Play frames captured while the bot moves sideways at full speed show both blades'
+  white edges and the afterimages trailing. Every screenshot showing the ship is
+  retaken.
+- Native and web builds are warning-free, and all 238 tests pass in both debug (as CI
+  runs them) and release.
+
 ## [0.8.3] - 2026-10-12 - Clean sides
 
 ### Fixed

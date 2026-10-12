@@ -52,6 +52,8 @@ the font and every sound are built when the game starts. Written in Rust on
 |---|---|
 | ![The options: volumes, shake, flashing, the hitbox, the fire scheme](docs/screenshots/options.png) | ![The title's demo: the bot flies Stage 1](docs/screenshots/demo.png) |
 
+![The Pilgrim before v0.8.4, Jason's sprites, and the redraw at game size: the flight form, then the laser form](docs/screenshots/pilgrim-vs-art.png)
+
 ![The Pilgrim's animation sheet: the flight form, banking, the five frames to the laser form, and the beam](docs/screenshots/pilgrim-sheet.png)
 
 ![The split sword in play: focus, and the blades close into one sword as the teal beam fires from its tip](docs/screenshots/pilgrim-forms.png)
@@ -73,8 +75,10 @@ full screen (F11 for a window).
 
 **v0.7.1, the split sword:** the Pilgrim is redesigned from Jason's sheet: two
 bone-white blades with teal channels, on a crossbar with an engine at each end.
-When you focus, the blades close into one broad sword and the teal beam fires from
-its tip. It flies exactly as before. Banked, both blades keep their white edges (v0.8.3).
+When you focus, the blades close into one sword and the teal beam fires from its
+tip. It flies exactly as before. Since v0.8.4 it's redrawn pixel by pixel from his
+sprites ([before, his art, now](docs/screenshots/pilgrim-vs-art.png)), and it
+animates by moving whole parts, so both blades keep their white edges when it banks.
 
 **v0.7, the boss:** JAWSTHIC, a great white carved from moon rock with a gothic
 cathedral for a body, from Jason's concept. Its fin cuts through the black hole's

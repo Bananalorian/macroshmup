@@ -1,13 +1,17 @@
-//! The Pilgrim, after Jason's split-sword sheet (docs/reference/Split-sword
-//! starship_ flight to laser.png): two bone-white blades, each with a teal channel
-//! and a red heart, an engine nacelle under each on a crossbar, and a capsule
-//! below on struts. Focusing closes the blades into one sword, the laser form,
-//! and the beam fires from its tip.
+//! The Pilgrim, redrawn pixel by pixel at game size from Jason's sprites
+//! (docs/reference/ship/: the modular atlas and the firing strip, after the
+//! split-sword sheet). Two bone blades, each with a bevelled top, an antenna, two
+//! plates stepping out down its outer edge, and a teal channel near its inner edge
+//! with a red heart. An engine nacelle hangs at each end of the crossbar beneath,
+//! and a capsule rides below on struts. Focusing slides the blades together, folding
+//! their plates and antennas away and tucking the nacelles in, until they lock into
+//! the laser form's sword: a long seamed point, two stepped shoulders, one channel.
+//! The beam fires from its tip.
 //!
-//! Each frame of the transformation is laid out pixel by pixel from a keyframe
-//! table (the left half; the right mirrors it), rolled for the bank, then painted
-//! in bone like the enemies. The lights are found in the painted frames and lit at
-//! draw time.
+//! Every frame is put together from those parts and never scaled. A roll folds the
+//! dipping side's plates (the sword's shoulders) and tucks its nacelle in, so the
+//! white stone down every edge stays whole. The lights are found in the frames and
+//! lit at draw time.
 
 use super::art::{Atlas, Packer, grid_image, rows};
 use super::foes::{BONE, OUTLINE};
@@ -22,233 +26,149 @@ const BANKS: usize = 5;
 const SIZE: (i32, i32) = (33, 49);
 const CX: i32 = SIZE.0 / 2;
 const CY: i32 = SIZE.1 / 2;
-/// Rows from the hitbox: the sword's tip (the beam leaves from here), the shoulder,
-/// and the foot of the blades.
-pub const TIP: i32 = -21;
-const SHOULDER: i32 = -8;
-const FOOT: i32 = 7;
-/// The channel: the point of its arch, and the step where it widens.
-const ARCH: i32 = -15;
-const STEP: i32 = -1;
+/// Rows from the hitbox: the tip (the beam leaves from here) and the blades' last
+/// row.
+pub const TIP: i32 = -22;
+const FOOT: i32 = 6;
 /// The crossbar's middle row (sparks fly off it as the blades lock).
 pub const BAR: i32 = FOOT + 2;
-/// The nacelles' rows (top, bottom; the nozzle is under the bottom) and the
-/// capsule's.
-const NACELLE_ROWS: (i32, i32) = (FOOT + 1, FOOT + 7);
-const POD_ROWS: (i32, i32) = (FOOT + 4, FOOT + 14);
+/// The row where a blade's 45-degree bevel meets its outer edge (the channel's arch
+/// sits on it), and where each plate steps out down the outer edge.
+const CORNER: i32 = TIP + 7;
+const PLATES: [i32; 2] = [-7, 0];
+/// The rows where the sword's shoulders step out.
+const SHOULDERS: [i32; 2] = [-4, 2];
+/// The nacelles' top row and the capsule's.
+const NACELLE_TOP: i32 = FOOT + 1;
+const POD_TOP: i32 = FOOT + 4;
 
-/// One frame of the transformation, the left half.
-struct Key {
-    /// Columns: the blade's inner edge, its channel's core, its outer edge below
-    /// and above the shoulder, and the nacelle's center.
+/// One frame of the transformation.
+struct Form {
+    /// The left blade's inner edge (the right blade mirrors it).
     inner: i32,
-    core: i32,
-    outer: i32,
-    upper: i32,
+    /// Plates out down each blade's outer edge (the sword's shoulders).
+    plates: i32,
+    /// How far the antennas stand.
+    antenna: i32,
+    /// The left nacelle's center.
     nacelle: i32,
-    /// The row where the bevelled top meets the outer edge (lower as the blades
-    /// join, so the sword's point stays sharp).
-    corner: i32,
-    /// The antenna on the bevelled top: its column, and how far it stands up (0
-    /// once it has folded away).
-    antenna: (i32, i32),
-    /// Where the strut leaves the crossbar.
-    strut: i32,
 }
 
-/// Flight form to laser form. The blades close in 3 px into one broad sword (as
-/// wide as both blades' stone, so the ship doesn't shrink as it focuses), their
-/// channels slide together into one core, the antennas fold away and the nacelles
-/// tuck in beside the sword (in flight they hang under the blades' outer edges).
-const KEYS: [Key; FORMS] = [
-    Key { inner: -3, core: -7, outer: -12, upper: -11, nacelle: -12, corner: -13, antenna: (-9, 4), strut: -7 },
-    Key { inner: -2, core: -5, outer: -11, upper: -10, nacelle: -12, corner: -13, antenna: (-8, 3), strut: -7 },
-    Key { inner: -1, core: -3, outer: -10, upper: -9, nacelle: -12, corner: -12, antenna: (-7, 1), strut: -7 },
-    Key { inner: 0, core: -1, outer: -9, upper: -9, nacelle: -11, corner: -11, antenna: (0, 0), strut: -6 },
-    Key { inner: 0, core: 0, outer: -8, upper: -8, nacelle: -11, corner: -10, antenna: (0, 0), strut: -6 },
+/// Flight form to laser form: the blades close 3 px, folding a plate a frame and
+/// their antennas, until their outer edges are the sword's. The nacelles tuck in.
+const FORM: [Form; FORMS] = [
+    Form { inner: -3, plates: 2, antenna: 4, nacelle: -11 },
+    Form { inner: -2, plates: 1, antenna: 3, nacelle: -11 },
+    Form { inner: -1, plates: 0, antenna: 1, nacelle: -10 },
+    Form { inner: 0, plates: 0, antenna: 0, nacelle: -10 },
+    Form { inner: 0, plates: 2, antenna: 0, nacelle: -10 },
 ];
-/// The nacelles' and the capsule's half widths.
-const NACELLE_W: i32 = 3;
-const POD_W: i32 = 3;
+/// The laser form: the sword in place of the blades.
+const SWORD: usize = FORMS - 1;
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum M {
-    Empty,
-    /// The blade's face, and the bevel down its outer edge.
-    Face,
-    Bevel,
-    /// The lighter inner face, between the channel and the gap.
-    Rail,
-    /// The channel: its dark walls, its black core (the teal dashes), the grooves
-    /// beside it below its step.
-    Wall,
-    Core,
-    Groove,
-    /// Where the blades meet, above the channel.
-    Seam,
-    Crack,
-    /// The crossbar, the nacelles and the capsule.
-    Metal,
-    Window,
-    Nozzle,
-    Antenna,
-    Strut,
-    Red,
+/// The nacelle (the left one; the right mirrors it), 7 wide around its center,
+/// from `NACELLE_TOP`. `b` its beacon, `v` its dark window, `n` the window's lights.
+const NACELLE: [&str; 8] = [".o2b2o.", "o34443o", "o3vnv2o", "o3vvv2o", "o3vnv2o", "o3vvv2o", "o34442o", ".o222o."];
+/// The capsule, 7 wide around the center, from `POD_TOP`: its window, a strobe
+/// either side (`s`), the keel light (`k`).
+const POD: [&str; 13] = [
+    "..o2o..", ".o343o.", "o34443o", "o3vnv3o", "o3vvv3o", "s3vnv3s", "o3vvv3o", "o3vnv3o", "o34443o", "o33k33o", "o34443o", ".o343o.", "..o2o..",
+];
+
+/// A pixel of a part: `(x, y, letter)`. The letters: `o` outline, `0`-`4` bone dark
+/// to light, `c` channel core, `v` dark window, and the lights `h` heart, `b`
+/// beacon, `k` keel, `s` strobe, `n` window.
+type Px = (i32, i32, char);
+
+/// A fixed per-pixel noise in 0..1 (the stone's speckle).
+fn hash(x: i32, y: i32) -> f32 {
+    let mut h = (x as u32).wrapping_mul(0x9E37_79B1) ^ (y as u32).wrapping_mul(0x85EB_CA77) ^ 0x5EED_0007;
+    h ^= h >> 15;
+    h = h.wrapping_mul(0x2C1B_3C6D);
+    h ^= h >> 12;
+    (h & 0xFFFF) as f32 / 65536.0
 }
 
-/// Which piece a pixel belongs to: a dark line is drawn where two pieces meet.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum Piece {
-    Blade,
-    Bar,
-    Nacelle,
-    Pod,
-    Strut,
-}
-
-/// A material map of the whole canvas, in pixels from the hitbox.
-#[derive(Clone)]
-struct Map {
-    m: Vec<(M, Piece)>,
-}
-
-impl Map {
-    fn new() -> Map {
-        Map { m: vec![(M::Empty, Piece::Blade); (SIZE.0 * SIZE.1) as usize] }
-    }
-
-    fn at(&self, x: i32, y: i32) -> (M, Piece) {
-        if x < -CX || x > CX || y < -CY || y > CY { (M::Empty, Piece::Blade) } else { self.m[((y + CY) * SIZE.0 + x + CX) as usize] }
-    }
-
-    fn set(&mut self, x: i32, y: i32, v: (M, Piece)) {
-        if !(x < -CX || x > CX || y < -CY || y > CY) {
-            self.m[((y + CY) * SIZE.0 + x + CX) as usize] = v;
+/// Speckle a part's lightest stone by its own coordinates, so the speckle moves
+/// with the part.
+fn speckle(px: &mut [Px]) {
+    for p in px.iter_mut() {
+        if p.2 == '4' && hash(p.0, p.1) < 0.14 {
+            p.2 = '3';
         }
     }
+}
 
-    /// Lay a pixel and its mirror.
-    fn put(&mut self, x: i32, y: i32, m: M, p: Piece) {
-        self.set(x, y, (m, p));
-        self.set(-x, y, (m, p));
+/// The channel's core on row `y`: dark, its heart on the hitbox's row, vents below.
+fn core(y: i32) -> char {
+    match y {
+        ..0 => 'c',
+        0 => 'h',
+        _ if y % 2 != 0 => 'o',
+        _ => '1',
     }
+}
 
-    /// Change the material of a laid pixel (and its mirror), keeping its piece.
-    fn over(&mut self, x: i32, y: i32, m: M) {
-        for x in [x, -x] {
-            let (k, p) = self.at(x, y);
-            if k != M::Empty {
-                self.set(x, y, (m, p));
+/// The left blade, `x` from its inner edge. A 45-degree bevel runs from the tip (its
+/// inner top corner) down to the outer edge. Outward from the inner edge: the inner
+/// face, the channel (walls either side of its core), three columns of white stone,
+/// the outline, and down the lower part `plates` plates stepping out.
+fn blade(plates: i32, antenna: i32) -> Vec<Px> {
+    let mut v = vec![];
+    for y in TIP..=FOOT {
+        if y <= CORNER {
+            let outer = TIP - y;
+            v.extend((outer..=0).map(|u| (u, y, if u == outer { '2' } else { '4' })));
+        } else {
+            v.extend([(-7, y, 'o'), (-6, y, '3'), (-5, y, '4'), (-4, y, '4'), (0, y, '4')]);
+            for (i, &top) in PLATES.iter().enumerate().take(plates as usize) {
+                let edge = -8 - i as i32;
+                if y >= top {
+                    // a lit step on top, then the plate's shaded face along the outline
+                    v.extend([(edge, y, if y == top { '2' } else { 'o' }), (edge + 1, y, '2')]);
+                }
             }
         }
+        if y == CORNER {
+            v.push((-2, y, '0'));
+        } else if y > CORNER {
+            v.extend([(-3, y, '0'), (-1, y, '0'), (-2, y, core(y))]);
+        }
     }
+    v.extend([(-5, -10, '1'), (-6, -9, '1'), (-5, -3, '2')]);
+    v.extend((0..antenna).map(|k| (-6, CORNER - 2 - k, if k == antenna - 1 { '3' } else { '2' })));
+    speckle(&mut v);
+    v
 }
 
-/// The row where the blade's top edge crosses column `x`.
-fn top_at(k: &Key, x: i32) -> i32 {
-    (TIP..=FOOT).find(|&y| left_at(k, y) <= x).unwrap_or(FOOT)
-}
-
-/// The blade's outermost column on row `y`.
-fn left_at(k: &Key, y: i32) -> i32 {
-    if y < k.corner {
-        k.inner + ((k.upper - k.inner) as f32 * (y - TIP) as f32 / (k.corner - TIP) as f32).round() as i32
-    } else if y < SHOULDER {
-        k.upper
-    } else {
-        k.outer
-    }
-}
-
-/// Lay out one frame of the transformation, unrolled.
-fn layout(k: &Key) -> Map {
-    let mut map = Map::new();
-    // the blade, row by row, its bevelled top running from the tip at its inner edge
-    // down to the outer corner
-    for y in TIP..=FOOT {
-        for x in left_at(k, y)..=k.inner {
-            map.put(x, y, M::Face, Piece::Blade);
+/// The laser form's sword, `x` from the center: a long point with a seam down it,
+/// straight below, then a shoulder stepping out for each of `plates` (per side,
+/// `[left, right]`). One channel down its middle.
+fn sword(plates: [i32; 2]) -> Vec<Px> {
+    // the point's rows, outer edge first; the last letter is the center column
+    const POINT: [&str; 11] = ["2", "o2", "4o", "34o", "44o", "344o", "444o", "2444o", "4444o", "34444o", "44444o"];
+    let mut v = vec![];
+    for (side, plates) in [(-1, plates[0]), (1, plates[1])] {
+        for y in TIP..=FOOT {
+            let r = (y - TIP) as usize;
+            if let Some(row) = POINT.get(r) {
+                let n = row.len() as i32;
+                v.extend(row.chars().enumerate().map(|(i, c)| ((n - 1 - i as i32) * side, y, c)));
+                continue;
+            }
+            let w = 5 + SHOULDERS.iter().take(plates as usize).filter(|&&s| y >= s).count() as i32;
+            v.extend((0..w).map(|x| (x * side, y, '4')));
+            // each shoulder lit on top, the step it makes shaded
+            let top = SHOULDERS.contains(&y) && w > 5;
+            v.extend([(w * side, y, if top { '2' } else { 'o' }), ((w - 1) * side, y, if w > 5 { '2' } else { '3' })]);
         }
     }
-    // the lighter inner face
-    let c = k.core;
-    for y in TIP..=FOOT {
-        for x in c + 2..=k.inner {
-            map.over(x, y, M::Rail);
-        }
+    v.extend((TIP + 2..CORNER + 1).map(|y| (0, y, 'o')));
+    for y in CORNER + 1..=FOOT {
+        v.extend([(-1, y, '0'), (1, y, '0'), (0, y, core(y))]);
     }
-    // the channel: a lancet arch at its top, grooved and wider below its step
-    for y in ARCH..=FOOT {
-        let (l, r) = if y == ARCH { (c, c) } else if y < STEP { (c - 1, c + 1) } else { (c - 2, c + 1) };
-        for x in l..=r {
-            map.over(x, y, if x == c { M::Core } else if x == c - 2 { M::Groove } else { M::Wall });
-        }
-    }
-    map.over(c, 0, M::Red);
-    // once they touch, the seam between the blades, from just under the tip to the arch
-    if k.inner == 0 {
-        for y in TIP + 2..ARCH {
-            map.over(0, y, M::Seam);
-        }
-    }
-    for (dx, y) in [(2, -6), (3, -5), (2, 2)] {
-        map.over(k.outer + dx, y, M::Crack);
-    }
-    // a broad face (the sword's) gets a wider bevel down its edge
-    if k.core - k.outer - 3 >= 5 {
-        for y in k.corner..=FOOT {
-            map.over(left_at(k, y) + 2, y, M::Bevel);
-        }
-    }
-    let (ax, ah) = k.antenna;
-    let base = top_at(k, ax);
-    for i in 1..=ah {
-        map.put(ax, base - i, M::Antenna, Piece::Blade);
-    }
-    // the crossbar under the blades, out to the nacelles
-    let n = k.nacelle;
-    for y in FOOT + 1..=FOOT + 3 {
-        for x in n + NACELLE_W..=k.inner {
-            map.put(x, y, M::Metal, Piece::Bar);
-        }
-    }
-    // the nacelles: rounded, a window, a red light on top, a nozzle beneath
-    let (top, bottom) = NACELLE_ROWS;
-    for y in top..=bottom {
-        let w = if y == top || y == bottom { NACELLE_W - 1 } else { NACELLE_W };
-        for x in n - w..=n + w {
-            map.put(x, y, M::Metal, Piece::Nacelle);
-        }
-    }
-    for y in top + 2..bottom {
-        map.put(n, y, M::Window, Piece::Nacelle);
-    }
-    map.put(n, top, M::Red, Piece::Nacelle);
-    for x in n - 1..=n + 1 {
-        map.put(x, bottom + 1, M::Nozzle, Piece::Nacelle);
-    }
-    // the capsule, on struts
-    let (top, bottom) = POD_ROWS;
-    for y in top..=bottom {
-        let w = if y == top || y == bottom { POD_W - 1 } else { POD_W };
-        for x in -w..=w {
-            map.put(x, y, M::Metal, Piece::Pod);
-        }
-    }
-    for y in top + 2..=top + 5 {
-        map.put(0, y, M::Window, Piece::Pod);
-    }
-    map.put(0, bottom - 2, M::Red, Piece::Pod);
-    map.put(-POD_W, top + 5, M::Red, Piece::Pod);
-    for x in -1..=1 {
-        map.put(x, bottom + 1, M::Nozzle, Piece::Pod);
-    }
-    for (x, y) in line((k.strut, top), (-POD_W - 1, top + 2)) {
-        if map.at(x, y).0 == M::Empty {
-            map.put(x, y, M::Strut, Piece::Strut);
-        }
-    }
-    map
+    speckle(&mut v);
+    v
 }
 
 /// The pixels on a line, ends included.
@@ -262,77 +182,87 @@ fn line(a: (i32, i32), b: (i32, i32)) -> Vec<(i32, i32)> {
         .collect()
 }
 
-/// Columns of stone a roll leaves inside the outline on the dipping side, outboard
-/// of the channel (the white face and its bevel) and inboard of it (the rail).
-const FACE_KEEP: usize = 2;
-const RAIL_KEEP: usize = 2;
-
-/// Up to `n` columns from the middle of `plain`.
-fn middle(plain: &[i32], n: usize) -> Vec<i32> {
-    plain.iter().skip((plain.len() / 2).saturating_sub(n.saturating_sub(1))).take(n).copied().collect()
+/// A frame being put together: a letter per pixel of the canvas, from the hitbox.
+#[derive(Clone)]
+struct Canvas {
+    px: Vec<char>,
 }
 
-const ROWS: usize = SIZE.1 as usize;
-/// A column a roll drops, row by row (`[y + CY]`).
-type Drop = [i32; ROWS];
-
-/// The columns a roll drops from the dipping side, one per step of the roll: plain
-/// stone (never a channel, a window, a light or the antenna), so the side
-/// foreshortens and everything outboard of it slides in whole. The outer face
-/// always keeps its white stone and bevel: without them the channel runs straight
-/// into the outline and the side goes muddy. So a slim blade gives up its inner
-/// face first, then the nacelle's plain columns.
-fn dropped(map: &Map, bank: i8) -> Vec<Drop> {
-    let side = bank.signum() as i32;
-    let steps = bank.unsigned_abs() as usize;
-    if steps == 0 {
-        return vec![];
+impl Canvas {
+    fn new() -> Canvas {
+        Canvas { px: vec!['.'; (SIZE.0 * SIZE.1) as usize] }
     }
-    let precious = |x: i32, rows: std::ops::RangeInclusive<i32>| rows.into_iter().any(|y| matches!(map.at(x, y).0, M::Core | M::Wall | M::Groove | M::Window | M::Red | M::Antenna | M::Seam));
-    // the dipping side's columns, outermost first, by what they are on the hitbox's row
-    let cols: Vec<i32> = (1..=CX).rev().map(|x| x * side).collect();
-    let on = |m: M| cols.iter().copied().filter(move |&x| map.at(x, 0).0 == m);
-    let edge = on(M::Face).next().map_or(CX, |x| x.abs());
-    // the outer face: the stone between the outline and the channel
-    let stone: Vec<i32> = cols.iter().copied().filter(|&x| x.abs() < edge).take_while(|&x| !matches!(map.at(x, 0).0, M::Groove | M::Wall | M::Core)).collect();
-    let plain: Vec<i32> = stone.iter().copied().filter(|&x| map.at(x, 0).0 == M::Face && !precious(x, -CY..=CY)).collect();
-    let mut pick: Vec<Drop> = middle(&plain, steps.min(stone.len().saturating_sub(FACE_KEEP))).into_iter().map(|x| [x; ROWS]).collect();
-    // then the inner face, a column at a time off its edge, so the tip comes down a
-    // row and the bevelled top stays one even slope (a column from its middle left
-    // the tip standing alone); below the crossbar, the column just outside the
-    // capsule goes instead
-    let rail: Vec<i32> = on(M::Rail).collect();
-    for i in 0..(steps - pick.len()).min(rail.len().saturating_sub(RAIL_KEEP)) {
-        let (high, low) = (rail[rail.len() - 1 - i], (POD_W + 1 + i as i32) * side);
-        if precious(high, -CY..=POD_ROWS.0 - 1) || precious(low, POD_ROWS.0..=CY) {
-            break;
+
+    fn at(&self, x: i32, y: i32) -> char {
+        if x < -CX || x > CX || y < -CY || y > CY { '.' } else { self.px[((y + CY) * SIZE.0 + x + CX) as usize] }
+    }
+
+    fn set(&mut self, x: i32, y: i32, c: char) {
+        if c != '.' && !(x < -CX || x > CX || y < -CY || y > CY) {
+            self.px[((y + CY) * SIZE.0 + x + CX) as usize] = c;
         }
-        pick.push(std::array::from_fn(|r| if (r as i32 - CY) < POD_ROWS.0 { high } else { low }));
     }
-    // then, beyond the blade, the nacelle's own plain columns (not its rim)
-    let outboard: Vec<i32> = (edge + 1..CX).map(|x| x * side).filter(|&x| !precious(x, -CY..=CY) && (-CY..=CY).any(|y| map.at(x, y).0 == M::Metal) && map.at(x + side, NACELLE_ROWS.0 + 2).0 != M::Empty).collect();
-    pick.extend(outboard.iter().take(steps - pick.len()).map(|&x| [x; ROWS]));
-    pick
-}
 
-/// Where a pixel of the unrolled ship lands at a roll (its row doesn't change).
-fn roll_x(x: i32, y: i32, drop: &[Drop]) -> i32 {
-    let (side, r) = (x.signum(), (y + CY).clamp(0, ROWS as i32 - 1) as usize);
-    x - side * drop.iter().filter(|d| d[r].signum() == side && d[r].abs() < x.abs()).count() as i32
-}
+    /// Lay a part's pixels, moved `dx` and, on the right side (`side` 1), mirrored.
+    fn stamp(&mut self, px: &[Px], dx: i32, side: i32) {
+        for &(x, y, c) in px {
+            let x = x + dx;
+            self.set(if side > 0 { -x } else { x }, y, c);
+        }
+    }
 
-/// The ship rolled by `bank`: the dipping side loses its dropped columns.
-fn roll(map: &Map, bank: i8) -> Map {
-    let drop = dropped(map, bank);
-    let mut out = Map::new();
-    for y in -CY..=CY {
-        for x in -CX..=CX {
-            if !drop.iter().any(|d| d[(y + CY) as usize] == x) {
-                out.set(roll_x(x, y, &drop), y, map.at(x, y));
+    /// Lay a grid with its top left at `(x0, y0)`, mirrored about the center on the
+    /// right side.
+    fn grid(&mut self, rows: &[&str], x0: i32, y0: i32, side: i32) {
+        for (r, row) in rows.iter().enumerate() {
+            for (i, c) in row.chars().enumerate() {
+                let x = x0 + i as i32;
+                self.set(if side > 0 { -x } else { x }, y0 + r as i32, c);
             }
         }
     }
-    out
+}
+
+/// Where each side's nacelle hangs (its center) and how many plates its blade (or
+/// the sword's shoulder) shows, at a roll: the dipping side folds a plate and tucks
+/// its nacelle in a pixel for each step of the roll. `[left, right]`.
+fn rolled(f: &Form, bank: i8) -> ([i32; 2], [i32; 2]) {
+    let dip = |s: usize| if (bank < 0) == (s == 0) && bank != 0 { bank.unsigned_abs() as i32 } else { 0 };
+    ([f.nacelle + dip(0), f.nacelle + dip(1)], [(f.plates - dip(0)).max(0), (f.plates - dip(1)).max(0)])
+}
+
+/// Put one frame together: a form at a roll.
+fn compose(form: usize, bank: i8) -> Canvas {
+    let f = &FORM[form];
+    let (nacelle, plates) = rolled(f, bank);
+    let mut c = Canvas::new();
+    for (s, side) in [(0, -1), (1, 1)] {
+        // a strut from under the crossbar to the capsule's shoulder, behind it all
+        for (x, y) in line(((f.inner - 4).min(-6), BAR + 2), (-4, POD_TOP + 2)) {
+            c.set(x * -side, y, '2');
+        }
+        let n = nacelle[s];
+        c.grid(&NACELLE, n - 3, NACELLE_TOP, side);
+        // the crossbar, from the nacelle in to the blade's inner edge
+        for x in n + 3..=f.inner {
+            for (y, k) in [(BAR - 1, '2'), (BAR, '4'), (BAR + 1, 'o')] {
+                c.set(x * -side, y, k);
+            }
+        }
+        if form != SWORD {
+            c.stamp(&blade(plates[s], f.antenna), f.inner, side);
+        }
+    }
+    if form == SWORD {
+        c.stamp(&sword(plates), 0, -1);
+    } else if f.inner == 0 {
+        // the blades meet: a seam down the point
+        for y in TIP + 2..CORNER {
+            c.set(0, y, 'o');
+        }
+    }
+    c.grid(&POD, -3, POD_TOP, -1);
+    c
 }
 
 const VOIDISH: Color = rgb(0x0B0B0A);
@@ -343,107 +273,19 @@ const fn rgb(c: u32) -> Color {
     Color::new(((c >> 16) & 0xFF) as f32 / 255.0, ((c >> 8) & 0xFF) as f32 / 255.0, (c & 0xFF) as f32 / 255.0, 1.0)
 }
 
-/// A fixed per-pixel noise in 0..1 (the stone's speckle).
-fn hash(x: i32, y: i32) -> f32 {
-    let mut h = (x as u32).wrapping_mul(0x9E37_79B1) ^ (y as u32).wrapping_mul(0x85EB_CA77) ^ 0x5EED_0007;
-    h ^= h >> 15;
-    h = h.wrapping_mul(0x2C1B_3C6D);
-    h ^= h >> 12;
-    (h & 0xFFFF) as f32 / 65536.0
-}
-
-/// Thin parts stand alone: no outline, and they don't break the outline of what
-/// they stand on.
-fn solid(m: M) -> bool {
-    !matches!(m, M::Empty | M::Antenna | M::Strut)
-}
-
-/// Paint a rolled map in bone, lit from the front. Selective outlines: ink along
-/// the bottoms and outer sides and where pieces meet, a mid-tone rim along the top
-/// edges (so the point of the sword doesn't vanish into the black), none down the
-/// blades' inner edges (the bright rail meets the gap). A bright lip under each top
-/// edge, darker bevels down the outer edges, speckled stone. The dipping side is a
-/// tone darker.
-fn paint(map: &Map, bank: i8) -> Image {
+/// A frame's letters in color, the lights unlit.
+fn paint(c: &Canvas) -> Image {
     let mut img = Image::gen_image_color(SIZE.0 as u16, SIZE.1 as u16, Color::new(0.0, 0.0, 0.0, 0.0));
-    let bare = |x: i32, y: i32| !solid(map.at(x, y).0);
-    let ink = |x: i32, y: i32| -> bool {
-        let (m, p) = map.at(x, y);
-        if !solid(m) || matches!(m, M::Red | M::Nozzle) {
-            return false;
-        }
-        let out = if x < 0 { -1 } else { 1 };
-        let meets = |dx: i32, dy: i32| {
-            let (n, q) = map.at(x + dx, y + dy);
-            solid(n) && q != p
-        };
-        let side = if x == 0 { bare(-1, y) || bare(1, y) } else { bare(x + out, y) || (p != Piece::Blade && bare(x - out, y)) };
-        bare(x, y + 1) || (side && !bare(x, y - 1)) || meets(0, 1) || (x != 0 && meets(out, 0)) || m == M::Seam
-    };
-    // a top edge catching the light
-    let rim = |x: i32, y: i32| solid(map.at(x, y).0) && bare(x, y - 1) && !ink(x, y);
     for y in -CY..=CY {
         for x in -CX..=CX {
-            let (m, p) = map.at(x, y);
-            if m == M::Empty {
-                continue;
-            }
-            let out = if x < 0 { -1 } else { 1 };
-            let dip = (x * bank as i32 > 0) as i32;
-            let speck = hash(x, y);
-            let tone = |t: i32| BONE[(t - dip).clamp(0, 4) as usize];
-            let c = if ink(x, y) {
-                OUTLINE
-            } else if rim(x, y) && !matches!(m, M::Red | M::Nozzle | M::Antenna | M::Strut) {
-                tone(2)
-            } else {
-                match m {
-                    // cream stone stippled gray, its outer bevel a step darker,
-                    // shadowed just above the crossbar
-                    M::Face => {
-                        let t = if rim(x, y - 1) || ink(x, y - 1) {
-                            4
-                        } else if x != 0 && ink(x + out, y) {
-                            3
-                        } else if y == FOOT - 1 {
-                            2
-                        } else {
-                            4
-                        };
-                        tone(t - (speck < 0.16) as i32 - (speck < 0.03) as i32)
-                    }
-                    M::Rail => tone(4 - (speck < 0.08) as i32),
-                    M::Bevel => tone(3 - (speck < 0.16) as i32),
-                    M::Wall => BONE[0],
-                    M::Core | M::Window => VOIDISH,
-                    M::Groove => if y % 2 == 0 { BONE[0] } else { OUTLINE },
-                    M::Seam => OUTLINE,
-                    M::Crack => BONE[1],
-                    M::Metal => {
-                        let up = map.at(x, y - 1);
-                        let t = if rim(x, y - 1) || ink(x, y - 1) || up.1 != p {
-                            4
-                        } else if ink(x, y + 1) {
-                            1
-                        } else if ink(x + out, y) {
-                            2
-                        } else {
-                            3
-                        };
-                        tone(t - (speck < 0.08) as i32)
-                    }
-                    M::Nozzle => if map.at(x - 1, y).0 == M::Nozzle && map.at(x + 1, y).0 == M::Nozzle { BONE[0] } else { BONE[1] },
-                    M::Antenna => {
-                        let above = map.at(x, y - 1).0 == M::Antenna;
-                        let second = above && map.at(x, y - 2).0 != M::Antenna;
-                        if !above { BONE[4] } else if second { BONE[1] } else { tone(3) }
-                    }
-                    M::Strut => tone(2),
-                    M::Red => RED_DIM,
-                    M::Empty => continue,
-                }
+            let col = match c.at(x, y) {
+                'o' => OUTLINE,
+                d @ '0'..='4' => BONE[d as usize - '0' as usize],
+                'c' | 'v' | 'n' => VOIDISH,
+                'h' | 'b' | 'k' | 's' => RED_DIM,
+                _ => continue,
             };
-            img.set_pixel((x + CX) as u32, (y + CY) as u32, c);
+            img.set_pixel((x + CX) as u32, (y + CY) as u32, col);
         }
     }
     img
@@ -473,19 +315,18 @@ pub struct Light {
     pub glow: Glow,
 }
 
-/// Every light in a rolled map.
-fn lights(map: &Map) -> Vec<Light> {
+/// Every light in a frame.
+fn lights(c: &Canvas) -> Vec<Light> {
     let mut v = vec![];
     for y in -CY..=CY {
         for x in -CX..=CX {
-            let (m, p) = map.at(x, y);
-            let glow = match (m, p) {
-                (M::Core, _) => Glow::Channel,
-                (M::Window, _) if y % 2 == 0 => Glow::Window,
-                (M::Red, Piece::Blade) => Glow::Heart,
-                (M::Red, Piece::Nacelle) => Glow::Beacon,
-                (M::Red, Piece::Pod) if x == 0 => Glow::Keel,
-                (M::Red, _) => Glow::Strobe,
+            let glow = match c.at(x, y) {
+                'c' => Glow::Channel,
+                'n' => Glow::Window,
+                'h' => Glow::Heart,
+                'b' => Glow::Beacon,
+                'k' => Glow::Keel,
+                's' => Glow::Strobe,
                 _ => continue,
             };
             v.push(Light { dx: x, dy: y, glow });
@@ -616,18 +457,15 @@ fn lit(g: Glow) -> Color {
 
 /// One frame, painted, with its lights and its points.
 fn frame_image(form: usize, bank: i8) -> (Image, Vec<Light>, [(i32, i32); 3], [(i32, i32); 2], [(i32, i32); 2]) {
-    let k = &KEYS[form];
-    let flat = layout(k);
-    let drop = dropped(&flat, bank);
-    let map = roll(&flat, bank);
-    let at = |x: i32, y: i32| (roll_x(x, y, &drop), y);
-    let n = k.nacelle;
-    let nozzles = [at(n, NACELLE_ROWS.1 + 2), at(-n, NACELLE_ROWS.1 + 2), at(0, POD_ROWS.1 + 2)];
-    let tips = [at(k.inner, TIP), at(-k.inner, TIP)];
-    let (ax, ah) = k.antenna;
-    let gun = if ah > 0 { (ax, top_at(k, ax) - ah) } else { (k.upper + 1, k.corner - 1) };
-    let guns = [at(gun.0, gun.1), at(-gun.0, gun.1)];
-    (paint(&map, bank), lights(&map), nozzles, tips, guns)
+    let f = &FORM[form];
+    let c = compose(form, bank);
+    let (nacelle, _) = rolled(f, bank);
+    let below = NACELLE_TOP + NACELLE.len() as i32;
+    let nozzles = [(nacelle[0], below), (-nacelle[1], below), (0, POD_TOP + POD.len() as i32)];
+    let tips = [(f.inner, TIP), (-f.inner, TIP)];
+    // the antennas' tips, or where they stood; the sword's point at its shoulders
+    let gun = if form == SWORD { (-4, CORNER + 1) } else { (f.inner - 6, CORNER - 1 - f.antenna) };
+    (paint(&c), lights(&c), nozzles, tips, [gun, (-gun.0, gun.1)])
 }
 
 pub fn build(p: &mut Packer) -> ShipArt {
@@ -819,14 +657,9 @@ mod tests {
     use super::*;
     use crate::render::palette::luma;
 
-    /// The material at a point of an unrolled form.
-    fn mat(form: usize, x: i32, y: i32) -> M {
-        layout(&KEYS[form]).at(x, y).0
-    }
-
-    /// The columns a form covers on a row.
-    fn span(map: &Map, y: i32) -> Vec<i32> {
-        (-CX..=CX).filter(|&x| map.at(x, y).0 != M::Empty).collect()
+    /// The columns a frame covers on a row.
+    fn span(c: &Canvas, y: i32) -> Vec<i32> {
+        (-CX..=CX).filter(|&x| c.at(x, y) != '.').collect()
     }
 
     #[test]
@@ -837,56 +670,71 @@ mod tests {
                 assert!(g.iter().flat_map(|r| r.chars()).all(|c| c == '.' || pal(c).is_some()), "{g:?}");
             }
         }
+        for g in [&NACELLE[..], &POD[..]] {
+            assert!(g.iter().all(|r| r.len() == 7), "{g:?}");
+            assert!(g.iter().flat_map(|r| r.chars()).all(|c| ".o01234cvnhbks".contains(c)), "{g:?}");
+        }
     }
 
     #[test]
     fn the_pilgrim_is_the_planned_size() {
-        let map = layout(&KEYS[0]);
-        let cols: Vec<i32> = (TIP - 4..=CY).flat_map(|y| span(&map, y)).collect();
+        let c = compose(0, 0);
+        let cols: Vec<i32> = (-CY..=CY).flat_map(|y| span(&c, y)).collect();
         let (lo, hi) = (*cols.iter().min().unwrap(), *cols.iter().max().unwrap());
         assert_eq!(lo, -hi, "symmetric about the hitbox");
-        assert!((29..=33).contains(&(hi - lo + 1)), "{} wide with its nacelles", hi - lo + 1);
-        let rows: Vec<i32> = (-CY..=CY).filter(|&y| !span(&map, y).is_empty()).collect();
+        assert!((27..=31).contains(&(hi - lo + 1)), "{} wide with its nacelles", hi - lo + 1);
+        let rows: Vec<i32> = (-CY..=CY).filter(|&y| !span(&c, y).is_empty()).collect();
         let h = rows.last().unwrap() - rows[0] + 1;
         assert!((42..=48).contains(&h), "{h} tall");
-        assert_eq!(rows.last(), Some(&(POD_ROWS.1 + 1)), "the capsule's nozzle is the bottom row");
+        assert_eq!(rows[0], TIP, "the blades' tips are the top row");
+        assert_eq!(rows.last(), Some(&(POD_TOP + POD.len() as i32 - 1)), "the capsule is the bottom row");
     }
 
     /// Flight form: the hitbox sits in the gap between the blades, level with their
-    /// red hearts. Laser form: the blades are one sword, its heart on the hitbox and
-    /// its tip straight above it.
+    /// red hearts. Laser form: one sword, its heart on the hitbox and its tip
+    /// straight above it.
     #[test]
     fn the_hitbox_sits_between_the_hearts_then_on_the_heart() {
-        assert_eq!(mat(0, 0, 0), M::Empty);
-        let c = KEYS[0].core;
-        assert_eq!((mat(0, c, 0), mat(0, -c, 0)), (M::Red, M::Red));
-        let last = FORMS - 1;
-        assert_eq!(mat(last, 0, 0), M::Red);
-        assert_ne!(mat(last, 0, TIP), M::Empty);
-        assert_eq!(span(&layout(&KEYS[last]), TIP), vec![0], "one point");
-        assert_eq!(mat(last, 0, TIP - 1), M::Empty);
+        let flight = compose(0, 0);
+        assert_eq!(flight.at(0, 0), '.');
+        let heart = FORM[0].inner - 2;
+        assert_eq!((flight.at(heart, 0), flight.at(-heart, 0)), ('h', 'h'));
+        let laser = compose(SWORD, 0);
+        assert_eq!(laser.at(0, 0), 'h');
+        assert_eq!(span(&laser, TIP), vec![0], "one point");
+        assert_eq!(laser.at(0, TIP - 1), '.');
     }
 
-    /// Frame by frame the blades close, slim down and lose their antennas, the
-    /// channels slide together into one core, and the nacelles tuck in.
+    /// Frame by frame the blades close, fold their plates and antennas, and the
+    /// nacelles tuck in; the two channels become the sword's one.
     #[test]
     fn the_blades_close_into_one_sword() {
-        let gap = |f: usize| (TIP..=FOOT).filter(|&y| mat(f, 0, y) == M::Empty).count();
-        let width = |f: usize| span(&layout(&KEYS[f]), 0).iter().filter(|&&x| x < 0 && mat(f, x, 0) != M::Empty).count();
-        let antenna = |f: usize| (-CY..=CY).flat_map(|y| (-CX..=CX).map(move |x| (x, y))).filter(|&(x, y)| mat(f, x, y) == M::Antenna).count();
+        let gap = |f: usize| {
+            let c = compose(f, 0);
+            (TIP..=FOOT).filter(|&y| c.at(0, y) == '.').count()
+        };
+        let reach = |f: usize| (-CY..=CY).flat_map(|y| span(&compose(f, 0), y)).max().unwrap();
         for f in 1..FORMS {
-            let (a, b) = (&KEYS[f - 1], &KEYS[f]);
-            assert!(b.inner >= a.inner && b.core > a.core && b.outer >= a.outer && b.nacelle >= a.nacelle, "frame {f}");
-            assert!(gap(f) <= gap(f - 1) && antenna(f) <= antenna(f - 1), "frame {f}");
+            let (a, b) = (&FORM[f - 1], &FORM[f]);
+            assert!(b.inner >= a.inner && b.antenna <= a.antenna && b.nacelle >= a.nacelle, "frame {f}");
+            assert!(gap(f) <= gap(f - 1) && reach(f) <= reach(f - 1), "frame {f}");
         }
         assert_eq!(gap(0), (FOOT - TIP + 1) as usize, "flight: split from tip to foot");
-        assert_eq!(gap(FORMS - 1), 0, "laser: one blade");
-        assert!(antenna(0) > 0 && antenna(FORMS - 1) == 0);
-        assert!(KEYS[FORMS - 1].nacelle > KEYS[0].nacelle, "the nacelles tuck in");
-        assert!(width(FORMS - 1) < width(0), "the laser form is slimmer");
-        let cores = |f: usize| (-CX..=CX).filter(|&x| mat(f, x, -5) == M::Core).collect::<Vec<_>>();
-        assert_eq!(cores(0), vec![KEYS[0].core, -KEYS[0].core]);
-        assert_eq!(cores(FORMS - 1), vec![0], "the channels become one");
+        assert_eq!(gap(SWORD), 0, "laser: one blade");
+        assert!(reach(SWORD) < reach(0), "the laser form is slimmer");
+        let cores = |f: usize| (-CX..=CX).filter(|&x| compose(f, 0).at(x, -5) == 'c').collect::<Vec<_>>();
+        assert_eq!(cores(0), vec![FORM[0].inner - 2, 2 - FORM[0].inner]);
+        assert_eq!(cores(SWORD), vec![0], "the channels become one");
+    }
+
+    /// The closed blades are exactly as wide as the sword's base, so they lock into
+    /// it without a jump.
+    #[test]
+    fn the_blades_lock_into_the_sword_without_a_jump() {
+        let (closed, sword) = (compose(SWORD - 1, 0), compose(SWORD, 0));
+        for y in SHOULDERS[1]..=FOOT {
+            assert_eq!(span(&closed, y), span(&sword, y), "row {y}");
+        }
     }
 
     /// The value budget: the Pilgrim tops out at 85%.
@@ -915,20 +763,20 @@ mod tests {
     #[test]
     fn rolling_keeps_the_hitbox_and_every_kind_of_light() {
         for form in 0..FORMS {
-            let flat = roll(&layout(&KEYS[form]), 0);
-            let kinds = |m: &Map| {
-                let mut k: Vec<Glow> = lights(m).iter().map(|l| l.glow).collect();
+            let flat = compose(form, 0);
+            let kinds = |c: &Canvas| {
+                let mut k: Vec<Glow> = lights(c).iter().map(|l| l.glow).collect();
                 k.sort_by_key(|g| *g as u8);
                 k.dedup();
                 k
             };
             for bank in [-2i8, -1, 1, 2] {
-                let r = roll(&layout(&KEYS[form]), bank);
+                let r = compose(form, bank);
                 for y in -CY..=CY {
                     assert_eq!(r.at(0, y), flat.at(0, y), "form {form} bank {bank}: the center column stays");
                 }
                 assert_eq!(kinds(&r), kinds(&flat), "form {form} bank {bank}");
-                let reach = |m: &Map, side: i32| (-CY..=CY).flat_map(|y| span(m, y)).map(|x| x * side).max().unwrap();
+                let reach = |c: &Canvas, side: i32| (-CY..=CY).flat_map(|y| span(c, y)).map(|x| x * side).max().unwrap();
                 let side = bank.signum() as i32;
                 assert!(reach(&r, side) < reach(&flat, side), "form {form} bank {bank}: the dipping side narrows");
                 assert_eq!(reach(&r, -side), reach(&flat, -side));
@@ -936,30 +784,24 @@ mod tests {
         }
     }
 
-    /// Rolling foreshortens the dipping side but never strips the stone outside its
-    /// channel: the white face and its bevel stay between the channel and the outline,
-    /// and the blade's tip stays one even slope. (Banked hard in flight, that side
-    /// used to lose both, leaving the dark channel against the outline.)
+    /// A roll folds plates and tucks the nacelle in, and never cuts into the stone
+    /// outside a channel: the white face stays between the channel and the outline
+    /// on the dipping side. (Before v0.8.3, banked hard in flight, that side lost it
+    /// and showed only the dark channel against the outline.)
     #[test]
     fn rolling_keeps_the_white_down_the_dipping_side() {
         for form in 0..FORMS {
             for bank in [-2i8, -1, 1, 2] {
                 let side = bank.signum() as i32;
-                let map = roll(&layout(&KEYS[form]), bank);
-                let img = paint(&map, bank);
+                let c = compose(form, bank);
+                let img = paint(&c);
                 let shade = |x: i32, y: i32| luma(img.get_pixel((x + CX) as u32, (y + CY) as u32));
                 for y in [-12, -9, -4, 0, 4, 6] {
                     // inward from the outline to the channel
-                    let blade: Vec<i32> = (1..=CX).rev().map(|x| x * side).filter(|&x| map.at(x, y).0 != M::Empty).collect();
-                    let stone: Vec<i32> = blade[1..].iter().copied().take_while(|&x| !matches!(map.at(x, y).0, M::Groove | M::Wall | M::Core)).collect();
-                    assert!(stone.len() >= FACE_KEEP, "form {form} bank {bank} row {y}: {} columns of stone", stone.len());
-                    assert!(stone.iter().any(|&x| shade(x, y) >= luma(BONE[2])), "form {form} bank {bank} row {y}: the stone stays light");
-                }
-                // the bevelled top: each row from the tip reaches at most one column
-                // further out than the row above it
-                let reach = |y: i32| (0..=CX).filter(|&x| x != 0 && solid(map.at(x * side, y).0)).count();
-                for y in TIP + 1..TIP + 6 {
-                    assert!(reach(y) <= reach(y - 1) + 1 || reach(y - 1) == 0, "form {form} bank {bank}: the top steps out one column a row at {y}");
+                    let blade: Vec<i32> = (1..=CX).rev().map(|x| x * side).filter(|&x| c.at(x, y) != '.').collect();
+                    let stone: Vec<i32> = blade[1..].iter().copied().take_while(|&x| !matches!(c.at(x, y), '0' | 'c' | 'h')).collect();
+                    assert!(stone.len() >= 3, "form {form} bank {bank} row {y}: {} columns of stone", stone.len());
+                    assert!(stone.iter().filter(|&&x| shade(x, y) >= luma(BONE[3])).count() >= 2, "form {form} bank {bank} row {y}: the stone stays white");
                 }
             }
         }
@@ -977,7 +819,8 @@ mod tests {
         }
         let windows = |frame: u64| ship.iter().filter(|l| l.glow == Glow::Window).map(|l| light_on(l, &Pose { frame, ..Default::default() }).map(|(_, k)| k)).collect::<Vec<_>>();
         assert!((0..20).all(|f| windows(f) == windows(0)), "the windows hold steady");
-        let laser = |frame: u64| ship.iter().filter_map(|l| light_on(l, &Pose { beaming: true, fire_t: 9, form: 1.0, frame, ..Default::default() }).map(|(c, _)| (l.dx, l.dy, c.g))).collect::<Vec<_>>();
+        let sword = frame_image(SWORD, 0).1;
+        let laser = |frame: u64| sword.iter().filter_map(|l| light_on(l, &Pose { beaming: true, fire_t: 9, form: 1.0, frame, ..Default::default() }).map(|(c, _)| (l.dx, l.dy, c.g))).collect::<Vec<_>>();
         assert!(!laser(0).is_empty() && laser(0) != laser(1), "the sword's channel flows while it fires");
     }
 

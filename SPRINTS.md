@@ -83,9 +83,10 @@ enemy bullets (big, slow ones below small, fast ones) → HUD.
 - All art is generated in code at startup, like Shinjuku. A debug key exports every sprite sheet as PNG so you can paint over it in Aseprite; a PNG placed back in `art/` replaces the coded version at build time.
 
 ### The Pilgrim
-**The split sword** (v0.7.1, from [your sheet](docs/reference/Split-sword%20starship_%20flight%20to%20laser.png)), about 31 × 44 px, bone white like Stage 1's enemies:
-- **Flight form:** two blades, each with a teal channel and a red heart, an antenna on each bevelled top, a crossbar with an engine nacelle at each end, and a capsule below on struts.
-- **Laser form:** focus closes the blades into one broad sword over the focus blend, nearly as wide as the flight form, so the ship doesn't shrink (v0.7.2). The antennas fold, the nacelles tuck in, the channels merge into one core, and the beam fires from the tip.
+**The split sword** (v0.7.1, from [your sheet](docs/reference/ship/Split-sword%20starship_%20flight%20to%20laser.png); redrawn in v0.8.4 from your [parts atlas](docs/reference/ship/Modular%20sword%20spacecraft%20sprite%20atlas.png) and [firing strip](docs/reference/ship/Closed%20Swordship%20Firing%20Animation%20Strip.png)), 29 × 45 px, bone white like Stage 1's enemies:
+- **Flight form:** two blades, each with a 45° bevelled top, an antenna, three columns of white stone, a teal channel near its inner edge with a red heart, and two plates stepping out down its outer edge; a crossbar with an engine nacelle at each end, and a capsule below on struts.
+- **Laser form:** focus slides the blades together a pixel a frame, folding their plates and antennas and tucking the nacelles in, until they lock into the sword: your long seamed point, two stepped shoulders, one channel, 15 px across at the base (the closed blades' exact width, so there's no jump). The beam fires from the tip.
+- **Built from parts, never scaled:** every frame is put together from the drawn parts. Banking folds the dipping side's plates (the sword's shoulders) and tucks its nacelle in, so no frame ever cuts the white stone.
 - **Hitbox:** in the gap between the blades' red hearts (on the single heart in the laser form).
 - **Animations:**
   - from your first sheet: idle (4 frames), thrust (4), fire (4), hit flash (4), destroy (6), the twin red bolt (4);
@@ -421,7 +422,7 @@ You check: play it. Where is it boring? Where is it unfair?
 ### Sprint 6 — The boss · v0.7.0
 **Goal:** a four-phase boss worth the trip, and a death worth watching.
 
-**The boss: JAWSTHIC** (Jason's concept, approved before the sprint, drawn 100% in code from [his reference](docs/reference/jawsthic.jpg)). A great white carved from moon rock, a gothic cathedral for a body: lancet windows with red and teal light, a dorsal fin with an arched window, a segmented stone tail, a red diamond eye, and jaws that drop open on a red crosshair. Glitch smears trail its tail. It swims side-on across the top of the screen and glitches round to face the other way ([the boss sheet](docs/screenshots/jawsthic-sheet.png)). The Cathedral proposal ([mock-up](docs/screenshots/cathedral-mockup.png), v0.6.5) is retired.
+**The boss: JAWSTHIC** (Jason's concept, approved before the sprint, drawn 100% in code from [his reference](docs/reference/stage%201%20bosss/jawsthic.jpg)). A great white carved from moon rock, a gothic cathedral for a body: lancet windows with red and teal light, a dorsal fin with an arched window, a segmented stone tail, a red diamond eye, and jaws that drop open on a red crosshair. Glitch smears trail its tail. It swims side-on across the top of the screen and glitches round to face the other way ([the boss sheet](docs/screenshots/jawsthic-sheet.png)). The Cathedral proposal ([mock-up](docs/screenshots/cathedral-mockup.png), v0.6.5) is retired.
 
 Build
 - The boss framework: several parts with their own hurtboxes and HP, a segmented health bar, a phase timer, a phase-break cancel (bullets turn to shards), a short pause between phases. A timeout ends the phase with no bonus.
