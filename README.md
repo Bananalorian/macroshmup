@@ -74,7 +74,7 @@ full screen (F11 for a window).
 **v0.7.1, the split sword:** the Pilgrim is redesigned from Jason's sheet: two
 bone-white blades with teal channels, on a crossbar with an engine at each end.
 When you focus, the blades close into one broad sword and the teal beam fires from
-its tip. It flies exactly as before.
+its tip. It flies exactly as before. Banked, both blades keep their white edges (v0.8.3).
 
 **v0.7, the boss:** JAWSTHIC, a great white carved from moon rock with a gothic
 cathedral for a body, from Jason's concept. Its fin cuts through the black hole's

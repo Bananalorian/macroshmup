@@ -3,6 +3,33 @@
 Session notes for Claude Code: what shipped, tuning that changed, known issues, what's next.
 Newest first.
 
+## v0.8.3 Clean sides - 2026-10-12
+
+**Jason:** "the ship teal outlines when moving are gone now!!! and the muddy sides have not
+changed ... that right side is not clean because the side loses the white ... when the ship is
+together making the laser, the sides are clean." So v0.8.2 was a misread: he LIKES the
+afterimages (restored from v0.8.1 byte for byte: scene pass, `draw_afterimages`,
+`AFTERIMAGE_MIN 0.9`, `Player.history`, `Player::focused`, the sheet demo, the test). The real
+problem all along (v0.7.3 "flickering lines", v0.8.1 "led lines", v0.8.2 screenshot): `roll()`
+dropped the 2 white face columns outside each flight-form channel on the dipping side. Fix in
+ship.rs `dropped()`: the outer face keeps `FACE_KEEP 2` columns of stone; then the rail gives a
+column off its INNER EDGE (a mid-rail column left the tip as a lone pixel), switching below
+`POD_ROWS.0` to the column just outside the capsule (drops are per row now: `type Drop =
+[i32; ROWS]`, `roll_x(x, y, drop)`), keeping `RAIL_KEEP 2`; then the nacelle's plain columns.
+Forms 2-4 (laser) roll exactly as before. Test `rolling_keeps_the_white_down_the_dipping_side`.
+The dipping side is still a tone darker (`dip` in `paint`), which he called clean on the laser.
+Channels stay dark in flight (v0.8.1). 237 tests.
+
+**Next (Jason asked):** redraw the Pilgrim from his new sprites in `docs/reference/ship/`
+("Closed Swordship Firing Animation Strip.png": 6 laser-form frames; "Modular sword spacecraft
+sprite atlas.png": blades, nacelles, capsule, struts; plus the split-sword ref, which he moved
+there along with jawsthic.jpg into `docs/reference/stage 1 bosss/`; those moves are still
+uncommitted and SPRINTS.md links the old paths). A straight shrink to ~20x46 turns to mud, so
+the plan he OK'd is a pixel-by-pixel redraw at game size from his art: parts slide for the
+transformation and the roll (no mesh, no resampling), his 6 frames become the laser form's
+firing cycle without their baked flames and tip star; keep my thrusters, beam, bullets and
+afterimages.
+
 ## v0.8.2 No ghosts - 2026-10-12
 
 **Jason** sent a screenshot: the "led lines on both sides of the ship" that interfere when

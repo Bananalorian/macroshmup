@@ -3,6 +3,36 @@
 Every version is one build sprint. Newest first. Versions are tagged in git, and
 each tag publishes a GitHub Release with downloads.
 
+## [0.8.3] - 2026-10-12 - Clean sides
+
+### Fixed
+- **Banking keeps the white down the dipping side.** To roll, the ship drops a
+  column or two from the side that dips. In flight form those were the two columns
+  of white stone outside each blade's channel, so moving sideways left the dark
+  channel right against the outline: the muddy side in your screenshot, and the
+  lines that seemed to move left or vanish. The roll now leaves that stone and its
+  bevel alone. It narrows the inner face instead, taking the column at the blade's
+  inner edge so the tip comes down a row and the top keeps one even slope, then a
+  plain column of the engine ([the bank frames](docs/screenshots/pilgrim-sheet.png)).
+  The laser form, whose sides were already clean, banks exactly as before.
+
+### Restored
+- **The teal afterimages are back.** v0.8.2 removed them because I misread your
+  screenshot; the trouble was the muddy side, not the ghosts. They trail the ship
+  at full speed again, exactly as in v0.8.1 ([in play](docs/screenshots/stage.png)).
+  The dark channels in flight from v0.8.1 stay.
+
+### Checked
+- **Tests prove** that on every frame of the transformation, banked either way:
+  - at least two columns of stone stay between the channel and the outline on the
+    dipping side, and at least one of them is light;
+  - the blade's top steps out at most one column a row from its tip.
+  The first test fails on v0.8.2's roll. The afterimage test is back too.
+- Play frames captured while the bot moves sideways at full speed show the
+  afterimages trailing and the dipping blade's stone intact.
+- Every screenshot showing the ship is retaken. Native and web builds are
+  warning-free, and all 237 tests pass in both debug (as CI runs them) and release.
+
 ## [0.8.2] - 2026-10-12 - No ghosts
 
 ### Changed

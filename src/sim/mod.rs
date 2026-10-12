@@ -581,6 +581,7 @@ impl World {
                 } else {
                     self.player = Player::new();
                     self.player.place(START_X, FIELD_H as f32 + 24.0);
+                    self.player.history = [(START_X, FIELD_H as f32 + 24.0); player::HISTORY];
                     self.bombs = BOMBS;
                     self.invuln = RESPAWN_INVULN;
                     self.invuln_blink = true;

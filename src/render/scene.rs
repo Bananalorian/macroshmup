@@ -11,7 +11,7 @@ use crate::sim::{BombBlast, Life, World};
 use crate::sim::geom::Rect as SimRect;
 use crate::sim::shots::ShotKind;
 use crate::sim::stage1::frames;
-use crate::tune::{AURA_R, BEAM_W, BG_DIM_AT, BG_DIM_MIN, BG_MAX_VALUE, DEBRIS_AT, FIGURE_AT, FLARE, GRAIN, HITBOX_R, HOLE_R, HOLE_X, HOLE_Y, SECTIONS, STAGE_FRAMES};
+use crate::tune::{AFTERIMAGE_MIN, AURA_R, BEAM_W, BG_DIM_AT, BG_DIM_MIN, BG_MAX_VALUE, DEBRIS_AT, FIGURE_AT, FLARE, GRAIN, HITBOX_R, HOLE_R, HOLE_X, HOLE_Y, SECTIONS, STAGE_FRAMES};
 use macroquad::color::Color;
 
 /// Max opacity of the Pilgrim's shots, so they never read as enemy bullets.
@@ -149,7 +149,14 @@ pub fn draw(r: &Renderer, lay: &Layout, w: &World, hitboxes: bool, show_dot: boo
         draw_aura(a, px, py, w.frame);
     }
 
+    // afterimages at full speed
+    let moving = (p.dx * p.dx + p.dy * p.dy).sqrt();
     let form = p.blend(&w.tuning);
+    if shown && !p.focused() && moving >= w.tuning.speed * AFTERIMAGE_MIN {
+        let at = [2, 4, 6].map(|k| (ox + snap(p.history[k].0), oy + snap(p.history[k].1)));
+        ship::draw_afterimages(a, form, p.bank, &at);
+    }
+
     let pose = Pose {
         bank: p.bank,
         form,

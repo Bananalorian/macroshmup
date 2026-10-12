@@ -115,7 +115,7 @@ a version stamp bottom-left (`V0.1 // PILGRIM`) and a tagline bottom-right.
 - No inertia. Normalized diagonals. The same speed on both axes.
 - Focus means slower movement plus a concentrated beam, with the speed change blended over a few frames.
 - The hitbox sits exactly in the center of the ship and shows while focused.
-- Smooth movement comes from visuals: banking matched to speed, engine trails, the blades closing for focus. (The afterimages are gone since v0.8.2: they smeared beside the ship when it moved side to side.)
+- Smooth movement comes from visuals: banking matched to speed, afterimages, trails, the blades closing for focus. (Since v0.8.3 a bank never takes the white stone outside a blade's channel, so the dipping side stays clean.)
 
 **Shooting**
 - Player shots are fast, long, dense and a little messy. Big shot hitboxes, big enemy hurtboxes, low emitters, so you can hit an enemy you're sitting right under.

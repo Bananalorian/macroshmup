@@ -262,32 +262,63 @@ fn line(a: (i32, i32), b: (i32, i32)) -> Vec<(i32, i32)> {
         .collect()
 }
 
+/// Columns of stone a roll leaves inside the outline on the dipping side, outboard
+/// of the channel (the white face and its bevel) and inboard of it (the rail).
+const FACE_KEEP: usize = 2;
+const RAIL_KEEP: usize = 2;
+
+/// Up to `n` columns from the middle of `plain`.
+fn middle(plain: &[i32], n: usize) -> Vec<i32> {
+    plain.iter().skip((plain.len() / 2).saturating_sub(n.saturating_sub(1))).take(n).copied().collect()
+}
+
+const ROWS: usize = SIZE.1 as usize;
+/// A column a roll drops, row by row (`[y + CY]`).
+type Drop = [i32; ROWS];
+
 /// The columns a roll drops from the dipping side, one per step of the roll: plain
-/// stone from the middle of the blade's outer face (never a channel, a window, a
-/// light or the antenna), so the face foreshortens and everything outboard of it
-/// slides in whole.
-fn dropped(map: &Map, bank: i8) -> Vec<i32> {
+/// stone (never a channel, a window, a light or the antenna), so the side
+/// foreshortens and everything outboard of it slides in whole. The outer face
+/// always keeps its white stone and bevel: without them the channel runs straight
+/// into the outline and the side goes muddy. So a slim blade gives up its inner
+/// face first, then the nacelle's plain columns.
+fn dropped(map: &Map, bank: i8) -> Vec<Drop> {
     let side = bank.signum() as i32;
-    let precious = |x: i32| (-CY..=CY).any(|y| matches!(map.at(x, y).0, M::Core | M::Wall | M::Groove | M::Window | M::Red | M::Antenna | M::Seam));
-    let face: Vec<i32> = (1..=CX).rev().map(|x| x * side).filter(|&x| map.at(x, 0).0 == M::Face).collect();
-    let plain: Vec<i32> = face.iter().skip(1).copied().filter(|&x| !precious(x)).collect();
-    // beyond the blade, the nacelle's own plain columns (not its rim)
-    let edge = face.first().map_or(CX, |x| x.abs());
-    let outboard: Vec<i32> = (edge + 1..CX).map(|x| x * side).filter(|&x| !precious(x) && (-CY..=CY).any(|y| map.at(x, y).0 == M::Metal) && map.at(x + side, NACELLE_ROWS.0 + 2).0 != M::Empty).collect();
     let steps = bank.unsigned_abs() as usize;
     if steps == 0 {
         return vec![];
     }
-    let mid = plain.len() / 2;
-    let mut pick: Vec<i32> = plain.iter().skip(mid.saturating_sub(steps - 1)).take(steps).copied().collect();
-    pick.extend(outboard.iter().take(steps - pick.len()));
+    let precious = |x: i32, rows: std::ops::RangeInclusive<i32>| rows.into_iter().any(|y| matches!(map.at(x, y).0, M::Core | M::Wall | M::Groove | M::Window | M::Red | M::Antenna | M::Seam));
+    // the dipping side's columns, outermost first, by what they are on the hitbox's row
+    let cols: Vec<i32> = (1..=CX).rev().map(|x| x * side).collect();
+    let on = |m: M| cols.iter().copied().filter(move |&x| map.at(x, 0).0 == m);
+    let edge = on(M::Face).next().map_or(CX, |x| x.abs());
+    // the outer face: the stone between the outline and the channel
+    let stone: Vec<i32> = cols.iter().copied().filter(|&x| x.abs() < edge).take_while(|&x| !matches!(map.at(x, 0).0, M::Groove | M::Wall | M::Core)).collect();
+    let plain: Vec<i32> = stone.iter().copied().filter(|&x| map.at(x, 0).0 == M::Face && !precious(x, -CY..=CY)).collect();
+    let mut pick: Vec<Drop> = middle(&plain, steps.min(stone.len().saturating_sub(FACE_KEEP))).into_iter().map(|x| [x; ROWS]).collect();
+    // then the inner face, a column at a time off its edge, so the tip comes down a
+    // row and the bevelled top stays one even slope (a column from its middle left
+    // the tip standing alone); below the crossbar, the column just outside the
+    // capsule goes instead
+    let rail: Vec<i32> = on(M::Rail).collect();
+    for i in 0..(steps - pick.len()).min(rail.len().saturating_sub(RAIL_KEEP)) {
+        let (high, low) = (rail[rail.len() - 1 - i], (POD_W + 1 + i as i32) * side);
+        if precious(high, -CY..=POD_ROWS.0 - 1) || precious(low, POD_ROWS.0..=CY) {
+            break;
+        }
+        pick.push(std::array::from_fn(|r| if (r as i32 - CY) < POD_ROWS.0 { high } else { low }));
+    }
+    // then, beyond the blade, the nacelle's own plain columns (not its rim)
+    let outboard: Vec<i32> = (edge + 1..CX).map(|x| x * side).filter(|&x| !precious(x, -CY..=CY) && (-CY..=CY).any(|y| map.at(x, y).0 == M::Metal) && map.at(x + side, NACELLE_ROWS.0 + 2).0 != M::Empty).collect();
+    pick.extend(outboard.iter().take(steps - pick.len()).map(|&x| [x; ROWS]));
     pick
 }
 
-/// Where a column of the unrolled ship lands at a roll.
-fn roll_x(x: i32, drop: &[i32]) -> i32 {
-    let side = x.signum();
-    x - side * drop.iter().filter(|&&d| d.signum() == side && d.abs() < x.abs()).count() as i32
+/// Where a pixel of the unrolled ship lands at a roll (its row doesn't change).
+fn roll_x(x: i32, y: i32, drop: &[Drop]) -> i32 {
+    let (side, r) = (x.signum(), (y + CY).clamp(0, ROWS as i32 - 1) as usize);
+    x - side * drop.iter().filter(|d| d[r].signum() == side && d[r].abs() < x.abs()).count() as i32
 }
 
 /// The ship rolled by `bank`: the dipping side loses its dropped columns.
@@ -296,8 +327,8 @@ fn roll(map: &Map, bank: i8) -> Map {
     let mut out = Map::new();
     for y in -CY..=CY {
         for x in -CX..=CX {
-            if !drop.contains(&x) {
-                out.set(roll_x(x, &drop), y, map.at(x, y));
+            if !drop.iter().any(|d| d[(y + CY) as usize] == x) {
+                out.set(roll_x(x, y, &drop), y, map.at(x, y));
             }
         }
     }
@@ -589,7 +620,7 @@ fn frame_image(form: usize, bank: i8) -> (Image, Vec<Light>, [(i32, i32); 3], [(
     let flat = layout(k);
     let drop = dropped(&flat, bank);
     let map = roll(&flat, bank);
-    let at = |x: i32, y: i32| (roll_x(x, &drop), y);
+    let at = |x: i32, y: i32| (roll_x(x, y, &drop), y);
     let n = k.nacelle;
     let nozzles = [at(n, NACELLE_ROWS.1 + 2), at(-n, NACELLE_ROWS.1 + 2), at(0, POD_ROWS.1 + 2)];
     let tips = [at(k.inner, TIP), at(-k.inner, TIP)];
@@ -753,9 +784,18 @@ fn hit_overlay(a: &Atlas, sil: Rect, x: i32, y: i32, hit_t: u32) {
     a.blit(sil, x, y, 1, c);
 }
 
-/// The ship's silhouette at `(x, y)` (its hitbox), in one color: the respawn blink.
+/// The ship's silhouette at `(x, y)` (its hitbox), in one color: afterimages,
+/// the respawn blink.
 pub fn draw_silhouette(a: &Atlas, form: f32, bank: i8, x: i32, y: i32, c: Color) {
     a.blit(a.r.ship.frame(form, bank).sil, x - CX, y - CY, 1, c);
+}
+
+/// Teal afterimages of the ship at earlier positions (drawn under the ship).
+pub fn draw_afterimages(a: &Atlas, form: f32, bank: i8, at: &[(i32, i32)]) {
+    for (k, &(x, y)) in at.iter().enumerate() {
+        let alpha = [0.14, 0.08, 0.04][k.min(2)];
+        draw_silhouette(a, form, bank, x, y, Color { a: alpha, ..TEAL });
+    }
 }
 
 /// The hitbox dot and its ring, faded in with the focus blend.
@@ -892,6 +932,35 @@ mod tests {
                 let side = bank.signum() as i32;
                 assert!(reach(&r, side) < reach(&flat, side), "form {form} bank {bank}: the dipping side narrows");
                 assert_eq!(reach(&r, -side), reach(&flat, -side));
+            }
+        }
+    }
+
+    /// Rolling foreshortens the dipping side but never strips the stone outside its
+    /// channel: the white face and its bevel stay between the channel and the outline,
+    /// and the blade's tip stays one even slope. (Banked hard in flight, that side
+    /// used to lose both, leaving the dark channel against the outline.)
+    #[test]
+    fn rolling_keeps_the_white_down_the_dipping_side() {
+        for form in 0..FORMS {
+            for bank in [-2i8, -1, 1, 2] {
+                let side = bank.signum() as i32;
+                let map = roll(&layout(&KEYS[form]), bank);
+                let img = paint(&map, bank);
+                let shade = |x: i32, y: i32| luma(img.get_pixel((x + CX) as u32, (y + CY) as u32));
+                for y in [-12, -9, -4, 0, 4, 6] {
+                    // inward from the outline to the channel
+                    let blade: Vec<i32> = (1..=CX).rev().map(|x| x * side).filter(|&x| map.at(x, y).0 != M::Empty).collect();
+                    let stone: Vec<i32> = blade[1..].iter().copied().take_while(|&x| !matches!(map.at(x, y).0, M::Groove | M::Wall | M::Core)).collect();
+                    assert!(stone.len() >= FACE_KEEP, "form {form} bank {bank} row {y}: {} columns of stone", stone.len());
+                    assert!(stone.iter().any(|&x| shade(x, y) >= luma(BONE[2])), "form {form} bank {bank} row {y}: the stone stays light");
+                }
+                // the bevelled top: each row from the tip reaches at most one column
+                // further out than the row above it
+                let reach = |y: i32| (0..=CX).filter(|&x| x != 0 && solid(map.at(x * side, y).0)).count();
+                for y in TIP + 1..TIP + 6 {
+                    assert!(reach(y) <= reach(y - 1) + 1 || reach(y - 1) == 0, "form {form} bank {bank}: the top steps out one column a row at {y}");
+                }
             }
         }
     }

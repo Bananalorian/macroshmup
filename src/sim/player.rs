@@ -30,6 +30,9 @@ impl Default for Tuning {
     }
 }
 
+/// Positions kept for afterimages, newest first.
+pub const HISTORY: usize = 8;
+
 pub struct Player {
     /// The hitbox center (the cross), sub-pixel; drawn snapped to the grid.
     pub x: f32,
@@ -56,6 +59,7 @@ pub struct Player {
     /// Hull flash frames left, and frames until it can flash again.
     pub hit_t: u32,
     pub bump_cd: u32,
+    pub history: [(f32, f32); HISTORY],
 }
 
 impl Player {
@@ -77,6 +81,7 @@ impl Player {
             volley: 0,
             hit_t: 0,
             bump_cd: 0,
+            history: [(START_X, START_Y); HISTORY],
         }
     }
 
@@ -92,6 +97,10 @@ impl Player {
     /// Speed this frame, px per frame.
     pub fn speed(&self, t: &Tuning) -> f32 {
         t.speed * (1.0 - self.blend(t) * (1.0 - t.focus_ratio))
+    }
+
+    pub fn focused(&self) -> bool {
+        self.focus_t > 0
     }
 
     /// Thrusting: moving up the screen this frame.
@@ -151,16 +160,20 @@ impl Player {
             self.bank_t = 0;
         }
 
+        self.history.rotate_right(1);
+        self.history[0] = (self.x, self.y);
         self.hit_t = self.hit_t.saturating_sub(1);
         self.bump_cd = self.bump_cd.saturating_sub(1);
     }
 
-    /// Put the ship somewhere directly (the respawn fly-in).
+    /// Put the ship somewhere directly (the respawn fly-in), keeping the trail and pods sensible.
     pub fn place(&mut self, x: f32, y: f32) {
         self.dx = x - self.x;
         self.dy = y - self.y;
         self.x = x;
         self.y = y;
+        self.history.rotate_right(1);
+        self.history[0] = (x, y);
     }
 
     /// Where the pods' guns are this frame.
@@ -340,4 +353,13 @@ mod tests {
         assert_eq!(p.locked, 0, "parting the moment focus is let go");
     }
 
+    #[test]
+    fn afterimage_history_is_newest_first() {
+        let t = Tuning::default();
+        let mut p = Player::new();
+        p.step(&held((1.0, 0.0)), &t);
+        p.step(&held((1.0, 0.0)), &t);
+        assert_eq!(p.history[0].0, p.x);
+        assert_eq!(p.history[1].0, p.x - MOVE_SPEED);
+    }
 }
