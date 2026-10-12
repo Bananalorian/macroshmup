@@ -47,7 +47,7 @@ pub struct Player {
     /// Frames since the blades locked into the laser form (0 while they're apart).
     pub locked: u32,
     bank_t: u32,
-    /// The wing pods' offsets from the hitbox, left then right. They lag a little.
+    /// The pod guns' offsets from the hitbox, left then right: the antennas.
     pub pods: [(f32, f32); 2],
     pub fire_cd: u32,
     /// Shooting the wide shot / the beam this frame.
@@ -135,22 +135,9 @@ impl Player {
         self.dx = dx;
         self.dy = dy;
 
-        // the pods chase where they should be, so they trail slightly
-        let k = self.blend(t);
-        let px = POD_X + (POD_X_FOCUS - POD_X) * k;
-        for (i, side) in [-1.0f32, 1.0].iter().enumerate() {
-            let (want_x, want_y) = (self.x + side * px, self.y);
-            let (mut ax, mut ay) = (ox + self.pods[i].0, oy + self.pods[i].1);
-            ax += (want_x - ax) * POD_FOLLOW;
-            ay += (want_y - ay) * POD_FOLLOW;
-            let (lx, ly) = (ax - want_x, ay - want_y);
-            let lag = (lx * lx + ly * ly).sqrt();
-            if lag > POD_MAX_LAG {
-                ax = want_x + lx / lag * POD_MAX_LAG;
-                ay = want_y + ly / lag * POD_MAX_LAG;
-            }
-            self.pods[i] = (ax - self.x, ay - self.y);
-        }
+        // the pod guns ride the antennas, closing in with the blades
+        let px = POD_X + (POD_X_FOCUS - POD_X) * self.blend(t);
+        self.pods = [(-px, 0.0), (px, 0.0)];
 
         // roll toward the sideways speed, one step every few frames
         let want = ((dx / t.speed.max(0.1)) * 2.0).round().clamp(-2.0, 2.0) as i8;
@@ -299,20 +286,18 @@ mod tests {
         assert_eq!(p.dx, 0.0, "no movement reported against a wall");
     }
 
+    /// The pod guns are the antennas: they move with the ship, never trailing it
+    /// (the first ship's wing pods lagged; the Pilgrim's antennas don't), and close
+    /// in as the blades do.
     #[test]
-    fn pods_lag_a_little_then_settle_and_tuck_in_for_focus() {
+    fn the_pod_guns_ride_the_antennas_and_tuck_in_for_focus() {
         let t = Tuning::default();
         let mut p = Player::new();
         p.x = 40.0;
         for _ in 0..20 {
             p.step(&held((1.0, 0.0)), &t);
-            let lag = p.pods[1].0 - POD_X;
-            assert!(lag < 0.0 && lag >= -POD_MAX_LAG - 1e-4, "the right pod trails: {lag}");
+            assert_eq!(p.pods, [(-POD_X, 0.0), (POD_X, 0.0)], "on the antennas while moving");
         }
-        for _ in 0..30 {
-            p.step(&held((0.0, 0.0)), &t);
-        }
-        assert!((p.pods[0].0 + POD_X).abs() < 0.01 && (p.pods[1].0 - POD_X).abs() < 0.01);
         for _ in 0..30 {
             p.step(&Controls { focus: true, ..Default::default() }, &t);
         }

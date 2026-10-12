@@ -7,7 +7,7 @@ use super::palette::{SIGNAL, WHITE_A, hue_rims};
 use crate::sim::World;
 use crate::sim::bullets::{Behavior, Kind};
 use crate::sim::pattern::Mount;
-use crate::tune::{BLOOM_FRAMES, MUZZLE_FRAMES};
+use crate::tune::{BLOOM_FRAMES, MUZZLE_FRAMES, STAR_SPIN};
 use macroquad::color::Color;
 
 /// Which pre-drawn turn suits a direction (rice and needles look the same turned 180 degrees).
@@ -58,7 +58,11 @@ pub fn draw_bullets(a: &Atlas, w: &World, ox: i32, oy: i32) {
                 }
             }
             let wob = ((age / 4) as usize + k) % 2;
-            let src = art.frames[b.hue[i] as usize][k][wob][turn(b.dx[i], b.dy[i])];
+            // stars turn as they drift (each from the way it was fired, so a ring of
+            // them doesn't spin in step); everything else points where it flies
+            let t = turn(b.dx[i], b.dy[i]);
+            let t = if kind == Kind::Star { (t + (age / STAR_SPIN) as usize) % TURNS } else { t };
+            let src = art.frames[b.hue[i] as usize][k][wob][t];
             let (sx, sy) = (ox + (x - src.w * 0.5).round() as i32, oy + (y - src.h * 0.5).round() as i32);
             if age < BLOOM_FRAMES {
                 // the spawn bloom: harmless, and it looks it

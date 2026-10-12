@@ -59,13 +59,12 @@ pub const EDGE_BOTTOM: f32 = 22.0;
 pub const START_X: f32 = 180.0;
 pub const START_Y: f32 = 300.0;
 
-/// Wing pods sit this far either side of the center, closer while focused.
-pub const POD_X: f32 = 11.0;
-pub const POD_X_FOCUS: f32 = 7.0;
-/// Pods close this share of the gap to where they should be each frame (the lag).
-pub const POD_FOLLOW: f32 = 0.6;
-/// They never trail by more than this many px.
-pub const POD_MAX_LAG: f32 = 3.0;
+/// The pod streams leave from the antennas' tips: this far either side of the
+/// center, closer as the blades close (v0.8.6: where the Pilgrim's antennas are
+/// drawn), and this far above the hitbox.
+pub const POD_X: f32 = 9.0;
+pub const POD_X_FOCUS: f32 = 6.0;
+pub const POD_GUN_Y: f32 = -20.0;
 /// Frames between bank steps (the ship rolls -2..2 as it moves sideways).
 pub const BANK_FRAMES: u32 = 3;
 
@@ -79,13 +78,14 @@ pub const FIRE_INTERVAL: u32 = 3;
 pub const BOLT_SPEED: f32 = 14.0;
 pub const BOLT_LEN: f32 = 18.0;
 pub const BOLT_HIT_W: f32 = 8.0;
-pub const BOLT_GAP: f32 = 4.0;
+pub const BOLT_GAP: f32 = 3.0;
 pub const BOLT_DMG: f32 = 3.0;
-/// The pod streams, angled outward (alternating between two angles, in degrees).
+/// The pod streams, angled outward (alternating between two angles, in degrees;
+/// from the antennas since v0.8.6, opened up so they cover what they did at range).
 pub const POD_SPEED: f32 = 13.0;
 pub const POD_LEN: f32 = 14.0;
 pub const POD_HIT_W: f32 = 6.0;
-pub const POD_ANGLES: [f32; 2] = [4.0, 9.0];
+pub const POD_ANGLES: [f32; 2] = [6.0, 11.5];
 pub const POD_DMG: f32 = 1.5;
 /// Where shots start, relative to the hitbox (positive is below it).
 pub const MUZZLE_Y: f32 = 6.0;
@@ -113,9 +113,12 @@ pub const BUMP_COOLDOWN: u32 = 40;
 
 /// Pool capacity (never reallocated during play).
 pub const BULLET_CAP: usize = 8192;
-/// Sprite radius and, for rice and needles, the half-length of the core along
-/// the flight direction. Indexed by `Kind` (small, orb, large, rice, needle).
-pub const BULLET_SIZE: [(f32, f32); 5] = [(3.5, 0.0), (5.5, 0.0), (9.5, 0.0), (2.5, 2.0), (1.5, 5.5)];
+/// Sprite radius and, for rice, needles and diamonds, the half-length of the core
+/// along the flight direction. Indexed by `Kind` (small, orb, large, rice, needle,
+/// star, diamond). A star's arms reach past its radius: only its middle hurts.
+pub const BULLET_SIZE: [(f32, f32); 7] = [(3.5, 0.0), (5.5, 0.0), (9.5, 0.0), (2.5, 2.0), (1.5, 5.5), (5.0, 0.0), (3.2, 3.0)];
+/// Frames a star takes to turn one step (an eighth of half a turn) as it drifts.
+pub const STAR_SPIN: u16 = 5;
 /// The bullet's hitbox is this share of its sprite radius (leans in the player's favor).
 pub const BULLET_HIT: f32 = 0.55;
 /// New bullets bloom harmlessly for this many frames.
@@ -524,13 +527,15 @@ pub const JAWS_JAW_SPEED: f32 = 0.2;
 /// each joint bends, root to the tail fin (radians).
 pub const JAWS_SWIM: (f32, f32) = (0.075, 0.24);
 pub const JAWS_BEND: [f32; 6] = [0.05, 0.07, 0.09, 0.11, 0.13, 0.17];
-/// The tail sweeps up off the body (radians), the way Jason drew it.
-pub const JAWS_TAIL_TILT: f32 = 0.18;
+/// The tail sweeps up off the body (radians), the way Jason drew it, on top of the
+/// shape of its own plates (each plate's slope as drawn, root to the fin).
+pub const JAWS_TAIL_TILT: f32 = 0.25;
+pub const JAWS_TAIL_ART: [f32; 6] = [-0.124, 0.124, 0.322, 0.322, 0.709, 0.0];
 /// The rig, facing right.
 pub const JAWS_HINGE: (f32, f32) = (-13.0, 9.0);
-pub const JAWS_TAIL_ROOT: (f32, f32) = (-78.0, -7.0);
+pub const JAWS_TAIL_ROOT: (f32, f32) = (-76.0, -9.0);
 /// The tail's plates, front to back: (length, height).
-pub const JAWS_TAIL: [(f32, f32); 5] = [(10.0, 22.0), (11.0, 20.0), (10.0, 17.0), (10.0, 15.0), (9.0, 13.0)];
+pub const JAWS_TAIL: [(f32, f32); 5] = [(8.06, 20.0), (8.06, 22.0), (9.49, 20.0), (9.49, 18.0), (9.22, 18.0)];
 pub const JAWS_DORSAL_AT: (f32, f32) = (-14.0, -14.0);
 pub const JAWS_PECTORAL_AT: (f32, f32) = (-17.0, 18.0);
 pub const JAWS_WINDOWS: [f32; 4] = [-24.0, -13.0, -2.0, 8.0];
@@ -548,7 +553,7 @@ pub const JAWS_BELLY: (f32, f32) = (1.0, 29.0);
 /// fin's (how far back along its plate its middle is, w, h) swings with the tail.
 pub const JAWS_BODY: (f32, f32, f32, f32) = (4.0, -2.0, 128.0, 52.0);
 pub const JAWS_PECTORAL: (f32, f32, f32, f32) = (-30.0, 28.0, 30.0, 26.0);
-pub const JAWS_TAIL_FIN: (f32, f32, f32) = (14.0, 24.0, 58.0);
+pub const JAWS_TAIL_FIN: (f32, f32, f32) = (16.0, 26.0, 64.0);
 /// Phase 3's laser: frames of warning, frames of beam, how far it sweeps (degrees),
 /// how wide it's drawn (px; it hits on a little over half of that), how often it
 /// comes and when the first one does (frames into the phase).
@@ -564,6 +569,12 @@ pub const JAWS_BLASTS: [u32; 11] = [0, 8, 15, 22, 30, 40, 52, 66, 82, 100, 140];
 /// phase, and through a turn or its end; how long each lives (frames).
 pub const JAWS_SMEARS: ([u32; 4], u32) = ([4, 6, 9, 14], 24);
 pub const JAWS_SMEAR_LIFE: u32 = 24;
+/// The black hole stripping particles off its back and belly: how many at once in
+/// each phase, and through a turn or its end; how long each lives (frames); how far
+/// across toward the hole's column one gets before it's gone (share of the way).
+pub const JAWS_STRIP: ([u32; 4], u32) = ([26, 34, 44, 58], 96);
+pub const JAWS_STRIP_LIFE: u32 = 56;
+pub const JAWS_STRIP_PULL: f32 = 0.6;
 /// Timed out in phase 4: frames for the hole to swallow it.
 pub const JAWS_FALL: u32 = 150;
 
@@ -571,14 +582,14 @@ const O: Mount = Mount::Owner { dx: 0.0, dy: 0.0 };
 /// Phase 4's bullets bend toward the black hole (and it swallows any that reach it).
 const HOLE_PULL: Behavior = Behavior::Pull { x: HOLE_X, y: HOLE_Y, pull: 0.006, max: 2.4 };
 
-/// Phase 1, TEETH: aimed 5-way fans from the jaws over slow static rings from the
-/// windows, one window after another.
+/// Phase 1, TEETH: aimed 5-way fans of crystal shards from the jaws over slow static
+/// rings from the windows, one window after another: orbs, then slower stars.
 pub const JAWS_P1: &[BossGun] = &[
-    bgun(Muzzle::Mouth, gun(O, Shape::Fan { n: 5, spread: 48.0, aimed: true }, Kind::Rice, 2.5, 40, 50, STRAIGHT).hue(Hue::Red)),
+    bgun(Muzzle::Mouth, gun(O, Shape::Fan { n: 5, spread: 48.0, aimed: true }, Kind::Diamond, 2.5, 40, 50, STRAIGHT).hue(Hue::Red)),
     bgun(Muzzle::Window(0), gun(O, Shape::Ring { n: 18, turn: 7.0 }, Kind::Orb, 1.1, 168, 30, STRAIGHT).hue(Hue::Teal)),
-    bgun(Muzzle::Window(1), gun(O, Shape::Ring { n: 18, turn: -7.0 }, Kind::Orb, 1.1, 168, 72, STRAIGHT).hue(Hue::Blue)),
+    bgun(Muzzle::Window(1), gun(O, Shape::Ring { n: 18, turn: -7.0 }, Kind::Star, 0.85, 168, 72, STRAIGHT).hue(Hue::Amber)),
     bgun(Muzzle::Window(2), gun(O, Shape::Ring { n: 18, turn: 7.0 }, Kind::Orb, 1.1, 168, 114, STRAIGHT).hue(Hue::Teal)),
-    bgun(Muzzle::Window(3), gun(O, Shape::Ring { n: 18, turn: -7.0 }, Kind::Orb, 1.1, 168, 156, STRAIGHT).hue(Hue::Blue)),
+    bgun(Muzzle::Window(3), gun(O, Shape::Ring { n: 18, turn: -7.0 }, Kind::Star, 0.85, 168, 156, STRAIGHT).hue(Hue::Blue)),
 ];
 /// Phase 2, FINS: the pectoral fin and the tail fin spin opposing spirals while the
 /// jaws fire aimed needle bursts. Breaking a fin silences its spiral.
@@ -586,21 +597,22 @@ pub const JAWS_P2: &[BossGun] = &[
     bgun(Muzzle::Pectoral, gun(O, Shape::Spiral { arms: 3, spin: 7.0, flip: 0 }, Kind::Rice, 1.6, 6, 40, STRAIGHT).hue(Hue::Violet)),
     bgun(Muzzle::Tail, gun(O, Shape::Spiral { arms: 3, spin: -7.0, flip: 0 }, Kind::Rice, 1.6, 6, 43, STRAIGHT).hue(Hue::Blue)),
     bgun(Muzzle::Mouth, gun(O, Shape::Stream { burst: 5, gap: 4 }, Kind::Needle, 3.0, 84, 70, STRAIGHT).hue(Hue::Red)),
-    // its fins gone, its windows open up
-    enraged(Muzzle::Window(0), gun(O, Shape::Ring { n: 20, turn: 9.0 }, Kind::Orb, 1.3, 120, 0, STRAIGHT).hue(Hue::Teal)),
-    enraged(Muzzle::Window(3), gun(O, Shape::Ring { n: 20, turn: -9.0 }, Kind::Orb, 1.3, 120, 60, STRAIGHT).hue(Hue::Teal)),
+    // its fins gone, its windows open up: slow rings of stars
+    enraged(Muzzle::Window(0), gun(O, Shape::Ring { n: 20, turn: 9.0 }, Kind::Star, 1.0, 120, 0, STRAIGHT).hue(Hue::Amber)),
+    enraged(Muzzle::Window(3), gun(O, Shape::Ring { n: 20, turn: -9.0 }, Kind::Star, 1.0, 120, 60, STRAIGHT).hue(Hue::Amber)),
 ];
 /// Phase 3, GLITCH: a curtain of rice like a corrupted screen, each row slipping
-/// sideways, a lane drifting through it; random sprinkles off the tail; and the laser
-/// sweeps (they pause the curtain).
+/// sideways, a lane drifting through it; slow stars sprinkled off the tail; and the
+/// laser sweeps (they pause the curtain).
 pub const JAWS_P3: &[BossGun] = &[
     bgun(Muzzle::Belly, gun(O, Shape::Curtain { n: 23, spacing: 15.0, gap: 3, period: 22, jitter: 6.0 }, Kind::Rice, 1.45, 20, 30, STRAIGHT).hue(Hue::Teal)),
-    bgun(Muzzle::Tail, gun(O, Shape::Cone { n: 2, spread: 140.0, jitter: 0.3 }, Kind::Small, 1.5, 11, 40, STRAIGHT).hue(Hue::Violet)),
+    bgun(Muzzle::Tail, gun(O, Shape::Cone { n: 2, spread: 140.0, jitter: 0.3 }, Kind::Star, 0.9, 18, 40, STRAIGHT).hue(Hue::Violet)),
 ];
 /// Phase 4, EVENT HORIZON: everything it throws bends toward the black hole: a turning
-/// flower from its jaws, spiral arms off its tail; and aimed needle bursts, straight.
+/// flower of stars from its jaws, spiral arms off its tail; and aimed needle bursts,
+/// straight.
 pub const JAWS_P4: &[BossGun] = &[
-    bgun(Muzzle::Mouth, gun(O, Shape::Flower { n: 24, petals: 5, turn: 9.0 }, Kind::Small, 1.9, 56, 40, HOLE_PULL).hue(Hue::Amber)),
+    bgun(Muzzle::Mouth, gun(O, Shape::Flower { n: 24, petals: 5, turn: 9.0 }, Kind::Star, 1.9, 56, 40, HOLE_PULL).hue(Hue::Amber)),
     bgun(Muzzle::Tail, gun(O, Shape::Spiral { arms: 2, spin: 11.0, flip: 0 }, Kind::Rice, 1.6, 8, 60, HOLE_PULL).hue(Hue::Violet)),
     bgun(Muzzle::Mouth, gun(O, Shape::Stream { burst: 4, gap: 5 }, Kind::Needle, 3.2, 72, 60, STRAIGHT).hue(Hue::Red)),
 ];

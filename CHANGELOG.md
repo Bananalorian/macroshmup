@@ -3,6 +3,66 @@
 Every version is one build sprint. Newest first. Versions are tagged in git, and
 each tag publishes a GitHub Release with downloads.
 
+## [0.8.6] - 2026-10-12 - Stars and particles
+
+### Fixed
+- **JAWSTHIC's tail reads as one tail**
+  ([your picture beside it](docs/screenshots/jawsthic-vs-art.png)). Your tail art
+  isn't level: it runs flat from the root, then rises toward the fin. The plates
+  were cut as if it were straight, so each plate's back sat above the next one's
+  front and the tail looked broken into steps. Now each joint sits on the tail's
+  centerline as you drew it, the swim bends each plate from its drawn slope, the
+  tail is traced at the body's scale, and it mounts inside the body's thick rear
+  (the body's little end cap gave way to the tail's first ring) at the body's own
+  upward slope.
+- **Your shots leave from where they're drawn.** The twin bolts fly from the blade
+  tips, 3 px either side of center (they were 4). The angled pod streams leave
+  from the antenna tips (they started 2-6 px outside them, beside the engines).
+  The pod guns no longer trail behind the ship as it moves: that lag was left over
+  from the first ship's wing pods. The pod angles open a little (6 and 11.5°, from
+  4 and 9°) so the wide shot covers the same ground at range. Shots still start low
+  on the ship, so an enemy you're sitting under still gets hit.
+
+### Added
+- **The black hole strips it apart.** Torn bits of the boss lift off its back and
+  belly and stream toward the hole: stone chips, red and teal scanlines like the
+  tail's glitch smears, a few lone sparks. There are a few in phase 1, more as it
+  weakens, and a storm when it turns, dies or falls
+  ([the four phases](docs/screenshots/boss-phases.png)).
+- **Two new bullets, used by the boss:**
+  - **stars:** four-point sparkles with a white-hot core, twinkling and turning
+    slowly as they drift. Only the middle hurts; the points are glitter.
+  - **diamonds:** crystal shards pointed where they fly, like the boss's eye and
+    its health bar's gem.
+  Both keep the rules every bullet follows: a white core, a hue rim and a black
+  outline, with big slow bullets drawn under small fast ones (Boghog's guide).
+- **The boss's new mix:**
+  - **Phase 1:** the jaw fans are red diamonds. Two of the four window rings are
+    slow stars, gold and blue, at 0.85 instead of 1.1.
+  - **Phase 2:** once its fins are broken, the windows fire slow gold stars.
+  - **Phase 3:** the tail's sprinkles are slow violet stars, fired less often so the
+    screen holds about as many.
+  - **Phase 4:** the flower from its jaws is gold stars pouring into the black hole.
+
+### Checked
+- **Tests prove:**
+  - the tail's plates are cut on its drawn centerline, each as long and as sloped
+    as the sim's joints;
+  - the bolts leave the blade tips and the pod streams the antennas, closing in
+    with the blades;
+  - the pod guns ride the antennas while the ship moves;
+  - stars and diamonds have a core, a rim and an outline in every hue and frame.
+- **PG_SIM=200:** the stage is cleared 100% with no misses and no deaths. JAWSTHIC is
+  destroyed in 100% of runs, its phases a median 24.5 / 25.7 / 27.6 / 24.8 s. The
+  median score is 2.98M, both extends come in 95% of runs, and the rank is A 80% and
+  S 19%. The derelict is destroyed in 92% of runs (94% before the shot change). An
+  early try of phase 4 with slower stars made it time out in 4% of runs, so its
+  stars kept the old speed.
+- Play frames at 1080p show the bolts leaving the tips and the pod streams the
+  antennas, the stars and diamonds up close, and the stripped particles. Every
+  screenshot is retaken. Native and web builds are warning-free, and all 240 tests
+  pass in both debug (as CI runs them) and release.
+
 ## [0.8.5] - 2026-10-12 - The new JAWSTHIC
 
 ### Changed

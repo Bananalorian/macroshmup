@@ -119,7 +119,7 @@ a version stamp bottom-left (`V0.1 // PILGRIM`) and a tagline bottom-right.
 - Smooth movement comes from visuals: banking matched to speed, afterimages, trails, the blades closing for focus. (Since v0.8.3 a bank never takes the white stone outside a blade's channel, so the dipping side stays clean.)
 
 **Shooting**
-- Player shots are fast, long, dense and a little messy. Big shot hitboxes, big enemy hurtboxes, low emitters, so you can hit an enemy you're sitting right under.
+- Player shots are fast, long, dense and a little messy. Big shot hitboxes, big enemy hurtboxes, low emitters, so you can hit an enemy you're sitting right under. They leave from where the Pilgrim's art says: the bolts from the blade tips, the pod streams from the antenna tips (v0.8.6).
 - Point-blank play is rewarded: a beam aura (from DoDonPachi) and a point-blank score bonus.
 - No power-ups in v1; you start at full power. If they're added later, the gains are mostly visual (Boghog's "lie about power").
 
@@ -131,6 +131,7 @@ a version stamp bottom-left (`V0.1 // PILGRIM`) and a tagline bottom-right.
 **Bullets**
 - A bright core beside a dark border (value contrast), in the red family.
 - Grouped into lines, rings and chunks. No lone strays. Odd trajectories get trails. Every bullet wobbles a little.
+- Seven kinds: small, orb, large, rice, needle, and since v0.8.6 the star (a slow, twinkling, turning sparkle; only its middle hurts) and the diamond (a crystal shard pointed along its flight). Big and slow draw under small and fast.
 - Patterns are aimed, static or random, layered together. Design in lanes, and never wall off big chunks of the screen.
 
 **Enemies**

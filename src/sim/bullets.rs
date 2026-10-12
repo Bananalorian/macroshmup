@@ -15,12 +15,16 @@ pub enum Kind {
     Large,
     Rice,
     Needle,
+    /// A four-point star, twinkling and turning as it drifts (v0.8.6): slow layers.
+    Star,
+    /// A crystal shard, pointed along its flight like the boss's diamond eye.
+    Diamond,
 }
 
 impl Kind {
-    pub const ALL: [Kind; 5] = [Kind::Small, Kind::Orb, Kind::Large, Kind::Rice, Kind::Needle];
+    pub const ALL: [Kind; 7] = [Kind::Small, Kind::Orb, Kind::Large, Kind::Rice, Kind::Needle, Kind::Star, Kind::Diamond];
     /// Bottom to top.
-    pub const DRAW_ORDER: [Kind; 5] = [Kind::Large, Kind::Orb, Kind::Rice, Kind::Small, Kind::Needle];
+    pub const DRAW_ORDER: [Kind; 7] = [Kind::Large, Kind::Star, Kind::Orb, Kind::Diamond, Kind::Rice, Kind::Small, Kind::Needle];
 
     /// Sprite radius (across) in px.
     pub fn radius(self) -> f32 {

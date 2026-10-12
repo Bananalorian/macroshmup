@@ -85,8 +85,9 @@ animates by moving whole parts, so both blades keep their white edges when it ba
 **v0.7, the boss:** JAWSTHIC, a great white carved from moon rock with a gothic
 cathedral for a body, from Jason's concept, redrawn in v0.8.5 from his sprite atlas:
 cracked flagstones, a red diamond eye, two rows of fangs, lancet windows, a segmented
-tail trailing glitch smears. Its fin cuts through the black hole's disk before it
-breaches. It fights in four phases, each with a timer: TEETH, FINS, GLITCH and EVENT
+tail trailing glitch smears, the black hole stripping bits off its back and belly.
+It fires stars and crystal shards among its orbs and rice (v0.8.6). Its fin cuts
+through the black hole's disk before it breaches. It fights in four phases, each with a timer: TEETH, FINS, GLITCH and EVENT
 HORIZON. Each phase's bar drains from both ends in to a gem that turns green, yellow,
 orange, then red. The phases bring aimed fans,
 breakable fin turrets, a glitching curtain, laser sweeps, and bullets bending into

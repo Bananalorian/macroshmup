@@ -3,6 +3,37 @@
 Session notes for Claude Code: what shipped, tuning that changed, known issues, what's next.
 Newest first.
 
+## v0.8.6 Stars and particles - 2026-10-12
+
+**Jason:** "the tale on the jawsthic-vs-art.png isn't lined up to look like a tale"; the tail
+glitch "looks good. need to have some on the top and bottom. like the black hole is taking
+away sub atomic particles"; "the bullets coming out of my ship don't line up correctly";
+boss bullets "look different, add some slower moving ones. some that look like stars... take
+some inspiration from the guide".
+
+- **Tail:** his tail art rises toward the fin (centerline y 47 at the root to 33 at the fin),
+  so level cuts made a staircase. Now `JOINTS` in jawsthic.rs are on the drawn centerline
+  [(80,46),(72,47),(64,46),(55,43),(46,40),(39,34)] (tail traced at 0.165); the sim's
+  `JAWS_TAIL_ART` (each plate's drawn slope) + `JAWS_TAIL_TILT` 0.25 + wave give each joint's
+  angle; the renderer turns plate i by `ang - ART[i]` (turn sets centered on TILT). JAWS_TAIL
+  lengths from the joints; TAIL_ROOT (-76,-9) inside the body's thick rear; the tool's
+  `trim_cap` clears body columns < 7 (the body's end cap) and seams the cut.
+- **Shots:** BOLT_GAP 3 (blade tips), POD_X 9 / POD_X_FOCUS 6 / POD_GUN_Y -20 (antenna
+  tips), the pod lag removed (POD_FOLLOW/POD_MAX_LAG gone), pod streams start low on the line
+  through the antenna tip; POD_ANGLES [6, 11.5] (were [4, 9]) to cover the same at range
+  (a derelict weak-point test caught the narrower spread). Test ties ship.rs tips/guns to tune.
+- **Particles:** `stripped()` + `JawsFrames.rim` (top/bottom silhouette, no jaw underside);
+  JAWS_STRIP ([26,34,44,58], 96), life 56, pull 0.6 sideways toward HOLE_X (the hole sits
+  behind the fish, so pulling at it dragged them across the stone, invisible). Drawn as
+  smear-style chips and scanlines plus a few sparks.
+- **Bullets:** Kind::Star (BULLET_SIZE (5.0, 0.0), spins by STAR_SPIN 5 from its fired
+  direction) and Kind::Diamond ((3.2, 3.0)); 7 kinds now. Boss: P1 jaw fans Diamond, windows
+  1/3 Star 0.85 amber/blue; P2 enraged windows Star 1.0 amber; P3 tail Star 0.9 every 18;
+  P4 flower Star 1.9 (1.6 timed out 4%). PG_SIM: 100% clear/no-miss, boss 100%, 2.98M,
+  extends 100/95, A 80 S 19, derelict 92% (94 before). 240 tests.
+
+**Next:** his list of tuning and fixes before Sprint 8.
+
 ## v0.8.5 The new JAWSTHIC - 2026-10-12
 
 **Jason** (via /loop): "redo the boss. the design. a major redesign. function can remain the

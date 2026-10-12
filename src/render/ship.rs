@@ -826,6 +826,18 @@ mod tests {
         assert!(!laser(0).is_empty() && laser(0) != laser(1), "the sword's channel flows while it fires");
     }
 
+    /// The shots leave from where they're drawn to: the bolts from the blades' tips,
+    /// the pod streams from the antennas' tips (closing in with the blades).
+    #[test]
+    fn the_guns_are_where_the_sim_fires_from() {
+        use crate::tune::{BOLT_GAP, POD_GUN_Y, POD_X, POD_X_FOCUS};
+        let (.., tips, guns) = frame_image(0, 0);
+        assert_eq!(tips, [(-BOLT_GAP as i32, TIP), (BOLT_GAP as i32, TIP)], "the bolts leave the blades' tips");
+        assert_eq!(guns, [(-POD_X as i32, POD_GUN_Y as i32), (POD_X as i32, POD_GUN_Y as i32)], "the pod streams leave the antennas");
+        let (.., guns) = frame_image(SWORD - 1, 0);
+        assert_eq!(guns[1].0, POD_X_FOCUS as i32, "closed, the antennas' roots");
+    }
+
     #[test]
     fn every_frame_has_a_frame_index() {
         assert_eq!(form_index(0.0), 0);

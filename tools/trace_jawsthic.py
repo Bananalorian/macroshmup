@@ -54,7 +54,7 @@ BAYER = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]]
 PARTS = {
     "body": ((20, 48, 1004, 544), 0.165, (84, 45)),
     "jaw": ((984, 208, 1512, 636), 0.165, (7, 22)),
-    "tail": ((24, 544, 552, 988), 0.15, (78, 37)),
+    "tail": ((24, 544, 552, 988), 0.165, (78, 37)),
     "dorsal": ((560, 624, 840, 928), 0.14, (22, 40)),
     "pec_near": ((768, 660, 1220, 988), 0.17, (66, 10)),
     "pec_far": ((1256, 700, 1504, 972), 0.15, (6, 6)),
@@ -182,6 +182,16 @@ def eye(g, cx, cy):
                 g[y][x] = "4"
 
 
+def trim_cap(g, x0):
+    """The body's narrow rear cap goes (the tail's first ring takes its place, so the
+    two don't pinch together), the cut seamed dark."""
+    for row in g:
+        for x in range(x0):
+            row[x] = None
+        if row[x0] is not None:
+            row[x0] = "o"
+
+
 def unpaint_crosshair(g, x0, y0, x1, y1):
     """The jaw's painted crosshair goes back to the dark of the mouth."""
     for y in range(y0, y1):
@@ -273,6 +283,7 @@ def main():
         print(f"{name}: {len(g[0])} x {len(g)}, pivot {pivot}", file=sys.stderr)
         parts[name] = (g, pivot)
     eye(parts["body"][0], 110, 23)
+    trim_cap(parts["body"][0], 7)
     unpaint_crosshair(parts["jaw"][0], 46, 16, 70, 38)
     parts["stump"] = (stump(parts["pec_near"][0], PARTS["pec_near"][2], 17), PARTS["pec_near"][2])
     emit(parts, windows(parts["body"][0], PARTS["body"][2]))

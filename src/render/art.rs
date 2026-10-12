@@ -170,7 +170,8 @@ fn dummy_images() -> [Image; 3] {
     [still, moving, big]
 }
 
-/// Directions pre-drawn for rice and needles (they look the same turned 180 degrees).
+/// Directions pre-drawn for rice, needles and diamonds (they look the same turned
+/// 180 degrees), and the turns of a spinning star.
 pub const TURNS: usize = 8;
 
 /// One enemy bullet sprite: an ink outline, a red rim, a white-hot core.
@@ -199,9 +200,8 @@ fn bullet_image(size: u16, wobble: bool, f: impl Fn(f32, f32) -> f32, (outline, 
 
 /// The enemy bullets' sprites, and the guns' turrets.
 pub struct BulletArt {
-    /// [kind][wobble frame][turn] (round bullets repeat their one turn).
-    /// [hue][kind][wobble frame][turn].
-    pub frames: [[[[Rect; TURNS]; 2]; 5]; 5],
+    /// [hue][kind][wobble frame][turn] (round bullets repeat their one turn).
+    pub frames: [[[[Rect; TURNS]; 2]; 7]; 5],
     /// The spawn bloom, growing over 4 frames.
     pub bloom: [Rect; 4],
     pub turret: Rect,
@@ -210,14 +210,14 @@ pub struct BulletArt {
 fn bullet_art(p: &mut Packer) -> BulletArt {
     use crate::sim::bullets::{Kind, seg_dist};
     use crate::sim::bullets::Hue;
-    let mut frames = [[[[Rect::default(); TURNS]; 2]; 5]; 5];
+    let mut frames = [[[[Rect::default(); TURNS]; 2]; 7]; 5];
     for hue in Hue::ALL {
     let rims = super::palette::hue_rims(hue);
     let frames = &mut frames[hue as usize];
     for kind in Kind::ALL {
         let r = kind.radius();
         let h = kind.half_len();
-        let turns = if h > 0.0 { TURNS } else { 1 };
+        let turns = if h > 0.0 || kind == Kind::Star { TURNS } else { 1 };
         for w in 0..2 {
             for t in 0..turns {
                 let (s, c) = (t as f32 * std::f32::consts::PI / TURNS as f32).sin_cos();
@@ -226,6 +226,16 @@ fn bullet_art(p: &mut Packer) -> BulletArt {
                     // an ellipse, long along the direction of flight
                     Kind::Rice => bullet_image(12, wob, |x, y| ((x * c + y * s) / 1.8).hypot(-x * s + y * c), (r, r - 0.8, r - 1.6), rims),
                     Kind::Needle => bullet_image(16, wob, |x, y| seg_dist(x, y, 0.0, 0.0, c, s, h), (r + 1.05, r + 0.05, 0.55), rims),
+                    // four points round a round middle, the points longer as it twinkles
+                    Kind::Star => {
+                        let k = if wob { 0.36 } else { 0.45 };
+                        bullet_image(15, wob, |x, y| {
+                            let (u, v) = (x * c + y * s, -x * s + y * c);
+                            u.hypot(v).min(u.abs() * k + v.abs()).min(u.abs() + v.abs() * k)
+                        }, (3.0, 2.2, 1.3), rims)
+                    }
+                    // a rhombus, long along the direction of flight
+                    Kind::Diamond => bullet_image(16, wob, |x, y| (x * c + y * s).abs() * 0.5 + (-x * s + y * c).abs(), (3.2, 2.3, 1.2), rims),
                     _ => {
                         let size = (2.0 * r).ceil() as u16 + 1;
                         let (rim, core) = match kind {

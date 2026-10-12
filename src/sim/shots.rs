@@ -67,9 +67,11 @@ pub fn volley(p: &Player, out: &mut Vec<Shot>) {
     let a = POD_ANGLES[(p.volley % 2) as usize].to_radians();
     for (i, (gx, gy)) in p.pod_guns().into_iter().enumerate() {
         let side = if i == 0 { -1.0 } else { 1.0 };
+        // it starts low on the ship like the bolts, on the line through the
+        // antenna's tip, so it leaves from the tip
         out.push(Shot {
             kind: ShotKind::Pod,
-            x: gx,
+            x: gx - side * (MUZZLE_Y - POD_GUN_Y) * a.tan(),
             y: gy + MUZZLE_Y,
             vx: side * a.sin() * POD_SPEED,
             vy: -a.cos() * POD_SPEED,

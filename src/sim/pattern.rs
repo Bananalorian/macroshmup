@@ -200,7 +200,7 @@ impl Hazards {
 
         let fill = SANDBOX[self.preset].fill as usize;
         while self.bullets.len() < fill {
-            let k = Kind::ALL[(self.rng.next_u64() % 5) as usize];
+            let k = Kind::ALL[(self.rng.next_u64() % Kind::ALL.len() as u64) as usize];
             let x = self.rng.range(0.0, FIELD_W as f32);
             let a = self.rng.range(60.0, 120.0);
             let v = self.rng.range(0.8, 2.6);

@@ -309,9 +309,11 @@ impl Boss {
         let mut out = [(0.0, 0.0, 0.0); 6];
         let (mut lx, mut ly) = JAWS_TAIL_ROOT;
         let lean = (self.vy * 0.05).clamp(-0.1, 0.1);
-        let mut ang = JAWS_TAIL_TILT;
+        let mut wave = 0.0;
         for (i, joint) in out.iter_mut().enumerate() {
-            ang += JAWS_BEND[i] * (self.swim - i as f32 * 0.6).sin() + lean * 0.3;
+            wave += JAWS_BEND[i] * (self.swim - i as f32 * 0.6).sin() + lean * 0.3;
+            // the plate's own slope as drawn, the whole tail's sweep, the wave
+            let ang = JAWS_TAIL_ART[i] + JAWS_TAIL_TILT + wave;
             let (x, y) = self.at((lx, ly));
             *joint = (x, y, ang);
             if let Some(&(len, _)) = JAWS_TAIL.get(i) {
