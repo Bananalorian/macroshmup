@@ -65,16 +65,16 @@ fn no_bullet_spawns_within_24_px_of_the_player() {
 
 /// The widest free gap across one horizontal band of the playfield.
 pub(super) fn widest_gap(w: &World, y0: f32, y1: f32) -> f32 {
+    widest_gap_drawn(w, y0, y1, 1.0)
+}
+
+/// The same, with every bullet's radius grown `look` times (as it's drawn).
+pub(super) fn widest_gap_drawn(w: &World, y0: f32, y1: f32, look: f32) -> f32 {
     let b = &w.hazards.bullets;
+    let extent = |i: usize| b.kind[i].radius() * look + b.kind[i].half_len();
     let mut spans: Vec<(f32, f32)> = (0..b.len())
-        .filter(|&i| {
-            let e = b.kind[i].extent();
-            b.y[i] + e > y0 && b.y[i] - e < y1
-        })
-        .map(|i| {
-            let e = b.kind[i].extent();
-            (b.x[i] - e, b.x[i] + e)
-        })
+        .filter(|&i| b.y[i] + extent(i) > y0 && b.y[i] - extent(i) < y1)
+        .map(|i| (b.x[i] - extent(i), b.x[i] + extent(i)))
         .collect();
     spans.sort_by(|a, b| a.0.total_cmp(&b.0));
     let (mut best, mut edge) = (0.0f32, 0.0f32);

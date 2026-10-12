@@ -279,12 +279,15 @@ mod tests {
         }
         assert_eq!((s.music_vol, s.sound_vol), (0, 10), "volumes stop at their ends");
         assert_eq!((value(&s, Item::Music).as_str(), value(&s, Item::Sound).as_str()), ("OFF", "100%"));
-        assert_eq!(value(&s, Item::Fire), "FOCUS BUTTON");
+        assert_eq!((value(&s, Item::Fire).as_str(), value(&s, Item::ShowHitbox).as_str()), ("FOCUS BUTTON", "ALWAYS"), "the hitbox shows always unless you say");
         adjust(&mut s, Item::Fire, 1);
         adjust(&mut s, Item::ShowHitbox, 1);
-        assert_eq!((value(&s, Item::Fire).as_str(), value(&s, Item::ShowHitbox).as_str()), ("HOLD TO BEAM", "ALWAYS"));
+        assert_eq!((value(&s, Item::Fire).as_str(), value(&s, Item::ShowHitbox).as_str()), ("HOLD TO BEAM", "FOCUSED"));
         let saved = Settings::parse(&s.format());
-        assert_eq!((saved.music_vol, saved.sound_vol, saved.hold_beam, saved.hitbox_always), (0, 10, true, true));
+        assert_eq!((saved.music_vol, saved.sound_vol, saved.hold_beam, saved.hitbox_always), (0, 10, true, false));
+        // a save from before v0.10.2 (focused-only was the default then) starts it always on
+        assert!(Settings::parse("hitbox=focus
+").hitbox_always);
         assert!(OPTIONS.iter().all(|i| !i.label().is_empty()) && OPTIONS.last() == Some(&Item::Back));
     }
 

@@ -222,28 +222,31 @@ fn bullet_art(p: &mut Packer) -> BulletArt {
             for t in 0..turns {
                 let (s, c) = (t as f32 * std::f32::consts::PI / TURNS as f32).sin_cos();
                 let wob = w == 1;
+                // arcade-sized: the rim and outline drawn `BULLET_LOOK` times the
+                // bullet's size, the white-hot core (what hurts) kept as it was
+                let g = crate::tune::BULLET_LOOK;
                 let img = match kind {
                     // an ellipse, long along the direction of flight
-                    Kind::Rice => bullet_image(12, wob, |x, y| ((x * c + y * s) / 1.8).hypot(-x * s + y * c), (r, r - 0.8, r - 1.6), rims),
-                    Kind::Needle => bullet_image(16, wob, |x, y| seg_dist(x, y, 0.0, 0.0, c, s, h), (r + 1.05, r + 0.05, 0.55), rims),
+                    Kind::Rice => bullet_image(16, wob, |x, y| ((x * c + y * s) / 1.8).hypot(-x * s + y * c), (r * g, r * g - 0.9, r - 1.6), rims),
+                    Kind::Needle => bullet_image(18, wob, |x, y| seg_dist(x, y, 0.0, 0.0, c, s, h), (r * g + 1.05, r * g + 0.05, 0.55), rims),
                     // four points round a round middle, the points longer as it twinkles
                     Kind::Star => {
                         let k = if wob { 0.36 } else { 0.45 };
-                        bullet_image(15, wob, |x, y| {
+                        bullet_image(19, wob, |x, y| {
                             let (u, v) = (x * c + y * s, -x * s + y * c);
                             u.hypot(v).min(u.abs() * k + v.abs()).min(u.abs() + v.abs() * k)
-                        }, (3.0, 2.2, 1.3), rims)
+                        }, (3.0 * g, 2.2 * g, 1.3), rims)
                     }
                     // a rhombus, long along the direction of flight
-                    Kind::Diamond => bullet_image(16, wob, |x, y| (x * c + y * s).abs() * 0.5 + (-x * s + y * c).abs(), (3.2, 2.3, 1.2), rims),
+                    Kind::Diamond => bullet_image(20, wob, |x, y| (x * c + y * s).abs() * 0.5 + (-x * s + y * c).abs(), (3.2 * g, 2.3 * g, 1.2), rims),
                     _ => {
-                        let size = (2.0 * r).ceil() as u16 + 1;
+                        let size = (2.0 * r * g).ceil() as u16 + 1;
                         let (rim, core) = match kind {
-                            Kind::Small => (r - 1.1, 1.4),
-                            Kind::Orb => (r - 1.1, 2.5),
-                            _ => (r - 1.7, 4.6),
+                            Kind::Small => (r * g - 1.2, 1.4),
+                            Kind::Orb => (r * g - 1.3, 2.5),
+                            _ => (r * g - 2.0, 4.6),
                         };
-                        bullet_image(size, wob, |x, y| x.hypot(y), (r, rim, core), rims)
+                        bullet_image(size, wob, |x, y| x.hypot(y), (r * g, rim, core), rims)
                     }
                 };
                 frames[kind as usize][w][t] = p.add(&img);

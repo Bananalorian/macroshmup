@@ -32,8 +32,9 @@ impl World {
         matches!(self.slam, Some(Slam::Aim { .. }))
     }
 
-    /// What a slam from `(x, y)` would strike: something in reach, the nearest along
-    /// `dir` if one is held (else just the nearest), not `not` unless it's all there is.
+    /// What a slam from `(x, y)` would strike: something in reach and worth it (never
+    /// popcorn), the nearest along `dir` if one is held (else just the nearest), not
+    /// `not` unless it's all there is.
     pub fn slam_target(&self, (x, y): (f32, f32), dir: (f32, f32), not: Option<Target>) -> Option<(Target, Rect)> {
         let held = dir.0.hypot(dir.1) > 0.3;
         let (ux, uy) = if held { (dir.0 / dir.0.hypot(dir.1), dir.1 / dir.0.hypot(dir.1)) } else { (0.0, 0.0) };
@@ -48,10 +49,11 @@ impl World {
             let along = if held && d > 1.0 { (dx * ux + dy * uy) / d } else { 1.0 };
             (along > -0.2).then(|| d * (2.0 - along))
         };
+        let worth = |t: &Target| !matches!(*t, Target::Foe(i, _) if self.foes.list[i].kind.fodder());
         let pick = |skip: Option<Target>| {
             self.boxes
                 .iter()
-                .filter(|(t, _)| Some(*t) != skip)
+                .filter(|(t, _)| Some(*t) != skip && worth(t))
                 .filter_map(|&(t, r)| score(&r).map(|s| (s, t, r)))
                 .min_by(|a, b| a.0.total_cmp(&b.0))
                 .map(|(_, t, r)| (t, r))
@@ -190,6 +192,25 @@ mod tests {
         broke |= w.events.iter().any(|e| matches!(e, Event::Break { .. }));
         assert!(broke, "it breaks");
         assert!(w.player.y > START_Y - 120.0 + 4.0, "it bounced back off it: {}", w.player.y);
+    }
+
+    /// Popcorn is never a slam's target: it dashes past to something worth it, or
+    /// not at all.
+    #[test]
+    fn it_never_slams_popcorn() {
+        use crate::sim::enemy::{Enemy, EnemyKind, Path};
+        let mut w = world(&[]);
+        let hover = |x: f32, y: f32| Path::Hover { from: (x, y), at: (x, y), enter: 1, stay: 9999, sway: 0.0 };
+        w.foes.list.push(Enemy::new(1, EnemyKind::Drone, 0, hover(START_X, START_Y - 60.0), 0.0));
+        w.tick(Controls::default());
+        w.tick(Controls::default());
+        w.rush = 3.0;
+        assert_eq!(w.slam_target((w.player.x, w.player.y), (0.0, 0.0), None), None, "a drone alone: nothing to slam");
+        w.foes.list.push(Enemy::new(2, EnemyKind::Gunship, 0, hover(START_X + 40.0, START_Y - 140.0), 0.0));
+        w.tick(Controls::default());
+        w.tick(Controls::default());
+        let t = w.slam_target((w.player.x, w.player.y), (0.0, 0.0), None).map(|t| t.0);
+        assert_eq!(t, Some(Target::Foe(1, 0)), "past the nearer drone to the gunship");
     }
 
     /// No gauge, no slam; nothing in reach, no slam.

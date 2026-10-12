@@ -119,8 +119,11 @@ pub const BULLET_CAP: usize = 8192;
 pub const BULLET_SIZE: [(f32, f32); 7] = [(3.5, 0.0), (5.5, 0.0), (9.5, 0.0), (2.5, 2.0), (1.5, 5.5), (5.0, 0.0), (3.2, 3.0)];
 /// Frames a star takes to turn one step (an eighth of half a turn) as it drifts.
 pub const STAR_SPIN: u16 = 5;
-/// The bullet's hitbox is this share of its sprite radius (leans in the player's favor).
+/// The bullet's hitbox is this share of its radius (leans in the player's favor).
 pub const BULLET_HIT: f32 = 0.55;
+/// Bullets are drawn this much bigger than their radius, arcade-style: a fat
+/// colored rim round the same white-hot core (only the core hurts).
+pub const BULLET_LOOK: f32 = 1.35;
 /// New bullets bloom harmlessly for this many frames.
 pub const BLOOM_FRAMES: u16 = 4;
 /// No bullet may appear this close to the player.
@@ -652,7 +655,7 @@ pub const JAWS_P2: &[BossGun] = &[
 /// sideways, a lane drifting through it; slow stars sprinkled off the tail; and the
 /// laser sweeps (they pause the curtain).
 pub const JAWS_P3: &[BossGun] = &[
-    bgun(Muzzle::Belly, gun(O, Shape::Curtain { n: 23, spacing: 15.0, gap: 3, period: 22, jitter: 6.0 }, Kind::Rice, 1.65, 24, 0, STRAIGHT).hue(Hue::Teal)),
+    bgun(Muzzle::Belly, gun(O, Shape::Curtain { n: 23, spacing: 15.0, gap: 4, period: 22, jitter: 3.0 }, Kind::Rice, 1.5, 26, 0, STRAIGHT).hue(Hue::Teal)),
     bgun(Muzzle::Tail, gun(O, Shape::Cone { n: 2, spread: 140.0, jitter: 0.3 }, Kind::Star, 1.05, 26, 20, STRAIGHT).hue(Hue::Violet)),
 ];
 /// Phase 4, EVENT HORIZON: everything it throws bends toward the black hole: a turning

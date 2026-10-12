@@ -46,7 +46,7 @@ the font and every sound are built when the game starts. Written in Rust on
 
 ![A lunge: it draws back, jaws wide, strikes forward and down, its eye rolling back white, and bites](docs/screenshots/jawsthic-lunge.png)
 
-![The beam flaring where it lands, its light wrapping round the boss's belly](docs/screenshots/beam-wrap.png)
+![The beam hitting: it flattens into a splash against the boss's belly, a flare on it, sparks splashing back](docs/screenshots/beam-impact.png)
 
 ![JAWSTHIC's sheet: in play, at rest, charging, in each phase, glitching, facing either way](docs/screenshots/jawsthic-sheet.png)
 
@@ -73,6 +73,10 @@ the font and every sound are built when the game starts. Written in Rust on
 ![Stage 1's enemies in bone white, all built in code](docs/screenshots/enemy-sheet.png)
 
 ## Status
+
+**v0.10.2, arcade feel:** chunky arcade bolts, bigger enemy bullets round the same
+small cores, the hitbox always showing, a beam that hits instead of wrapping, the
+Slam chaining only between enemies worth it, and a phase 3 wall with a wider lane.
 
 **v0.10, boss attacks & the Slam:** JAWSTHIC fights like a shmup boss now: each
 phase cycles through its own attacks one at a time, each telegraphed, then a rest

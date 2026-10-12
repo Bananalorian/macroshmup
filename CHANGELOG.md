@@ -3,6 +3,51 @@
 Every version is one build sprint. Newest first. Versions are tagged in git, and
 each tag publishes a GitHub Release with downloads.
 
+## [0.10.2] - 2026-10-13 - Arcade feel
+
+### Changed
+- **The Slam chains only between enemies worth it.** Popcorn (drones, couriers,
+  ushers) is never a target: the slam dashes past it to the gunship, buoy, heavy,
+  derelict or boss in reach, or not at all.
+- **The beam hits instead of wrapping.** The wrap is gone. Where the beam lands it
+  flattens against what it hit, in a flickering splash wider than the beam, under
+  the flare and its hot core, and sparks splash back off it, down and out
+  ([close up](docs/screenshots/beam-impact.png)).
+- **Your shots are chunky arcade bolts:** fat red capsules with cream cores, about
+  twice as wide, and more solid. The pod shots match them, slimmer. They still
+  draw under the enemy bullets.
+- **The hitbox always shows:** the white core in its teal ring at the ship's
+  middle, not just while you focus. Saves from before start with it on;
+  Options > SHOW HITBOX can still set it back to FOCUSED. Sizes are unchanged.
+- **Bigger arcade bullets:** every enemy bullet is drawn 35% bigger, a fat colored
+  rim round the same white-hot core. Only the core hurts, as before, so the
+  hitboxes haven't changed.
+- **The phase 3 wall always lets you through:**
+  - the lane through the curtain is a column wider;
+  - its rows slip sideways half as much;
+  - they come a little slower and a little further apart.
+
+### Checked
+- **Tests prove:**
+  - the slam never targets popcorn and dashes past it to a gunship;
+  - the beam's splash throws its sparks back down and out;
+  - the hitbox shows always by default, and an old save's FOCUSED is reset;
+  - through all of phase 3, on three seeds, every band of the bottom half keeps a
+    lane over 30 px wide, measured on the bullets as drawn.
+- **Captures, beside v0.10.1:**
+  - phase 3's wall with the bigger bullets and the lane;
+  - a stage wave with the new bolts, the bigger bullets and the hitbox showing;
+  - the beam's impact.
+
+  The bomb's sweep is untouched. Every screenshot is retaken.
+- **PG_SIM=200:**
+  - cleared 100%, with no deaths and no bombs;
+  - JAWSTHIC is destroyed in every run, its phases 18.6 / 22.8 / 23.2 / 21.3 s;
+  - the median score is 3.76M;
+  - bullets on screen average 34 with the bot, 50 with the pacifist.
+- Native and web builds are warning-free, and all 263 tests pass in both debug and
+  release.
+
 ## [0.10.1] - 2026-10-13 - The bomb as it was
 
 ### Fixed

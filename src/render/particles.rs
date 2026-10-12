@@ -195,10 +195,12 @@ impl Particles {
         }
     }
 
-    /// Where the beam lands: teal sparks spraying out sideways along what it hit.
+    /// Where the beam lands: teal sparks splashing back off what it hit, down and out
+    /// to either side.
     pub fn beam_spray(&mut self, x: f32, y: f32) {
-        for side in [0.0, std::f32::consts::PI] {
-            let a = side + self.rng.range(-0.35, 0.15) * if side == 0.0 { 1.0 } else { -1.0 };
+        use std::f32::consts::FRAC_PI_2;
+        for side in [-1.0f32, 1.0] {
+            let a = FRAC_PI_2 - side * self.rng.range(0.5, 1.25);
             let s = self.rng.range(1.2, 2.8);
             let life = self.rng.range(5.0, 11.0);
             let c = if self.rng.chance(0.3) { CREAM } else { TEAL };
@@ -515,9 +517,9 @@ mod tests {
     use crate::tune::BLASTS;
 
     /// Shots knock chips off what they hit (the beam doesn't); where the beam lands,
-    /// sparks spray out sideways along what it hit.
+    /// sparks splash back down and out, both ways.
     #[test]
-    fn hits_chip_and_the_beam_sprays_sideways() {
+    fn hits_chip_and_the_beam_splashes_back() {
         let mut p = Particles::new();
         for _ in 0..20 {
             p.hit(50.0, 50.0, false);
@@ -533,7 +535,7 @@ mod tests {
             p.beam_spray(50.0, 50.0);
         }
         assert_eq!(p.len(), 40);
-        assert!(p.list.iter().all(|q| q.vx.abs() > q.vy.abs()), "sideways");
+        assert!(p.list.iter().all(|q| q.vy > 0.0 && q.vx.abs() > 0.3), "back down and out");
         assert!(p.list.iter().filter(|q| q.vx < 0.0).count() == 20, "both ways");
     }
 

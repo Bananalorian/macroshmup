@@ -3,6 +3,30 @@
 Session notes for Claude Code: what shipped, tuning that changed, known issues, what's next.
 Newest first.
 
+## v0.10.2 Arcade feel - 2026-10-13
+
+**Jason's list:** (1) chain only between non-fodder; (2) remove the beam wrap, "i really just
+wanted the end of the laser to look like it was impacting"; (3) rings at game start not from the
+player: he'll show me later (I couldn't find any at a run's start; candidates: the respawn
+ring at a fixed bottom-center spot, the bomb's rings, the invuln ring); (4) bigger arcade player
+bullets; (5) hitbox small vs big ship, he chose ALWAYS SHOW IT (asked with options); and the
+phase 3 wall ("can't maneuver... doesn't give me a path... bullets more arcade"): he chose fix
+the wall + bigger bullets with the same deadly cores.
+- slam_target skips `kind.fodder()` foes; test `it_never_slams_popcorn`.
+- Beam: `hit_box`, draw_wrap, wrap_path removed; draw_beam's end is a contact splash (3 rows,
+  flickering width) + flare; `beam_spray` throws sparks down and out.
+- ship.rs BOLT 5 px wide capsules (red/cream), POD_SHOT 3 px; SHOT_ALPHA 0.85, pods 0.7.
+- Hitbox: Settings default hitbox_always true; save key `hitbox_shown` (old `hitbox` ignored).
+- BULLET_LOOK 1.35 in art.rs (rims/outlines grow, cores and sim hitboxes unchanged).
+- P3 curtain gap 4 (was 3), jitter 3 (6), speed 1.5 (1.65), every 26 (24); test
+  `the_glitch_curtain_always_leaves_a_lane_the_ship_fits` (>= 30 px drawn, 3 seeds);
+  fairness `widest_gap_drawn`.
+- PG_SIM: 0 deaths/bombs, phases 18.6/22.8/23.2/21.3, score 3.76M, rank S 100%.
+- Screenshots: beam-impact.png (boss:3 seed 11 frames 162,165,168) replaces beam-wrap in the
+  README (beam-wrap.png kept for v0.9.0's changelog).
+
+**Open:** item 3 (he'll show me), the rank thresholds. **Next:** Sprint 10 (Style) on go.
+
 ## v0.10.1 The bomb as it was - 2026-10-13
 
 **Jason:** "i really like the chain atack. this is important. i feel like you changed the bomb

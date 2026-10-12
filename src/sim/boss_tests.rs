@@ -88,6 +88,31 @@ fn every_band_in_the_bottom_half_keeps_a_12_px_gap_in_every_phase() {
     }
 }
 
+/// Phase 3's curtain always leaves a lane the ship plainly fits through: through the
+/// whole phase, every band of the bottom half keeps a gap wider than the Pilgrim,
+/// measured on the bullets as they're drawn (bigger than what hurts).
+#[test]
+fn the_glitch_curtain_always_leaves_a_lane_the_ship_fits() {
+    for seed in [1, 2, 3] {
+        let mut w = phase(3, seed, true);
+        let mut bot = bot::Bot::new();
+        for f in 0..JAWS_PHASES[2].1 * TICK_HZ {
+            let c = bot.decide(&w);
+            w.tick(Controls { fire: false, ..c });
+            w.events.clear();
+            if f < 240 {
+                continue;
+            }
+            let mut y = FIELD_H as f32 / 2.0;
+            while y < FIELD_H as f32 {
+                let gap = super::fairness::widest_gap_drawn(&w, y, y + 4.0, BULLET_LOOK);
+                assert!(gap >= 30.0, "seed {seed}: at y={y} the widest lane is {gap:.1} px (frame {f})");
+                y += 4.0;
+            }
+        }
+    }
+}
+
 /// The sprint's bars, on a handful of seeds here (PG_SIM=boss:200 runs the full set):
 /// the bot gets through each phase without bombs on at least 80% of seeds, and each
 /// phase takes 20-35 s to break with full power.

@@ -49,7 +49,7 @@ pub struct Settings {
 
 impl Default for Settings {
     fn default() -> Self {
-        Settings { tuning: Tuning::default(), touch_sens: TOUCH_SENS, analog: false, muted: false, reduce_flash: false, shake: ShakeSetting::Full, view: View::default(), fullscreen: true, music_vol: VOLUME_DEFAULT, sound_vol: VOLUME_DEFAULT, hitbox_always: false, hold_beam: false, hiscore: 0, boss_unlocked: false }
+        Settings { tuning: Tuning::default(), touch_sens: TOUCH_SENS, analog: false, muted: false, reduce_flash: false, shake: ShakeSetting::Full, view: View::default(), fullscreen: true, music_vol: VOLUME_DEFAULT, sound_vol: VOLUME_DEFAULT, hitbox_always: true, hold_beam: false, hiscore: 0, boss_unlocked: false }
     }
 }
 
@@ -103,7 +103,9 @@ impl Settings {
                         s.sound_vol = n.min(10);
                     }
                 }
-                "hitbox" => s.hitbox_always = v == "always",
+                // "hitbox" (before v0.10.2, when it showed only while focused by default) is
+                // dropped, so everyone starts with it always on
+                "hitbox_shown" => s.hitbox_always = v != "focus",
                 "fire" => s.hold_beam = v == "hold",
                 "hiscore" => {
                     if let Ok(n) = v.parse::<u64>() {
@@ -124,7 +126,7 @@ impl Settings {
             ShakeSetting::Full => "full",
         };
         format!(
-            "speed={}\nfocus_ratio={}\nfocus_blend={}\ntouch_sens={}\nstick={}\nmuted={}\nreduce_flash={}\nshake={}\nfullscreen={}\nmusic={}\nsound={}\nhitbox={}\nfire={}\nhiscore={}\nboss={}\n",
+            "speed={}\nfocus_ratio={}\nfocus_blend={}\ntouch_sens={}\nstick={}\nmuted={}\nreduce_flash={}\nshake={}\nfullscreen={}\nmusic={}\nsound={}\nhitbox_shown={}\nfire={}\nhiscore={}\nboss={}\n",
             self.tuning.speed,
             self.tuning.focus_ratio,
             self.tuning.focus_blend,
