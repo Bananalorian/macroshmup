@@ -37,6 +37,7 @@ fn mix(id: Id) -> (f32, f64) {
         Id::Chomp => (VOL_CHOMP, 0.15),
         Id::Crunch => (VOL_CRUNCH, 0.04),
         Id::Dash => (VOL_DASH, 0.05),
+        Id::StyleUp => (VOL_STYLE, 0.1),
         Id::Swallowed => (VOL_SWALLOWED, 2.0),
         Id::Tick => (VOL_TICK, 0.03),
         Id::Slam => (VOL_SLAM, 0.3),
@@ -129,6 +130,19 @@ impl Audio {
         play_sound(s, PlaySoundParams { looped: false, volume: (base * vol * self.sfx_gain).min(1.0) });
     }
 
+    /// Variant `k` of a sound (the style stinger for each rank).
+    pub fn play_variant(&mut self, id: Id, k: usize, vol: f32) {
+        if self.muted || vol <= 0.01 {
+            return;
+        }
+        let (base, gap) = mix(id);
+        if !self.throttle.allow(id, get_time(), gap) {
+            return;
+        }
+        let Some(list) = self.bank.get(&id).filter(|l| !l.is_empty()) else { return };
+        play_sound(&list[k.min(list.len() - 1)], PlaySoundParams { looped: false, volume: (base * vol * self.sfx_gain).min(1.0) });
+    }
+
     /// Turn this frame's events into sounds.
     pub fn handle(&mut self, w: &World) {
         for e in &w.events {
@@ -155,6 +169,8 @@ impl Audio {
                 Event::BossRoar { .. } => self.play(Id::Roar, 1.0),
                 Event::BossBite { .. } => self.play(Id::Chomp, 1.0),
                 Event::SlamDash { .. } => self.play(Id::Dash, 1.0),
+                Event::Style { rank, up: true } if rank > 0 => self.play_variant(Id::StyleUp, rank as usize - 1, 1.0),
+                Event::Style { .. } => {}
                 Event::Slam { .. } => {
                     self.play(Id::Crunch, 1.0);
                     self.play(Id::Hit, 1.0);

@@ -15,7 +15,7 @@ use crate::tune::{AFTERIMAGE_MIN, AURA_R, BEAM_W, BG_DIM_AT, BG_DIM_MIN, BG_MAX_
 use macroquad::color::Color;
 
 /// Max opacity of the Pilgrim's shots, so they never read as enemy bullets.
-const SHOT_ALPHA: f32 = 0.85;
+const SHOT_ALPHA: f32 = 0.6;
 
 fn snap(v: f32) -> i32 {
     v.round() as i32
@@ -124,19 +124,19 @@ pub fn draw(r: &Renderer, lay: &Layout, w: &World, hitboxes: bool, show_dot: boo
 
     super::bullets::draw_guns(a, w, ox, oy);
 
-    // the Pilgrim's shots: chunky arcade bolts, a little see-through, no outline
+    // the Pilgrim's shots: translucent, streaked, no outline
     for s in &w.shots {
         let (tx, ty) = s.tip();
         match s.kind {
             ShotKind::Bolt => {
                 let src = a.r.ship.bolt[(s.age / 2 % 4) as usize];
-                a.blit(src, ox + snap(s.x) - 2, oy + snap(ty), 1, Color { a: SHOT_ALPHA, ..Color::new(1.0, 1.0, 1.0, 1.0) });
+                a.blit(src, ox + snap(s.x) - 1, oy + snap(ty), 1, Color { a: SHOT_ALPHA, ..Color::new(1.0, 1.0, 1.0, 1.0) });
             }
             ShotKind::Pod => {
                 let src = a.r.ship.pod_shot[(s.age / 2 % 2) as usize];
                 let ang = s.vx.atan2(-s.vy);
                 let (cx, cy) = ((s.x + tx) * 0.5, (s.y + ty) * 0.5);
-                a.blit_rot(src, ox as f32 + cx, oy as f32 + cy, ang, Color::new(1.0, 1.0, 1.0, 0.7));
+                a.blit_rot(src, ox as f32 + cx, oy as f32 + cy, ang, Color::new(1.0, 1.0, 1.0, 0.45));
             }
         }
     }

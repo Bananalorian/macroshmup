@@ -566,8 +566,36 @@ Done when
 
 ---
 
-### Sprint 10 — Style · v0.11.0 · *proposal*
+### Sprint 10 — Style · v0.11.0
 **Goal:** play with variety and the game tells you you're good at it.
+
+How the genre does it (research, 2026-10-13):
+- **Devil May Cry's style meter:** varied actions fill it, and it drains all the time,
+  so you keep moving.
+  - Repeating a move earns little for about 6 seconds.
+  - A hit drops you two ranks, not to nothing.
+  - The rank pays out in rewards.
+- **DoDonPachi's chain gauge:** every kill refills it, and it drains at a constant
+  speed; when it empties, the chain breaks. The chain multiplies the score, and what
+  you kill with (shot or laser) changes how much a kill refills it.
+- **Death of a Wish:** if the rank's rewards are optional, players ignore the system;
+  it has to matter.
+
+Built (v0.11.0):
+- 100 points a rank, D to SSS, and the meter drains every frame, faster the higher it is.
+- **The moves:** a kill (wide shot, beam, or in a slam chain), a point-blank kill, a
+  slam's strike, a graze, steady damage to the boss (shots and the beam separately),
+  and a break.
+  - Each move cools on its own: every use lately makes it earn less, and one use takes
+    about 5 seconds to cool.
+  - A bomb's kills earn none.
+- **What costs ranks:** a hit drops two ranks, a bomb one, and a death sends you to D.
+- **What it does:** the rank multiplies the points you earn by playing (kills, breaks,
+  shards, grazes), from x1.0 at D to x2.5 at SSS; grades and bonuses aren't multiplied.
+- **How it shows:** STYLE in the right panel beside the playfield, with the multiplier,
+  the rank in big letters and the meter draining under it. A new rank slams in with a
+  stinger that's a step higher for each rank; a lost one flashes red and shakes. On a
+  phone it's a line under the hints.
 
 Build
 - **The rank:** a style rank from D to SSS, rising with varied actions (kills, point-blank

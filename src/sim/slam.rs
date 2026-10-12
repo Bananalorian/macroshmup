@@ -119,9 +119,11 @@ impl World {
     /// it, and bounces back the way it came.
     fn strike(&mut self, target: Target, from: (f32, f32), to: (f32, f32), link: u32) {
         let alive = self.boxes.iter().any(|b| b.0 == target);
+        self.by = super::By::Slam;
         if alive {
             self.hurt(target, if matches!(target, Target::Boss(_)) { SLAM_BOSS_DMG } else { SLAM_DMG });
         }
+        self.stylish(super::style::Move::Slam, STYLE_SLAM.0 + STYLE_SLAM.1 * (link - 1) as f32);
         let mut out = std::mem::take(&mut self.cancelled);
         let before = out.len();
         self.hazards.cancel_within(to.0, to.1, SLAM_CANCEL_R, &mut out);

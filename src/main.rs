@@ -1223,6 +1223,7 @@ async fn amain() {
                     lives: world.lives,
                     bombs: world.bombs,
                     rush: world.rush,
+                    style: world.stage.as_ref().map(|_| hud::StyleView { rank: world.style.rank(), fill: world.style.fill(), mult: world.style.mult(), since: world.style.since, rose: world.style.rose }),
                     over: *over,
                     pattern: world.hazards.preset,
                     bullets: world.hazards.bullets.len(),

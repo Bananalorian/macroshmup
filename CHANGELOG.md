@@ -3,6 +3,57 @@
 Every version is one build sprint. Newest first. Versions are tagged in git, and
 each tag publishes a GitHub Release with downloads.
 
+## [0.11.0] - 2026-10-13 - Style
+
+### Added
+- **A style rank, Devil May Cry's in a shmup**
+  ([slamming in to S](docs/screenshots/style.png)). Playing with variety fills a
+  meter that drains all the time, faster the higher it is. It climbs D, C, B, A, S,
+  SS, SSS.
+  - **What fills it:** kills (with the shot, the beam, or in a slam chain),
+    point-blank kills, slam strikes, grazes, steady damage to the boss, and breaking
+    weak points, fins and phases. Bigger kills fill it more.
+  - **Mix it up:** each kind of move earns less the more you've used it lately, and
+    recovers in about 5 seconds. A bomb's kills earn none.
+  - **What costs it:** a hit drops two ranks, a bomb one, and a death sends you to D.
+  - **What it pays:** the rank multiplies the points you earn by playing, from x1.0
+    at D to x2.5 at SSS. Grades and bonuses aren't multiplied.
+  - **Where it shows:** STYLE in the right panel, with its multiplier, the rank in
+    big letters and the meter under it. A new rank slams in with a stinger, a step
+    higher for each rank; a lost one flashes red and shakes. On a phone it's a line
+    under the hints.
+- The balance report shows how long the bot spends at each rank and the best rank
+  each run reaches.
+
+### Changed
+- **Your shots are back** to the thin red streaks of v0.10.1 (v0.10.2's chunky bolts
+  are gone).
+- **On a phone, SLAM sits beside BOMB.** v0.10.0 put it over the hints. The sandbox's
+  NEXT button moved above them.
+
+### Checked
+- **Tests prove:**
+  - moves climb the ranks one at a time, and the multiplier rises with them;
+  - repeating a move earns less until it cools, and mixing moves earns more;
+  - the meter drains faster the higher it is;
+  - a hit costs two ranks, a bomb one, a death everything;
+  - in play, the rank multiplies a kill's points, a bomb's kill earns no style, a hit
+    drops it, and the sandbox keeps none;
+  - the touch buttons, SLAM beside BOMB now, stay off the playfield, and each answers
+    a tap on it;
+  - the stingers are clean sounds.
+- **Captures:** the rank in the right panel at D, at B and slamming in to S; the
+  phone's line and buttons. Every screenshot is retaken.
+- **PG_SIM=200:**
+  - cleared 100%, with no deaths and no bombs;
+  - JAWSTHIC's phases take 18.6 / 22.8 / 23.2 / 21.3 s;
+  - the bot spends 9% of the stage at D, 19% at C, 50% at B, 17% at A and 6% at S;
+  - its best is S in 74% of runs and SS in 16%. It never plays for style (no
+    point-blank, few grazes), so SSS is left for players who do;
+  - the median score is 4.06M (it was 3.76M).
+- Native and web builds are warning-free, and all 268 tests pass in both debug and
+  release.
+
 ## [0.10.2] - 2026-10-13 - Arcade feel
 
 ### Changed

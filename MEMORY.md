@@ -3,6 +3,34 @@
 Session notes for Claude Code: what shipped, tuning that changed, known issues, what's next.
 Newest first.
 
+## v0.11.0 Style (Sprint 10) - 2026-10-13
+
+**Jason:** "lets continue to sprint 10. return the ship bullets back to what they were" (the
+v0.10.2 chunky bolts: reverted to v0.10.1's BOLT/POD_SHOT, SHOT_ALPHA 0.6, offsets).
+Research (in SPRINTS.md): DMC style meter (variety, constant drain, ~6 s repetition penalty,
+a hit drops 2 ranks), DoDonPachi chain gauge (kills refill, constant drain, weapon matters),
+Death of a Wish (ranks must matter).
+- src/sim/style.rs: `Style { points, heat[9], boss_dmg[2], since, rose, peak, frames[7] }`,
+  `Move::{Kill, BeamKill, Blank, SlamKill, Slam, Graze, BossHit, BossBeam, Break}`, gain()
+  (fresh = 1/(1+heat*STYLE_STALE)), boss_damage(dmg, beam), drop(n), reset(), tick().
+- World: `style`, private `by: By {Shot, Beam, Bomb, Slam}` set before hurt() calls; kill()
+  gains by source (a chain's slowdown counts as Slam; bombs none) + Blank; grazes, slam strikes,
+  PartBreak/FinBreak/BossBreak(not timeout) gain; Struck drop(2), start_bomb drop(1),
+  final_death reset; award() multiplies Kill/Blank/Part/Shards/Graze by STYLE_MULT; style only
+  in Stage (sandbox none). Event::Style{rank, up} -> audio play_variant(Id::StyleUp, rank-1).
+- tune: STYLE_MULT [1,1.1,1.25,1.5,1.75,2,2.5], STYLE_DRAIN [0.07,0.11,0.15,0.19,0.23,0.28,
+  0.34], STALE 0.42, COOL 330, BOSS (130,11), KILL [11,13,16,34,38,78,156], BLANK 20,
+  SLAM (34,17), GRAZE 5, BREAK 70, VOL_STYLE 0.4.
+- HUD: `StyleView`; right panel `style_block` at y 206 (scale 4 letters, 5 slamming in, red
+  shake on a drop); portrait line at bottom+61. Portrait SLAM button moved to (cw-80, b+46),
+  NEXT to (cw-57, b+15).
+- PG_SIM report: STYLE, TIME AT EACH / BEST REACHED. Bot: D9 C19 B50 A17 S6; best S74 SS16.
+  Score 4.06M.
+- Screenshot: docs/screenshots/style.png (stage:0 seed 7 frame 3304, the S slam-in).
+
+**Open:** the rings (he'll show me), rank thresholds (bot S every run), style words? (letters
+only for now; DMC uses words; names are his call). **Next:** Sprint 11 (the Swarm) on go.
+
 ## v0.10.2 Arcade feel - 2026-10-13
 
 **Jason's list:** (1) chain only between non-fodder; (2) remove the beam wrap, "i really just

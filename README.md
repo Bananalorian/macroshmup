@@ -38,6 +38,8 @@ the font and every sound are built when the game starts. Written in Rust on
 
 ![The Slam: the reticle locks on, the sword dashes in and strikes, and chains on to the next target](docs/screenshots/slam-chain.png)
 
+![The style rank slamming in to S in the right panel, the multiplier at x1.75](docs/screenshots/style.png)
+
 ![Its death: every bullet cancels, blasts walk up from its tail, the screen whites out, then the tally](docs/screenshots/boss-death.png)
 
 ![Jason's JAWSTHIC beside the redraw at game size, traced from his sprite atlas](docs/screenshots/jawsthic-vs-art.png)
@@ -74,9 +76,14 @@ the font and every sound are built when the game starts. Written in Rust on
 
 ## Status
 
-**v0.10.2, arcade feel:** chunky arcade bolts, bigger enemy bullets round the same
-small cores, the hitbox always showing, a beam that hits instead of wrapping, the
-Slam chaining only between enemies worth it, and a phase 3 wall with a wider lane.
+**v0.11, style:** a style rank, Devil May Cry's: playing with variety (kills,
+point-blank kills, slams, grazes, the beam, breaks) climbs it from D to SSS while it
+drains; repeating yourself earns less, a hit costs two ranks; and the rank
+multiplies your points, up to x2.5.
+
+**v0.10.2, arcade feel:** bigger enemy bullets round the same small cores, the
+hitbox always showing, a beam that hits instead of wrapping, the Slam chaining only
+between enemies worth it, and a phase 3 wall with a wider lane.
 
 **v0.10, boss attacks & the Slam:** JAWSTHIC fights like a shmup boss now: each
 phase cycles through its own attacks one at a time, each telegraphed, then a rest

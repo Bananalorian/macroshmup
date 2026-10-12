@@ -350,6 +350,13 @@ fn stage_report(seeds: u32) {
         println!("PHASE {} GRADES: {}", p + 1, spread(&|r| r.grades[p]));
     }
     println!("STAGE RANK: {}", spread(&|r| r.rank));
+    // the style rank: the share of the stage spent at each, and the best each run reached
+    use crate::sim::style::RANKS;
+    let total: u64 = runs.iter().map(|r| r.style_frames.iter().sum::<u64>()).sum::<u64>().max(1);
+    let time: Vec<String> = (0..7).map(|k| format!("{} {:.0}%", RANKS[k], 100.0 * runs.iter().map(|r| r.style_frames[k]).sum::<u64>() as f32 / total as f32)).collect();
+    println!("STYLE, TIME AT EACH: {}", time.join("  "));
+    let peak: Vec<String> = (0..7).map(|k| format!("{} {:.0}%", RANKS[k], pct(runs.iter().filter(|r| r.style_peak == k as u8).count()))).collect();
+    println!("STYLE, BEST REACHED: {}", peak.join("  "));
     println!("done in {:.1} s", start.elapsed().as_secs_f32());
 }
 

@@ -417,18 +417,17 @@ const MUZZLE: [&[&str]; 4] = [
     &[".R.R.", "..C..", ".RCR."],
     &["..r..", ".rRr."],
 ];
-/// The twin red bolt, 4 frames: a chunky arcade shot in the sheet's red and cream, a
-/// fat rounded head with a hot core, a short tail flickering behind it.
+/// The twin red bolt, 4 frames (from the sheet's PROJECTILE row): a hot head, a streak, a dotted tail.
 const BOLT: [&[&str]; 4] = [
-    &[".RRR.", "RCCCR", "RCCCR", "RCCCR", "RCCCR", "RRCRR", "RRCRR", ".RCR.", ".RRR.", "..R..", "..R..", "..r..", "..r..", ".....", "..r.."],
-    &[".RRR.", "RCCCR", "RCCCR", "RCCCR", "RCCCR", "RRCRR", ".RCR.", ".RCR.", ".RRR.", "..R..", "..r..", "..r..", ".....", "..r..", "....."],
-    &[".RRR.", "RCCCR", "RCCCR", "RCCCR", "RRCRR", "RRCRR", ".RCR.", ".RRR.", "..R..", "..R..", "..r..", ".....", "..r..", ".....", "..r.."],
-    &[".RRR.", "RCCCR", "RCCCR", "RCCCR", "RCCCR", "RRCRR", "RRCRR", ".RCR.", ".RRR.", "..R..", "..R..", "..r..", ".....", "..r..", "....."],
+    &[".R.", "RCR", "RCR", "RCR", "RRR", "RRR", ".R.", ".R.", ".R.", ".R.", ".r.", ".r.", "...", ".r.", "...", "...", ".r.", "..."],
+    &[".R.", "RCR", "RCR", "RCR", "RRR", ".R.", ".R.", ".R.", ".R.", ".r.", ".r.", ".r.", "...", "...", ".r.", "...", "...", ".r."],
+    &[".R.", "RCR", "RCR", "RRR", "RRR", ".R.", ".R.", ".R.", ".R.", ".R.", ".r.", "...", ".r.", "...", "...", ".r.", "...", "..."],
+    &[".R.", "RCR", "RCR", "RCR", "RRR", "RRR", ".R.", ".R.", ".R.", ".r.", ".r.", "...", "...", ".r.", "...", "...", "...", ".r."],
 ];
-/// The pod shot: the same, slimmer.
+/// The thinner pod shot.
 const POD_SHOT: [&[&str]; 2] = [
-    &[".R.", "RCR", "RCR", "RCR", "RCR", ".R.", ".R.", ".r.", ".r.", "...", ".r."],
-    &[".R.", "RCR", "RCR", "RCR", ".R.", ".R.", ".r.", ".r.", "...", ".r.", "..."],
+    &["R.", "CR", "RR", "R.", "R.", "R.", "r.", "r.", "r.", "..", "r.", "..", "..", "r."],
+    &[".R", "RC", "RR", ".R", ".R", ".R", ".r", ".r", ".r", "..", ".r", "..", "r.", ".."],
 ];
 /// The hitbox dot (2 px radius), shown while focused.
 const DOT: [&str; 5] = [".TTT.", "TCCCT", "TCCCT", "TCCCT", ".TTT."];

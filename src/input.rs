@@ -59,9 +59,9 @@ pub fn touch_buttons(lay: &Layout) -> [(Button, f32, f32, f32); 4] {
     match lay.orient {
         Orient::Portrait => [
             (Button::Bomb, (lay.cw - 34) as f32, (f.bottom() + 46) as f32, 17.0),
-            (Button::Slam, 34.0, (f.bottom() + 46) as f32, 17.0),
+            (Button::Slam, (lay.cw - 80) as f32, (f.bottom() + 46) as f32, 17.0),
             (Button::Pause, (lay.cw - 12) as f32, 12.0, 10.0),
-            (Button::Next, (lay.cw - 80) as f32, (f.bottom() + 52) as f32, 13.0),
+            (Button::Next, (lay.cw - 57) as f32, (f.bottom() + 15) as f32, 12.0),
         ],
         Orient::Landscape => [
             (Button::Bomb, ((f.right() + lay.cw) / 2) as f32, (lay.ch - 96) as f32, 20.0),

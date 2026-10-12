@@ -253,6 +253,24 @@ pub const SLAM_INVULN: u32 = 60;
 pub const RUSH_FILL: [f32; 7] = [0.08, 0.1, 0.12, 0.35, 0.4, 0.8, 1.5];
 pub const RUSH_BOSS: f32 = 0.00025;
 pub const RUSH_START: f32 = 1.0;
+/// The style rank (Devil May Cry's, D to SSS, 100 points a rank): what each rank
+/// multiplies your points by; how much the meter drains a frame at each; how much
+/// each recent use of a move counts against it, and frames for one use to cool off;
+/// boss damage turned into style (each so much damage worth so much).
+pub const STYLE_MULT: [f32; 7] = [1.0, 1.1, 1.25, 1.5, 1.75, 2.0, 2.5];
+pub const STYLE_DRAIN: [f32; 7] = [0.07, 0.11, 0.15, 0.19, 0.23, 0.28, 0.34];
+pub const STYLE_STALE: f32 = 0.42;
+pub const STYLE_COOL: u32 = 330;
+pub const STYLE_BOSS: (f32, f32) = (130.0, 11.0);
+/// What each move is worth: a kill, by what died (drone, courier, usher, gunship,
+/// buoy, heavy, derelict); point-blank, on top; a slam's strike and each further
+/// link; a graze; a break (a weak point, a fin, a boss phase).
+pub const STYLE_KILL: [f32; 7] = [11.0, 13.0, 16.0, 34.0, 38.0, 78.0, 156.0];
+pub const STYLE_BLANK: f32 = 20.0;
+pub const STYLE_SLAM: (f32, f32) = (34.0, 17.0);
+pub const STYLE_GRAZE: f32 = 5.0;
+pub const STYLE_BREAK: f32 = 70.0;
+
 /// Hit-stop on a slam's strike (frames).
 pub const HITSTOP_SLAM: u32 = 4;
 
@@ -809,6 +827,8 @@ pub const VOL_CHOMP: f32 = 0.5;
 pub const VOL_CRUNCH: f32 = 0.45;
 /// The slam's dash: a rising whoosh.
 pub const VOL_DASH: f32 = 0.5;
+/// A new style rank's stinger.
+pub const VOL_STYLE: f32 = 0.4;
 pub const CRUNCH_BY_SIZE: [f32; 4] = [0.7, 0.85, 1.0, 1.0];
 pub const VOL_SWALLOWED: f32 = 0.7;
 /// The score: the tally's ticks, a grade's or the rank's slam, an extend.

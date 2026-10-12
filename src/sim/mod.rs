@@ -21,6 +21,7 @@ pub mod score;
 pub mod shots;
 mod slam;
 pub use slam::Slam;
+pub mod style;
 pub mod stage1;
 #[cfg(test)]
 mod stage_tests;
@@ -86,6 +87,8 @@ pub enum Event {
     BossRoar { x: f32, y: f32 },
     /// JAWSTHIC's jaws snapped shut at `(x, y)`, lunging.
     BossBite { x: f32, y: f32 },
+    /// The style rank changed to `rank` (0 D to 6 SSS), up or down.
+    Style { rank: u8, up: bool },
     /// The Slam: link `link` of a chain dashed off from `(x, y)`, and struck at `(x, y)`.
     SlamDash { x: f32, y: f32, link: u32 },
     Slam { x: f32, y: f32, link: u32 },
@@ -121,6 +124,15 @@ pub enum Target {
     Dummy(usize),
     Foe(usize, usize),
     Boss(usize),
+}
+
+/// What's dealing damage (for the style a kill earns).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum By {
+    Shot,
+    Beam,
+    Bomb,
+    Slam,
 }
 
 /// Where the Pilgrim is in its life.
@@ -219,6 +231,9 @@ pub struct World {
     pub rush: f32,
     pub slam: Option<slam::Slam>,
     pub reticle: Option<(Target, Rect)>,
+    /// The style rank (Stage 1 only), and what's dealing damage right now.
+    pub style: style::Style,
+    by: By,
     pub foes: Foes,
     /// Stage 1's script and clock (none in the sandbox).
     pub stage: Option<Stage>,
@@ -264,6 +279,8 @@ impl World {
             rush: RUSH_START,
             slam: None,
             reticle: None,
+            style: style::Style::default(),
+            by: By::Shot,
             foes: Foes::new(seed),
             stage: None,
             boss: None,
@@ -453,6 +470,10 @@ impl World {
         }
         self.refill_shots();
         self.boss_aftermath(first_event);
+        if self.stage.is_some() {
+            let r = self.style.tick();
+            self.restyled(r);
+        }
         self.invuln = self.invuln.saturating_sub(1);
         self.dip = self.dip.saturating_sub(1);
         self.slow = self.slow.saturating_sub(1);
@@ -467,7 +488,13 @@ impl World {
             let before = out.len();
             let event = self.events[k];
             match event {
-                Event::BossBreak { .. } | Event::BossFall => self.hazards.cancel_owner(BOSS_ID, &mut out),
+                Event::BossBreak { timeout, .. } => {
+                    self.hazards.cancel_owner(BOSS_ID, &mut out);
+                    if !timeout {
+                        self.stylish(style::Move::Break, STYLE_BREAK);
+                    }
+                }
+                Event::BossFall => self.hazards.cancel_owner(BOSS_ID, &mut out),
                 Event::BossDown { .. } => {
                     self.hazards.cancel_within(0.0, 0.0, f32::MAX, &mut out);
                     self.slow = JAWS_SLOWMO;
@@ -479,7 +506,11 @@ impl World {
                         self.finish_stage();
                     }
                 }
-                Event::FinBreak { x, y, .. } => self.award(x, y, FIN_POINTS, Award::Part),
+                Event::FinBreak { x, y, .. } => {
+                    self.award(x, y, FIN_POINTS, Award::Part);
+                    self.stylish(style::Move::Break, STYLE_BREAK);
+                }
+
                 _ => {}
             }
             let shards = out.len() - before;
@@ -501,6 +532,11 @@ impl World {
         if self.stage.is_none() || n == 0 {
             return;
         }
+        // the style rank multiplies what you earn by playing (not the grades and bonuses)
+        let n = match how {
+            Award::Kill | Award::Blank | Award::Part | Award::Shards | Award::Graze => (n as f32 * self.style.mult()).round() as u32,
+            _ => n,
+        };
         let extends = self.score.add(n);
         if how != Award::Graze {
             self.events.push(Event::Points { x, y, n, how });
@@ -511,6 +547,21 @@ impl World {
                 self.lives += 1;
             }
             self.events.push(Event::Extend);
+        }
+    }
+
+    /// A move worth `base` style points (Stage 1 only).
+    fn stylish(&mut self, m: style::Move, base: f32) {
+        if self.stage.is_some() {
+            let r = self.style.gain(m, base);
+            self.restyled(r);
+        }
+    }
+
+    /// The style rank changed (or not): say so.
+    fn restyled(&mut self, r: Option<u8>) {
+        if let Some(rank) = r {
+            self.events.push(Event::Style { rank, up: self.style.rose });
         }
     }
 
@@ -622,6 +673,8 @@ impl World {
         }
         self.lives = self.lives.saturating_sub(1);
         self.life = Life::Dead { t: 0 };
+        let r = self.style.reset();
+        self.restyled(r);
         self.beam = None;
         self.events.push(Event::Death { x: self.player.x, y: self.player.y });
     }
@@ -644,6 +697,8 @@ impl World {
         self.invuln_blink = false;
         self.dip = BOMB_DIP;
         self.events.push(Event::Bomb { x, y });
+        let r = self.style.drop(1);
+        self.restyled(r);
     }
 
     /// The bomb's ring spreads, cancelling every bullet it crosses (into teal
@@ -657,6 +712,7 @@ impl World {
         self.cancel_shards |= out.len() > before;
         self.cancelled = out;
         self.hits_now.clear();
+        self.by = By::Bomb;
         for &(t, rect) in &self.boxes {
             if rect.dist(b.x, b.y) > r {
                 continue;
@@ -744,6 +800,10 @@ impl World {
                 let hurt = b.hurt(p, dmg, &mut self.events);
                 if hurt != Hurt::Nothing {
                     self.rush = (self.rush + dmg * RUSH_BOSS).min(SLAM_LINKS as f32);
+                    if self.by != By::Bomb && self.stage.is_some() {
+                        let r = self.style.boss_damage(dmg, self.by == By::Beam);
+                        self.restyled(r);
+                    }
                 }
                 match hurt {
                     // a turret broke off: just it; the phase broke: the whole boss, till the next
@@ -760,6 +820,7 @@ impl World {
                     let (x, y) = ((r.x0 + r.x1) * 0.5, (r.y0 + r.y1) * 0.5);
                     self.events.push(Event::PartBreak { x, y });
                     self.award(x, y, PART_POINTS, Award::Part);
+                    self.stylish(style::Move::Break, STYLE_BREAK);
                     self.boxes.retain(|b| b.0 != t);
                 }
                 Hurt::Hit | Hurt::Nothing => {}
@@ -775,6 +836,21 @@ impl World {
         self.fill_rush(RUSH_FILL[kind as usize]);
         let (n, blank) = score::kill_points(kind, (x - self.player.x).hypot(y - self.player.y));
         self.award(x, y, n, if blank { Award::Blank } else { Award::Kill });
+        // style: what killed it (a bomb's kills earn none); a kill in a chain's
+        // slowdown counts as the slam's
+        let by = if self.slam.is_some() { By::Slam } else { self.by };
+        let m = match by {
+            By::Shot => Some(style::Move::Kill),
+            By::Beam => Some(style::Move::BeamKill),
+            By::Slam => Some(style::Move::SlamKill),
+            By::Bomb => None,
+        };
+        if let Some(m) = m {
+            self.stylish(m, STYLE_KILL[kind as usize]);
+            if blank {
+                self.stylish(style::Move::Blank, STYLE_BLANK);
+            }
+        }
         self.boxes.retain(|b| !matches!(b.0, Target::Foe(j, _) if j == i));
         if kind.heavy() {
             let mut out = std::mem::take(&mut self.cancelled);
@@ -805,6 +881,7 @@ impl World {
                 let (_, ty) = s.tip();
                 let y = ty.max(rect.y0).min(rect.y1);
                 self.events.push(Event::Hit { x: s.x, y, beam: false });
+                self.by = By::Shot;
                 self.hurt(t, s.dmg);
             } else {
                 i += 1;
@@ -824,6 +901,7 @@ impl World {
         let hit = self.boxes.iter().filter(|b| b.1.overlaps(&lane)).max_by(|a, b| a.1.y1.total_cmp(&b.1.y1)).copied();
         let top = hit.map_or(0.0, |b| b.1.y1.min(bottom));
         self.beam = Some(Beam { x: px, top, bottom, hit: hit.map(|b| b.0) });
+        self.by = By::Beam;
         if let Some((t, _)) = hit {
             self.events.push(Event::Hit { x: px, y: top, beam: true });
             self.hurt(t, BEAM_DMG);
@@ -875,6 +953,9 @@ impl World {
             }
         }
         self.award(px, py, grazed * GRAZE_POINTS, Award::Graze);
+        for _ in 0..grazed {
+            self.stylish(style::Move::Graze, STYLE_GRAZE);
+        }
         // crashing into an enemy's body is as bad as a bullet, and so is the boss's laser
         if !safe {
             hit |= self.foes.list.iter().any(|e| e.alive() && e.body().dist(px, py) < HITBOX_R);
@@ -884,6 +965,8 @@ impl World {
             // struck: the deathbomb window opens
             self.hits += 1;
             self.life = Life::Struck { left: DEATHBOMB };
+            let r = self.style.drop(2);
+            self.restyled(r);
             self.player.hit_t = BUMP_FLASH;
             self.events.push(Event::Struck { x: px, y: py });
         }
@@ -952,6 +1035,35 @@ mod tests {
         let base = KILL_POINTS[EnemyKind::Gunship as usize];
         assert_eq!(points(&w), vec![(base, Award::Kill), (base * POINT_BLANK.1, Award::Blank)]);
         assert_eq!(w.score.points, (base + base * POINT_BLANK.1) as u64);
+    }
+
+    /// The style rank multiplies what kills earn; kills raise it (a bomb's don't); a
+    /// hit drops it two ranks; the sandbox keeps none.
+    #[test]
+    fn the_style_rank_multiplies_kills_and_falls_when_hit() {
+        let mut w = quiet_stage();
+        let (px, py) = (w.player.x, w.player.y);
+        w.style = style::Style::default();
+        w.style.gain(style::Move::Break, 450.0);
+        assert_eq!(w.style.rank(), 4, "S");
+        let i = parked(&mut w, EnemyKind::Gunship, px, py - 200.0);
+        let before = w.style.points;
+        w.kill(i);
+        let base = KILL_POINTS[EnemyKind::Gunship as usize];
+        assert_eq!(points(&w), vec![((base as f32 * STYLE_MULT[4]).round() as u32, Award::Kill)]);
+        assert!(w.style.points > before, "the kill raised it");
+        let j = parked(&mut w, EnemyKind::Gunship, px, py - 200.0);
+        w.by = By::Bomb;
+        let before = w.style.points;
+        w.kill(j);
+        assert_eq!(w.style.points, before, "a bomb's kill earns no style");
+        w.events.clear();
+        w.debug_strike();
+        w.tick(Controls::default());
+        assert!(w.events.contains(&Event::Style { rank: 2, up: false }), "struck: S to B");
+        let mut sandbox = World::new(1, Tuning::default());
+        sandbox.stylish(style::Move::Kill, 500.0);
+        assert_eq!(sandbox.style.points, 0.0, "the sandbox keeps no style");
     }
 
     #[test]

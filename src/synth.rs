@@ -708,6 +708,26 @@ pub fn glitch(seed: u32) -> Vec<f32> {
     b
 }
 
+/// A new style rank: a bright two-note stinger (three from S up), a step higher for
+/// each rank (`rank` 1 C to 6 SSS).
+pub fn style_up(rank: u32) -> Vec<f32> {
+    let len = 0.24;
+    let mut b = buf(len);
+    let root = 392.0 * 2f32.powf(rank as f32 * 2.0 / 12.0);
+    let notes: &[(f32, f32)] = if rank >= 4 { &[(1.0, 0.0), (1.5, 0.05), (2.0, 0.1)] } else { &[(1.0, 0.0), (1.5, 0.06)] };
+    for &(k, at) in notes {
+        for (i, s) in b.iter_mut().enumerate() {
+            let t = i as f32 / SR - at;
+            if t > 0.0 {
+                *s += sq(root * k * t, 0.25) * (-t * 14.0).exp() * attack(t, 0.003) * 0.3;
+            }
+        }
+    }
+    let mut b = reverb(&b, 0.25, 0.9, 0.5);
+    normalize(&mut b, 0.7);
+    b
+}
+
 /// The slam's dash: a short whoosh of noise rising fast, a bright edge on top.
 pub fn dash(seed: u32) -> Vec<f32> {
     let len = 0.2;
@@ -827,6 +847,8 @@ pub enum Id {
     Crunch,
     /// The slam's dash.
     Dash,
+    /// A new style rank (a variant for each, C to SSS).
+    StyleUp,
     Swallowed,
     /// The score: a tally line's tick, a grade's slam, an extend's jingle.
     Tick,
@@ -943,6 +965,9 @@ pub fn bank() -> Vec<(Id, Vec<u8>)> {
     }
     for k in 0..2 {
         v.push((Id::Dash, mono(dash(1490 + k))));
+    }
+    for rank in 1..=6 {
+        v.push((Id::StyleUp, mono(style_up(rank))));
     }
     v.push((Id::Swallowed, mono(swallowed(1400))));
     v.push((Id::Tick, mono(tally_tick())));

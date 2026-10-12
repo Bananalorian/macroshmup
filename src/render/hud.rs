@@ -274,6 +274,8 @@ pub struct HudView<'a> {
     pub lives: u8,
     pub bombs: u8,
     pub rush: f32,
+    /// The style rank (Stage 1 only).
+    pub style: Option<StyleView>,
     /// The game-over menu's selected row, once the last ship is gone.
     pub over: Option<usize>,
     /// The sandbox: pattern number, bullets on screen, hits, grazes.
@@ -302,6 +304,17 @@ impl HudView<'_> {
     fn best(&self) -> u64 {
         if self.ranked { self.hiscore.max(self.score) } else { self.hiscore }
     }
+}
+
+/// The style rank as the HUD shows it: the rank (0 D to 6 SSS), how far through it,
+/// what it multiplies points by, and frames since it changed (and whether it rose).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct StyleView {
+    pub rank: u8,
+    pub fill: f32,
+    pub mult: f32,
+    pub since: u32,
+    pub rose: bool,
 }
 
 /// What the HUD shows of Stage 1.
@@ -532,6 +545,9 @@ pub fn stage(r: &Renderer, lay: &Layout, v: &HudView) {
             };
             small(a, hint, r0, 170, SLATE);
             strip(a, r0, 190, 12, 6);
+            if let Some(st) = v.style {
+                style_block(a, st, r0, r1, 206);
+            }
             panel_stamps(a, r0, r1, lay.ch - 42, false);
             if v.mode == Mode::Touch {
                 buttons(a, lay, v);
@@ -564,6 +580,15 @@ pub fn stage(r: &Renderer, lay: &Layout, v: &HudView) {
             let hint = if v.mode == Mode::Pad { "START: PAUSE + TUNING" } else { "DRAG ANYWHERE TO FLY" };
             small(a, hint, 8, f.bottom() + 36, ASH);
             small(a, "2ND FINGER: FOCUS", 8, f.bottom() + 48, SLATE);
+            if let Some(st) = v.style {
+                let c = match (st.since < 14, st.rose, st.rank) {
+                    (true, true, _) if st.since % 4 < 2 => WHITE_A,
+                    (true, false, _) => SIGNAL,
+                    (_, _, r) if r >= 4 => TEAL_HOT,
+                    _ => CREAM,
+                };
+                text(a, &format!("STYLE {}  X{:.2}", crate::sim::style::RANKS[st.rank as usize], st.mult), 8, f.bottom() + 61, 1, 1, c);
+            }
             let stats = match v.stage {
                 Some(s) => format!("KILLS {}/{}  MISSES {}  GRAZE {}", s.killed, s.spawned, v.hits, v.grazes),
                 None => format!("BULLETS {}  HITS {}  GRAZE {}", v.bullets, v.hits, v.grazes),
@@ -820,6 +845,32 @@ fn icons(a: &Atlas, icon: Rect, n: u8, right: i32, y: i32) {
     for i in 0..n as i32 {
         a.blit(icon, right - 7 - i * 9, y, 1, WHITE_A);
     }
+}
+
+/// The style rank in the right panel, beside the playfield: STYLE and the multiplier,
+/// the rank in big letters (a new one slams in, a lost one flashes red and shakes),
+/// and the meter draining under it.
+fn style_block(a: &Atlas, st: StyleView, r0: i32, r1: i32, y: i32) {
+    use crate::sim::style::RANKS;
+    hrule(a, r0, r1, y);
+    small(a, "STYLE", r0, y + 8, ASH);
+    text_r(a, &format!("X{:.2}", st.mult), r1, y + 8, if st.rank >= 4 { TEAL_HOT } else { SLATE });
+    let fresh = st.since < 14;
+    let base = match st.rank {
+        0 | 1 => ASH,
+        2 | 3 => CREAM,
+        _ => TEAL_HOT,
+    };
+    let (scale, color, dx) = match (fresh, st.rose) {
+        (true, true) => (if st.since < 5 { 5 } else { 4 }, if st.since % 4 < 2 { WHITE_A } else { base }, 0),
+        (true, false) => (4, SIGNAL, [0, 1, 0, -1][(st.since % 4) as usize]),
+        _ => (4, base, 0),
+    };
+    // the meter under it; a slamming-in rank grows down over it for a moment
+    let w = r1 - r0;
+    a.fill(r0, y + 52, w, 3, DUSK);
+    a.fill(r0, y + 52, (w as f32 * st.fill).round() as i32, 3, base);
+    text(a, RANKS[st.rank as usize], r0 + dx, y + 20, scale, TRACK, color);
 }
 
 /// The rush gauge, right-aligned at `right`: a segment a slam link, teal when full,

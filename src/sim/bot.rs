@@ -237,6 +237,9 @@ pub struct StageRun {
     pub extends: u8,
     pub grades: [Option<super::score::Grade>; 4],
     pub rank: Option<super::score::Grade>,
+    /// Frames at each style rank (D to SSS), and the best reached.
+    pub style_frames: [u64; 7],
+    pub style_peak: u8,
 }
 
 /// The bot plays Stage 1 from the top with 3 lives, with or without bombs, shooting
@@ -295,6 +298,8 @@ pub fn stage_trial(seed: u64, bombs: bool, shoot: bool) -> StageRun {
     run.killed = s.killed;
     run.spawned = s.spawned;
     run.grazes = w.grazes;
+    run.style_frames = w.style.frames;
+    run.style_peak = w.style.peak;
     run.score = w.score.points;
     run.extends = w.score.extends;
     run.grades = w.score.grades;
