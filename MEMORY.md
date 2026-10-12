@@ -3,6 +3,16 @@
 Session notes for Claude Code: what shipped, tuning that changed, known issues, what's next.
 Newest first.
 
+## v0.8.1 Full size, dark blades - 2026-10-12
+
+**Jason:** "return the ship to the previous size. and remove the led lines on both sides of the
+ship. interferes with animation when going right and left." The v0.7.3 shrink is undone (he
+asked for it, then preferred the old size): ship.rs is back to v0.7.2's numbers (SIZE 33x49,
+TIP -21, SHOULDER -8, FOOT 7, ARCH -15, NACELLE_ROWS (8, 14), POD_ROWS (11, 21), KEYS as
+v0.7.2, NACELLE_W/POD_W 3, pod window rows 13-16, strobes at 16), keeping the named rows and the
+roll's nacelle-column fallback. Channel lights: `None` unless `pose.beaming` (then flowing
+TEAL_HOT); the lock's charge band still runs. Nacelle/capsule window dots kept (asked him).
+
 ## v0.8.0 Score & shell (Sprint 7) - 2026-10-12
 
 **Jason's calls:** the score sprint with arcade grades: "s/a/b/ etc. flare when the score

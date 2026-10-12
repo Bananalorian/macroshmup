@@ -19,23 +19,23 @@ pub const FORMS: usize = 5;
 /// Rolls from hard left to hard right.
 const BANKS: usize = 5;
 /// The canvas: odd both ways, centered on the hitbox.
-const SIZE: (i32, i32) = (27, 41);
+const SIZE: (i32, i32) = (33, 49);
 const CX: i32 = SIZE.0 / 2;
 const CY: i32 = SIZE.1 / 2;
 /// Rows from the hitbox: the sword's tip (the beam leaves from here), the shoulder,
 /// and the foot of the blades.
-pub const TIP: i32 = -17;
-const SHOULDER: i32 = -6;
-const FOOT: i32 = 5;
+pub const TIP: i32 = -21;
+const SHOULDER: i32 = -8;
+const FOOT: i32 = 7;
 /// The channel: the point of its arch, and the step where it widens.
-const ARCH: i32 = -12;
+const ARCH: i32 = -15;
 const STEP: i32 = -1;
 /// The crossbar's middle row (sparks fly off it as the blades lock).
 pub const BAR: i32 = FOOT + 2;
 /// The nacelles' rows (top, bottom; the nozzle is under the bottom) and the
 /// capsule's.
-const NACELLE_ROWS: (i32, i32) = (FOOT + 1, FOOT + 6);
-const POD_ROWS: (i32, i32) = (FOOT + 4, FOOT + 12);
+const NACELLE_ROWS: (i32, i32) = (FOOT + 1, FOOT + 7);
+const POD_ROWS: (i32, i32) = (FOOT + 4, FOOT + 14);
 
 /// One frame of the transformation, the left half.
 struct Key {
@@ -56,20 +56,20 @@ struct Key {
     strut: i32,
 }
 
-/// Flight form to laser form. The blades close in 2 px into one broad sword (as
+/// Flight form to laser form. The blades close in 3 px into one broad sword (as
 /// wide as both blades' stone, so the ship doesn't shrink as it focuses), their
 /// channels slide together into one core, the antennas fold away and the nacelles
 /// tuck in beside the sword (in flight they hang under the blades' outer edges).
 const KEYS: [Key; FORMS] = [
-    Key { inner: -2, core: -5, outer: -9, upper: -8, nacelle: -10, corner: -11, antenna: (-7, 3), strut: -5 },
-    Key { inner: -1, core: -3, outer: -8, upper: -7, nacelle: -10, corner: -10, antenna: (-6, 2), strut: -5 },
-    Key { inner: -1, core: -2, outer: -8, upper: -8, nacelle: -9, corner: -9, antenna: (-5, 1), strut: -5 },
-    Key { inner: 0, core: -1, outer: -7, upper: -7, nacelle: -9, corner: -9, antenna: (0, 0), strut: -4 },
-    Key { inner: 0, core: 0, outer: -7, upper: -7, nacelle: -9, corner: -8, antenna: (0, 0), strut: -4 },
+    Key { inner: -3, core: -7, outer: -12, upper: -11, nacelle: -12, corner: -13, antenna: (-9, 4), strut: -7 },
+    Key { inner: -2, core: -5, outer: -11, upper: -10, nacelle: -12, corner: -13, antenna: (-8, 3), strut: -7 },
+    Key { inner: -1, core: -3, outer: -10, upper: -9, nacelle: -12, corner: -12, antenna: (-7, 1), strut: -7 },
+    Key { inner: 0, core: -1, outer: -9, upper: -9, nacelle: -11, corner: -11, antenna: (0, 0), strut: -6 },
+    Key { inner: 0, core: 0, outer: -8, upper: -8, nacelle: -11, corner: -10, antenna: (0, 0), strut: -6 },
 ];
 /// The nacelles' and the capsule's half widths.
-const NACELLE_W: i32 = 2;
-const POD_W: i32 = 2;
+const NACELLE_W: i32 = 3;
+const POD_W: i32 = 3;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum M {
@@ -191,7 +191,7 @@ fn layout(k: &Key) -> Map {
             map.over(0, y, M::Seam);
         }
     }
-    for (dx, y) in [(2, -4), (2, 2)] {
+    for (dx, y) in [(2, -6), (3, -5), (2, 2)] {
         map.over(k.outer + dx, y, M::Crack);
     }
     // a broad face (the sword's) gets a wider bevel down its edge
@@ -235,11 +235,11 @@ fn layout(k: &Key) -> Map {
             map.put(x, y, M::Metal, Piece::Pod);
         }
     }
-    for y in top + 2..=top + 4 {
+    for y in top + 2..=top + 5 {
         map.put(0, y, M::Window, Piece::Pod);
     }
     map.put(0, bottom - 2, M::Red, Piece::Pod);
-    map.put(-POD_W, top + 4, M::Red, Piece::Pod);
+    map.put(-POD_W, top + 5, M::Red, Piece::Pod);
     for x in -1..=1 {
         map.put(x, bottom + 1, M::Nozzle, Piece::Pod);
     }
@@ -672,10 +672,13 @@ fn light_on(l: &Light, pose: &Pose) -> Option<(Color, f32)> {
                     return Some((TEAL_HOT, 1.0));
                 }
             }
-            // steady dashes, flowing up the sword only while the laser fires (in
-            // flight, moving dashes down both blades fight the banking frames)
-            let phase = if pose.beaming { f as i32 } else { 0 };
-            ((l.dy + phase).rem_euclid(4) < 2).then_some(if pose.beaming { (TEAL_HOT, 1.0) } else { (TEAL, 0.85) })
+            // dark in flight (lit dashes down both blades fought the banking frames
+            // as it moved side to side); on the sword they flow up to the tip while
+            // the laser fires
+            if !pose.beaming {
+                return None;
+            }
+            ((l.dy + f as i32).rem_euclid(4) < 2).then_some((TEAL_HOT, 1.0))
         }
         Glow::Heart => {
             let base = if pose.fire_t > 0 { 0.75 } else { 0.4 };
@@ -811,11 +814,10 @@ mod tests {
         let cols: Vec<i32> = (TIP - 4..=CY).flat_map(|y| span(&map, y)).collect();
         let (lo, hi) = (*cols.iter().min().unwrap(), *cols.iter().max().unwrap());
         assert_eq!(lo, -hi, "symmetric about the hitbox");
-        // v0.7.3: 20% smaller than v0.7.1's 31 x 44, with every part kept
-        assert!((24..=26).contains(&(hi - lo + 1)), "{} wide with its nacelles", hi - lo + 1);
+        assert!((29..=33).contains(&(hi - lo + 1)), "{} wide with its nacelles", hi - lo + 1);
         let rows: Vec<i32> = (-CY..=CY).filter(|&y| !span(&map, y).is_empty()).collect();
         let h = rows.last().unwrap() - rows[0] + 1;
-        assert!((34..=37).contains(&h), "{h} tall");
+        assert!((42..=48).contains(&h), "{h} tall");
         assert_eq!(rows.last(), Some(&(POD_ROWS.1 + 1)), "the capsule's nozzle is the bottom row");
     }
 
@@ -903,20 +905,20 @@ mod tests {
         }
     }
 
-    /// In flight the channels' dashes hold still, firing or not (moving dashes down
-    /// both blades fought the banking frames); they flow up the sword only while
-    /// the laser fires. The windows hold steady too.
+    /// In flight, firing or not and mid-transformation, the channels stay dark and
+    /// the windows steady (lit lines down both blades fought the banking frames);
+    /// the channels light and flow up the sword only while the laser fires.
     #[test]
-    fn the_lights_only_flow_while_the_laser_fires() {
+    fn the_channels_light_only_while_the_laser_fires() {
         let ship = frame_image(0, 0).1;
-        let shown = |pose: &Pose| ship.iter().map(|l| light_on(l, pose).map(|(c, k)| (c.r, c.g, c.b, k))).collect::<Vec<_>>();
-        for (fire_t, form) in [(0, 0.0), (9, 0.0), (9, 0.6), (0, 1.0)] {
-            let at = |frame: u64| shown(&Pose { fire_t, form, frame, ..Default::default() });
-            let quiet: Vec<_> = (0..8).map(|f| at(f * 7)).collect();
-            assert!(quiet.windows(2).all(|w| w[0].iter().zip(&w[1]).zip(&ship).all(|((a, b), l)| l.glow != Glow::Channel && l.glow != Glow::Window || a == b)), "fire_t {fire_t}, form {form}");
+        let channel = |pose: &Pose| ship.iter().filter(|l| l.glow == Glow::Channel).filter_map(|l| light_on(l, pose)).count();
+        for (fire_t, form, frame) in [(0, 0.0, 3), (9, 0.0, 40), (9, 0.6, 7), (0, 1.0, 11)] {
+            assert_eq!(channel(&Pose { fire_t, form, frame, ..Default::default() }), 0, "fire_t {fire_t}, form {form}");
         }
-        let laser = |frame: u64| shown(&Pose { beaming: true, fire_t: 9, form: 1.0, frame, ..Default::default() });
-        assert_ne!(laser(0), laser(1), "the sword's channel flows while it fires");
+        let windows = |frame: u64| ship.iter().filter(|l| l.glow == Glow::Window).map(|l| light_on(l, &Pose { frame, ..Default::default() }).map(|(_, k)| k)).collect::<Vec<_>>();
+        assert!((0..20).all(|f| windows(f) == windows(0)), "the windows hold steady");
+        let laser = |frame: u64| ship.iter().filter_map(|l| light_on(l, &Pose { beaming: true, fire_t: 9, form: 1.0, frame, ..Default::default() }).map(|(c, _)| (l.dx, l.dy, c.g))).collect::<Vec<_>>();
+        assert!(!laser(0).is_empty() && laser(0) != laser(1), "the sword's channel flows while it fires");
     }
 
     #[test]

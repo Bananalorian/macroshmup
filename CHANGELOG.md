@@ -3,6 +3,28 @@
 Every version is one build sprint. Newest first. Versions are tagged in git, and
 each tag publishes a GitHub Release with downloads.
 
+## [0.8.1] - 2026-10-12 - Full size, dark blades
+
+### Changed
+- **The Pilgrim is back to its v0.7.2 size**, about 31 × 44 px
+  ([its sheet](docs/screenshots/pilgrim-sheet.png),
+  [in play](docs/screenshots/pilgrim-forms.png)). Every part is exactly as it was
+  then; only the lights below changed.
+- **No lit lines down the blades in flight.** Their channels stay dark, with just
+  the red hearts. Lit dashes down both blades fought the banking frames as the ship
+  moved side to side, even holding still. The channels only light when the laser
+  fires, flowing up the sword to its tip, the part you liked. The engines' and the
+  capsule's small window lights stay.
+
+### Checked
+- **Tests prove:**
+  - the ship is 29-33 px wide and 42-48 px tall again;
+  - in flight, firing or not and mid-transformation, no channel light is lit and
+    the window lights hold steady;
+  - the channel lights and flows while the laser fires.
+- Every screenshot is retaken. Native and web builds are warning-free, and all 236
+  tests pass in both debug (as CI runs them) and release.
+
 ## [0.8.0] - 2026-10-12 - Score & shell
 
 ### Added
