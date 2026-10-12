@@ -3,6 +3,16 @@
 Session notes for Claude Code: what shipped, tuning that changed, known issues, what's next.
 Newest first.
 
+## v0.10.1 The bomb as it was - 2026-10-13
+
+**Jason:** "i really like the chain atack. this is important. i feel like you changed the bomb
+visual on the juice sprint. there is an outer ring that is blue. we are getting to the point
+where changes are altering things i like." Found by capturing the same bomb (stage:12 seed 3,
+PG_BOMB=1020) in a v0.8.8 worktree build vs now: v0.9.0's hit-stop froze the frame on every
+bomb kill, so the bomb ring (blue-fringed by the aberration) hung still. Fix: `hitstop(events,
+bombing)` returns 0 while `world.bomb` is Some, and no impact frames during a bomb. Proof image
+docs/screenshots/bomb-sweep.png. Lesson saved in the auto-memory (build on what he likes).
+
 ## v0.10.0 Boss attacks & the Slam (Sprint 9) - 2026-10-13
 
 **Jason, after v0.9.0:** "bosses don't constantly just fire. they have phases and patterns...

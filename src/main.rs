@@ -547,8 +547,12 @@ fn kill_size(kind: EnemyKind) -> Size {
 
 /// Hit-stop: how many ticks the stage holds still after this tick's events. Big
 /// kills land with a moment's freeze; fodder never stops the flow; a boss phase
-/// breaking, a turret or a weak point snapping off, hold longest.
-fn hitstop(events: &[Event]) -> u32 {
+/// breaking, a turret or a weak point snapping off, hold longest. Never while a bomb
+/// sweeps the screen: it plays as it always has (a stop would freeze its ring).
+fn hitstop(events: &[Event], bombing: bool) -> u32 {
+    if bombing {
+        return 0;
+    }
     events
         .iter()
         .map(|e| match *e {
@@ -847,8 +851,9 @@ fn effects(w: &World, r: &mut Renderer, s: &Settings, audio: &mut Audio, chains:
                 let art = &r.atlas.r.foes;
                 let size = kill_size(kind);
                 let pixels = if kind == EnemyKind::Hull { &art.pod.pixels } else { &art.sprite(kind, w.frame).pixels };
-                // its impact frame: lit bone-bright a moment (not the derelict's hull)
-                if kind != EnemyKind::Hull {
+                // its impact frame: lit bone-bright a moment (not the derelict's hull,
+                // and not in a bomb's sweep, which plays as it always has)
+                if kind != EnemyKind::Hull && w.bomb.is_none() {
                     let sil = art.sprite(kind, w.frame).sil;
                     r.parts.impact(sil, ((x - sil.w * 0.5).round() as i32, (y - sil.h * 0.5).round() as i32), tune::IMPACT[size as usize]);
                 }
@@ -1170,7 +1175,7 @@ async fn amain() {
                         audio.blast(size);
                     }
                     audio.handle(world);
-                    game.stop = game.stop.max(hitstop(&world.events));
+                    game.stop = game.stop.max(hitstop(&world.events, world.bomb.is_some()));
                     if world.events.contains(&Event::NoBomb) {
                         game.toast = Some(("NO BOMBS LEFT".into(), tune::TOAST_FRAMES / 2));
                     }
@@ -1285,18 +1290,21 @@ async fn amain() {
 mod tests {
     use super::*;
 
-    /// Big kills land with a moment's freeze, fodder never stops the flow, a bomb's
-    /// many kills stop once (as long as the biggest), and no stop feels like lag.
+    /// Big kills land with a moment's freeze, fodder never stops the flow, many kills
+    /// at once stop once (as long as the biggest), no stop feels like lag, and a
+    /// bomb's sweep never stops.
     #[test]
     fn big_kills_land_with_a_hitstop() {
         let kill = |kind| Event::Kill { x: 0.0, y: 0.0, kind };
-        assert_eq!(hitstop(&[kill(EnemyKind::Drone), kill(EnemyKind::Courier), kill(EnemyKind::Usher)]), 0);
-        assert!(hitstop(&[kill(EnemyKind::Gunship)]) > 0);
-        assert!(hitstop(&[kill(EnemyKind::Heavy)]) > hitstop(&[kill(EnemyKind::Gunship)]));
-        assert_eq!(hitstop(&[kill(EnemyKind::Drone), kill(EnemyKind::Heavy), kill(EnemyKind::Gunship)]), hitstop(&[kill(EnemyKind::Heavy)]));
-        assert!(hitstop(&[Event::BossBreak { x: 0.0, y: 0.0, timeout: false }]) >= hitstop(&[kill(EnemyKind::Heavy)]));
-        assert_eq!(hitstop(&[Event::Graze { x: 0.0, y: 0.0 }]), 0);
+        assert_eq!(hitstop(&[kill(EnemyKind::Drone), kill(EnemyKind::Courier), kill(EnemyKind::Usher)], false), 0);
+        assert!(hitstop(&[kill(EnemyKind::Gunship)], false) > 0);
+        assert!(hitstop(&[kill(EnemyKind::Heavy)], false) > hitstop(&[kill(EnemyKind::Gunship)], false));
+        assert_eq!(hitstop(&[kill(EnemyKind::Drone), kill(EnemyKind::Heavy), kill(EnemyKind::Gunship)], false), hitstop(&[kill(EnemyKind::Heavy)], false));
+        assert!(hitstop(&[Event::BossBreak { x: 0.0, y: 0.0, timeout: false }], false) >= hitstop(&[kill(EnemyKind::Heavy)], false));
+        assert_eq!(hitstop(&[Event::Graze { x: 0.0, y: 0.0 }], false), 0);
         assert!(tune::HITSTOP.iter().chain([&tune::HITSTOP_BOSS]).all(|&f| f <= 8));
+        // a bomb's sweep never stops: its ring would freeze on the screen
+        assert_eq!(hitstop(&[kill(EnemyKind::Heavy), Event::BossBreak { x: 0.0, y: 0.0, timeout: false }], true), 0);
     }
 
     fn ui() -> Ui {

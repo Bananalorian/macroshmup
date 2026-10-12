@@ -3,6 +3,23 @@
 Every version is one build sprint. Newest first. Versions are tagged in git, and
 each tag publishes a GitHub Release with downloads.
 
+## [0.10.1] - 2026-10-13 - The bomb as it was
+
+### Fixed
+- **The bomb plays exactly as it did before v0.9.0**
+  ([v0.8.8 above, now below, frame for frame](docs/screenshots/bomb-sweep.png)).
+  v0.9.0's hit-stop froze the screen for a few frames each time the bomb killed
+  something. That left the bomb's ring, with its blue fringe, hanging still on the
+  screen as it swept through the enemies, and the kills' impact frames lit them up
+  in its path. While a bomb sweeps now, there's no hit-stop and no impact frame. The
+  rest of the hit-stop is unchanged.
+
+### Checked
+- A test proves a bomb's sweep never stops, whatever it kills or breaks.
+- The same bomb, through a wave of gunships, captured in v0.8.8 and now: its ring
+  reaches the same place on the same frames.
+- Native and web builds are warning-free, and all 262 tests pass.
+
 ## [0.10.0] - 2026-10-13 - Boss attacks & the Slam
 
 ### JAWSTHIC attacks like a shmup boss
