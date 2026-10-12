@@ -753,18 +753,9 @@ fn hit_overlay(a: &Atlas, sil: Rect, x: i32, y: i32, hit_t: u32) {
     a.blit(sil, x, y, 1, c);
 }
 
-/// The ship's silhouette at `(x, y)` (its hitbox), in one color: afterimages,
-/// the respawn blink.
+/// The ship's silhouette at `(x, y)` (its hitbox), in one color: the respawn blink.
 pub fn draw_silhouette(a: &Atlas, form: f32, bank: i8, x: i32, y: i32, c: Color) {
     a.blit(a.r.ship.frame(form, bank).sil, x - CX, y - CY, 1, c);
-}
-
-/// Teal afterimages of the ship at earlier positions (drawn under the ship).
-pub fn draw_afterimages(a: &Atlas, form: f32, bank: i8, at: &[(i32, i32)]) {
-    for (k, &(x, y)) in at.iter().enumerate() {
-        let alpha = [0.14, 0.08, 0.04][k.min(2)];
-        draw_silhouette(a, form, bank, x, y, Color { a: alpha, ..TEAL });
-    }
 }
 
 /// The hitbox dot and its ring, faded in with the focus blend.

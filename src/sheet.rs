@@ -71,7 +71,7 @@ fn draw_sheet(a: &Atlas) {
     let (kx, ky) = (232 + 112, row(182) + 14);
     ship::draw(a, kx, ky, &Pose { bank: 2, frame: 4, ..laser });
     let shot = Color::new(1.0, 1.0, 1.0, 0.6);
-    label("SHOTS  //  AFTERIMAGES", 232, 268);
+    label("SHOTS", 232, 268);
     for i in 0..4 {
         a.blit(a.r.ship.bolt[i], 232 + 8 + i as i32 * 10, 282, 1, shot);
     }
@@ -79,7 +79,6 @@ fn draw_sheet(a: &Atlas) {
         a.blit(a.r.ship.pod_shot[i], 232 + 50 + i as i32 * 6, 284, 1, Color::new(1.0, 1.0, 1.0, 0.45));
     }
     let (ax, ay) = (232 + 150, row(268));
-    ship::draw_afterimages(a, 0.0, 2, &[(ax - 9, ay + 3), (ax - 18, ay + 6), (ax - 27, ay + 9)]);
     ship::draw(a, ax, ay, &Pose { bank: 2, frame: 4, ..base });
     a.fill(10, SHEET.1 as i32 - 13, SHEET.0 as i32 - 20, 1, DUSK);
     text(a, &crate::render::hud::version_stamp(), 10, SHEET.1 as i32 - 9, 1, 2, SLATE);

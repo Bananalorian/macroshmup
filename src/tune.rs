@@ -677,8 +677,6 @@ pub const TOUCH_SENS: f32 = 1.0;
 pub const TOUCH_SENS_RANGE: (f32, f32, f32) = (0.5, 2.5, 0.1);
 /// Left stick deadzone.
 pub const STICK_DEADZONE: f32 = 0.25;
-/// Afterimages show when moving at least this share of full speed, unfocused.
-pub const AFTERIMAGE_MIN: f32 = 0.9;
 
 // ------------------------------------------------------------------ sound
 

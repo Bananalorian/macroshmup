@@ -3,6 +3,23 @@
 Every version is one build sprint. Newest first. Versions are tagged in git, and
 each tag publishes a GitHub Release with downloads.
 
+## [0.8.2] - 2026-10-12 - No ghosts
+
+### Changed
+- **No more afterimages.** Moving side to side at full speed used to leave teal
+  ghost copies of the ship trailing beside it, glowing through the gap between the
+  blades: the "lines" in your screenshot. They're gone, so the ship draws only
+  itself and banks cleanly ([in play](docs/screenshots/stage.png),
+  [its sheet](docs/screenshots/pilgrim-sheet.png)). The engine trails stay. The
+  positions the ship kept for the afterimages went with them.
+
+### Checked
+- Every screenshot where the ship was moving is retaken, and none shows a ghost.
+  The animation sheet's afterimage demo is gone.
+- Native and web builds are warning-free, and all 235 tests pass, in both debug
+  (as CI runs them) and release. One fewer test than before: the afterimages'
+  position history went with them.
+
 ## [0.8.1] - 2026-10-12 - Full size, dark blades
 
 ### Changed

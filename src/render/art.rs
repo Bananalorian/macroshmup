@@ -48,7 +48,7 @@ impl Packer {
         r
     }
 
-    /// Add an image and its white silhouette (for flashes and afterimages).
+    /// Add an image and its white silhouette (for flashes and blinks).
     pub fn add_with_silhouette(&mut self, src: &Image) -> (Rect, Rect) {
         (self.add(src), self.add(&silhouette(src)))
     }

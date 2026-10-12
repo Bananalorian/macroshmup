@@ -3,6 +3,17 @@
 Session notes for Claude Code: what shipped, tuning that changed, known issues, what's next.
 Newest first.
 
+## v0.8.2 No ghosts - 2026-10-12
+
+**Jason** sent a screenshot: the "led lines on both sides of the ship" that interfere when
+moving left and right were the **afterimages** (teal silhouettes at history 2/4/6 at full speed),
+not the channel dashes. Removed: scene's afterimage pass, `ship::draw_afterimages`,
+`AFTERIMAGE_MIN`, `Player.history`/`HISTORY`, `Player::focused`, the sheet's demo. (v0.8.1's dark
+channels in flight stay.) Lesson: when he describes a visual, ask for or look at a screenshot
+before guessing. His game was running from target/release while I worked, so I built into
+`target/work` (CARGO_TARGET_DIR) and ran the screenshot batch from there (scratchpad
+shots_work.sh); never kill his running game.
+
 ## v0.8.1 Full size, dark blades - 2026-10-12
 
 **Jason:** "return the ship to the previous size. and remove the led lines on both sides of the
