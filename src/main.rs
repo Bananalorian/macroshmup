@@ -45,8 +45,11 @@ use storage::Settings;
 use synth::Id;
 
 enum Scene {
-    /// The title, `t` ticks after it appeared, with `sel` chosen.
-    Title { t: u64, sel: usize },
+    /// The title, `t` ticks after it appeared, with `sel` chosen; untouched for
+    /// `idle` ticks (the demo starts after a while).
+    Title { t: u64, sel: usize, idle: u64 },
+    /// The title's options.
+    Options { t: u64, sel: usize },
     /// A run: Stage 1, or the pattern sandbox. `menu` is the pause menu's selected
     /// row while paused; `over` the end menu's once the last ship is gone or the
     /// stage is over.
@@ -69,8 +72,28 @@ impl Chain {
     }
 }
 
+/// What kind of run the stage scene is playing.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Run {
+    /// Stage 1 from the top: it counts for the hi-score, and reaching the boss
+    /// unlocks Boss Practice.
+    Stage,
+    /// From partway in: the boss's arrival (Boss Practice), or a debug start.
+    Practice,
+    Sandbox,
+    /// The title's attract demo: the bot plays.
+    Demo,
+}
+
 struct Game {
     scene: Scene,
+    run: Run,
+    /// Ticks since the run ended (the tally counts up on them), and whether it set a
+    /// new hi-score.
+    end_t: u32,
+    record: bool,
+    /// Ticks fire has been held (the HOLD TO BEAM scheme).
+    hold_t: u32,
     seed: u64,
     settings: Settings,
     toast: Option<(String, u32)>,
@@ -92,15 +115,15 @@ enum MenuAct {
     Boom,
 }
 
-/// Apply one frame of input to the pause menu.
-fn menu_input(sel: &mut usize, ui: &Ui, lay: &Layout, s: &mut Settings) -> MenuAct {
+/// Apply one frame of input to a menu of `items` (the pause menu, the options).
+fn menu_input(sel: &mut usize, ui: &Ui, lay: &Layout, s: &mut Settings, items: &[Item]) -> MenuAct {
     if ui.back || ui.pause {
         return MenuAct::Resume;
     }
-    let n = ITEMS.len() as i32;
+    let n = items.len() as i32;
     *sel = (*sel as i32 + ui.nav.1).rem_euclid(n) as usize;
-    let activate = |sel: usize, s: &mut Settings| match ITEMS[sel] {
-        Item::Resume => MenuAct::Resume,
+    let activate = |sel: usize, s: &mut Settings| match items[sel] {
+        Item::Resume | Item::Back => MenuAct::Resume,
         Item::Quit => MenuAct::Quit,
         Item::Boom => MenuAct::Boom,
         item => {
@@ -108,18 +131,18 @@ fn menu_input(sel: &mut usize, ui: &Ui, lay: &Layout, s: &mut Settings) -> MenuA
             MenuAct::Changed
         }
     };
-    if ui.nav.0 != 0 && ITEMS[*sel].adjustable() {
-        menu::adjust(s, ITEMS[*sel], ui.nav.0.signum());
+    if ui.nav.0 != 0 && items[*sel].adjustable() {
+        menu::adjust(s, items[*sel], ui.nav.0.signum());
         return MenuAct::Changed;
     }
     if ui.confirm {
         return activate(*sel, s);
     }
     if let Some((x, y)) = ui.tap {
-        if let Some((row, step)) = hud::menu_tap(lay, x, y) {
+        if let Some((row, step)) = hud::menu_tap(lay, items, x, y) {
             *sel = row;
             if step != 0 {
-                menu::adjust(s, ITEMS[row], step);
+                menu::adjust(s, items[row], step);
                 return MenuAct::Changed;
             }
             return activate(row, s);
@@ -130,15 +153,24 @@ fn menu_input(sel: &mut usize, ui: &Ui, lay: &Layout, s: &mut Settings) -> MenuA
 
 impl Game {
     fn new(seed: u64, req: Option<SceneReq>, settings: Settings) -> Game {
-        let mut g = Game { scene: Scene::Title { t: 0, sel: 0 }, seed, settings, toast: None, fill_shots: 0, boom: None, chains: vec![] };
+        let mut g = Game {
+            scene: Scene::Title { t: 0, sel: 0, idle: 0 },
+            run: Run::Sandbox,
+            end_t: 0,
+            record: false,
+            hold_t: 0,
+            seed,
+            settings,
+            toast: None,
+            fill_shots: 0,
+            boom: None,
+            chains: vec![],
+        };
         match req {
             None | Some(SceneReq::Title) => {}
+            Some(SceneReq::Options) => g.scene = Scene::Options { t: 0, sel: 0 },
             Some(SceneReq::Stage(secs)) => g.start_stage(secs),
-            Some(SceneReq::Boss(phase)) => {
-                let mut w = World::boss_at(seed, g.settings.tuning, phase);
-                w.invincible = g.settings.view.invincible;
-                g.scene = Scene::Stage { world: Box::new(w), menu: None, over: None };
-            }
+            Some(SceneReq::Boss(phase)) => g.start_boss(phase),
             Some(SceneReq::Shots(n)) => {
                 g.fill_shots = n;
                 g.start_sandbox();
@@ -151,32 +183,69 @@ impl Game {
         g
     }
 
-    /// Play the same mode again from the top.
+    /// Play the same run again from the top.
     fn retry(&mut self) {
-        let staged = matches!(&self.scene, Scene::Stage { world, .. } if world.stage.is_some());
-        if staged {
-            self.start_stage(0.0);
-        } else {
-            self.start_sandbox();
+        match self.run {
+            Run::Stage | Run::Demo => self.start_stage(0.0),
+            Run::Practice => self.start_boss(0),
+            Run::Sandbox => self.start_sandbox(),
         }
     }
 
-    /// Stage 1, `secs` seconds in.
-    fn start_stage(&mut self, secs: f32) {
-        let mut w = World::stage_at(self.seed, self.settings.tuning, secs);
-        w.invincible = self.settings.view.invincible;
+    /// A new run in `w`.
+    fn begin(&mut self, mut w: World, run: Run) {
+        w.invincible = self.settings.view.invincible && run != Run::Demo;
         self.chains.clear();
+        (self.run, self.end_t, self.record, self.hold_t) = (run, 0, false, 0);
         self.scene = Scene::Stage { world: Box::new(w), menu: None, over: None };
+    }
+
+    /// Stage 1, `secs` seconds in (only a run from the top counts for the hi-score).
+    fn start_stage(&mut self, secs: f32) {
+        let w = World::stage_at(self.seed, self.settings.tuning, secs);
+        self.begin(w, if secs == 0.0 { Run::Stage } else { Run::Practice });
+    }
+
+    /// Boss Practice: from its arrival (phase 0), or straight into a phase.
+    fn start_boss(&mut self, phase: u8) {
+        let w = World::boss_at(self.seed, self.settings.tuning, phase);
+        self.begin(w, Run::Practice);
+    }
+
+    /// The title's demo: the bot plays Stage 1.
+    fn start_demo(&mut self) {
+        let w = World::stage(self.seed, self.settings.tuning);
+        self.begin(w, Run::Demo);
     }
 
     fn start_sandbox(&mut self) {
         let mut w = World::new(self.seed, self.settings.tuning);
         w.fill_shots = self.fill_shots;
         w.set_pattern(self.settings.view.pattern);
-        w.invincible = self.settings.view.invincible;
-        self.chains.clear();
-        self.scene = Scene::Stage { world: Box::new(w), menu: None, over: None };
+        self.begin(w, Run::Sandbox);
     }
+
+    /// Back to the title.
+    fn to_title(&mut self, sel: usize) {
+        self.scene = Scene::Title { t: 0, sel, idle: 0 };
+    }
+
+    /// The title, left alone, plays a demo; the demo ends on any button (`touched`),
+    /// at its end, or after a minute. True when a demo just ended.
+    fn attract(&mut self, touched: bool) -> bool {
+        match &self.scene {
+            Scene::Title { idle, .. } if *idle >= tune::ATTRACT_AFTER => {
+                self.start_demo();
+                false
+            }
+            Scene::Stage { world, over, .. } if self.run == Run::Demo && (touched || over.is_some() || world.frame >= tune::DEMO_LEN) => {
+                self.to_title(0);
+                true
+            }
+            _ => false,
+        }
+    }
+
 
     /// The sandbox switches changed: apply them to the running game.
     fn sync_view(&mut self) {
@@ -216,7 +285,7 @@ impl Game {
 
     fn sim_frame(&self) -> u64 {
         match &self.scene {
-            Scene::Title { t, .. } => *t,
+            Scene::Title { t, .. } | Scene::Options { t, .. } => *t,
             Scene::Stage { world, .. } => world.frame,
         }
     }
@@ -233,15 +302,19 @@ impl Game {
             self.settings.save();
             self.say(if self.settings.muted { "SOUND OFF" } else { "SOUND ON" });
         }
+        let items = hud::title_items(self.settings.boss_unlocked);
         match &mut self.scene {
-            Scene::Title { sel, .. } => {
-                let n = hud::TITLE_ITEMS.len() as i32;
+            Scene::Title { sel, idle, .. } => {
+                if ui.confirm || ui.back || ui.pause || ui.tap.is_some() || ui.nav != (0, 0) {
+                    *idle = 0;
+                }
+                let n = items.len() as i32;
                 let before = *sel;
                 *sel = (*sel as i32 + ui.nav.1).rem_euclid(n) as usize;
                 let mut choice = ui.confirm.then_some(*sel);
                 if let Some((x, y)) = ui.tap {
                     // a tap on a row picks it; anywhere else starts what's selected
-                    choice = Some(hud::title_tap(lay, x, y).unwrap_or(*sel));
+                    choice = Some(hud::title_tap(lay, items.len(), x, y).unwrap_or(*sel));
                 }
                 if *sel != before {
                     audio.play(Id::Select, 0.5);
@@ -249,18 +322,46 @@ impl Game {
                 if let Some(i) = choice {
                     audio.play(Id::Select, 1.0);
                     input.release();
-                    if i == 0 {
-                        self.start_stage(0.0);
-                    } else {
-                        self.start_sandbox();
+                    match items[i] {
+                        hud::TitleItem::Stage => self.start_stage(0.0),
+                        hud::TitleItem::Practice => self.start_boss(0),
+                        hud::TitleItem::Sandbox => self.start_sandbox(),
+                        hud::TitleItem::Options => self.scene = Scene::Options { t: 0, sel: 0 },
                     }
+                }
+            }
+            Scene::Options { sel, .. } => {
+                let before = *sel;
+                let act = menu_input(sel, ui, lay, &mut self.settings, &menu::OPTIONS);
+                if *sel != before {
+                    audio.play(Id::Select, 0.5);
+                }
+                match act {
+                    MenuAct::Changed => {
+                        self.settings_changed(input);
+                        audio.volumes(self.settings.music_vol, self.settings.sound_vol);
+                        audio.play(Id::Select, 0.7);
+                    }
+                    MenuAct::Nothing => {}
+                    _ => {
+                        input.release();
+                        let back = items.iter().position(|i| *i == hud::TitleItem::Options).unwrap_or(0);
+                        self.to_title(back);
+                    }
+                }
+            }
+            // the tally plays out first: any button skips to its end
+            Scene::Stage { over: Some(_), world, .. } if self.end_t < if world.stage.as_ref().is_some_and(|s| s.over) { tune::TALLY_DONE } else { 0 } => {
+                if ui.confirm || ui.back || ui.tap.is_some() {
+                    self.end_t = tune::TALLY_DONE;
+                    input.release();
                 }
             }
             Scene::Stage { over: Some(sel), world, .. } => {
                 let n = hud::OVER_ITEMS.len() as i32;
                 let before = *sel;
                 let cleared = world.stage.as_ref().is_some_and(|s| s.over);
-                let staged = world.stage.is_some();
+                let staged = self.run != Run::Sandbox;
                 *sel = (*sel as i32 + ui.nav.1).rem_euclid(n) as usize;
                 let mut choice = ui.confirm.then_some(*sel);
                 if let Some((x, y)) = ui.tap {
@@ -280,16 +381,13 @@ impl Game {
                         audio.play(Id::Select, 1.0);
                         audio.silence();
                         input.release();
-                        if staged {
-                            self.start_stage(0.0);
-                        } else {
-                            self.start_sandbox();
-                        }
+                        self.retry();
                     }
                     Some(_) => {
                         audio.silence();
                         input.release();
-                        self.scene = Scene::Title { t: 0, sel: if staged { 0 } else { 1 } };
+                        let back = if staged { 0 } else { items.iter().position(|i| *i == hud::TitleItem::Sandbox).unwrap_or(0) };
+                        self.to_title(back);
                     }
                     None => {}
                 }
@@ -309,7 +407,7 @@ impl Game {
             }
             Scene::Stage { menu: Some(sel), .. } => {
                 let before = *sel;
-                let act = menu_input(sel, ui, lay, &mut self.settings);
+                let act = menu_input(sel, ui, lay, &mut self.settings, &ITEMS);
                 if *sel != before {
                     audio.play(Id::Select, 0.5);
                 }
@@ -329,8 +427,8 @@ impl Game {
                     MenuAct::Quit => {
                         audio.silence();
                         input.release();
-                        let staged = matches!(&self.scene, Scene::Stage { world, .. } if world.stage.is_some());
-                        self.scene = Scene::Title { t: 0, sel: if staged { 0 } else { 1 } };
+                        let back = if self.run == Run::Sandbox { items.iter().position(|i| *i == hud::TitleItem::Sandbox).unwrap_or(0) } else { 0 };
+                        self.to_title(back);
                     }
                     MenuAct::Boom => {
                         if let Scene::Stage { menu, .. } = &mut self.scene {
@@ -573,6 +671,40 @@ fn chain_effects(chains: &mut Vec<Chain>, w: &World, r: &mut Renderer, s: &Setti
     chains.retain(|c| c.t < Chain::end());
 }
 
+/// Focusing this tick: the focus button, or (HOLD TO BEAM) fire held a moment.
+fn focused(button: bool, hold_beam: bool, fire_held: u32) -> bool {
+    button || (hold_beam && fire_held > tune::HOLD_BEAM)
+}
+
+/// A run ended with `points`: a new best (Stage 1 from the top only) is kept and
+/// saved. True when it's a new record.
+fn new_record(s: &mut Settings, run: Run, points: u64) -> bool {
+    let record = run == Run::Stage && points > s.hiscore;
+    if record {
+        s.hiscore = points;
+        s.save();
+    }
+    record
+}
+
+/// The tally's sounds, `e` ticks after the stage ended: a tick as each line comes
+/// in, rapid ticks while the score counts up, the rank's slam, and a jingle for a
+/// new record.
+fn tally_cue(e: u32, record: bool) -> Option<(Id, f32)> {
+    use tune::{TALLY_COUNT, TALLY_RANK, TALLY_SCORE, TALLY_STEP};
+    if (1..=5).any(|i| e == TALLY_STEP * i) {
+        Some((Id::Tick, 1.0))
+    } else if (TALLY_SCORE..TALLY_SCORE + TALLY_COUNT).contains(&e) && e % 3 == 0 {
+        Some((Id::Tick, 0.6))
+    } else if e == TALLY_RANK {
+        Some((Id::Slam, 1.0))
+    } else if record && e == TALLY_RANK + 24 {
+        Some((Id::Extend, 1.0))
+    } else {
+        None
+    }
+}
+
 /// Feed one tick's events to the effects and the blasts' sounds.
 fn effects(w: &World, r: &mut Renderer, s: &Settings, audio: &mut Audio, chains: &mut Vec<Chain>) {
     let p = &w.player;
@@ -682,6 +814,24 @@ fn effects(w: &World, r: &mut Renderer, s: &Settings, audio: &mut Audio, chains:
                 r.parts.smoke(x, y, 6, 16.0);
                 audio.blast(Size::Medium);
             }
+            Event::Points { x, y, n, how } => {
+                r.popups.points(x, y, n, how);
+                match how {
+                    sim::score::Award::Blank => r.parts.ring(x, y, 2.0, 12, TEAL_C),
+                    sim::score::Award::Grade(_, g) => {
+                        let c = if g == sim::score::Grade::S { TEAL_C } else { render::palette::CREAM };
+                        r.parts.ring(x, y, 5.0, 26, c);
+                        if g == sim::score::Grade::S {
+                            r.fx.aberrate(if s.reduce_flash { 0.4 } else { 1.0 });
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            Event::Extend => {
+                r.popups.extend();
+                r.parts.ring(p.x, p.y, 3.0, 30, TEAL_C);
+            }
             Event::Crack { x, y } => {
                 explode(&mut r.fx, &mut r.parts, x, y - 6.0, Size::Large, me, s.reduce_flash, w.frame);
                 r.parts.ring(x, y, 5.0, 26, SIGNAL_C);
@@ -717,28 +867,21 @@ fn stage_view(w: &World, s: &sim::stage1::Stage) -> hud::StageView {
         (e.parts[0].hp / e.parts[0].max_hp, t)
     });
     let warn_at = sim::stage1::frames(tune::SECTIONS[tune::WARNING_SECTION].0);
-    use sim::boss::{Act, Outcome};
+    use sim::boss::Act;
     let jaws = w.boss.as_ref().filter(|b| !matches!(b.act, Act::Gone | Act::Dying | Act::Falling)).map(|b| {
         let [_, _, peak, done] = tune::JAWS_INTRO;
         let fill = if b.act == Act::Intro { (b.t.saturating_sub(peak) as f32 / (done - peak) as f32).min(1.0) } else { 1.0 };
         hud::JawsView { bar: b.bar(), phase: if b.act == Act::Intro { 0 } else { b.phase }, left: b.time_left(), fill }
-    });
-    let jaws_end = w.boss.as_ref().filter(|_| s.over).map(|b| {
-        let broken = b.outcomes.iter().filter(|o| **o == Some(Outcome::Broken)).count() as u8;
-        let clean = (0..4).filter(|&p| b.outcomes[p] == Some(Outcome::Broken) && b.clean[p]).count() as u8;
-        (b.outcomes[3] == Some(Outcome::Broken), broken, clean)
     });
     hud::StageView {
         t: s.t,
         section: s.section,
         killed: s.killed,
         spawned: s.spawned,
-        bombs_used: w.bombs_used,
         over: s.over,
         boss,
         warned: (s.t >= warn_at).then(|| s.t - warn_at),
         jaws,
-        jaws_end,
     }
 }
 
@@ -795,6 +938,7 @@ async fn amain() {
     let settings = Settings::load();
     let mut audio = Audio::load().await;
     audio.muted = settings.muted;
+    audio.volumes(settings.music_vol, settings.sound_vol);
     if matches!(hooks.scene, Some(SceneReq::Boss(p)) if p > 0) {
         audio.music(true);
     }
@@ -886,16 +1030,31 @@ async fn amain() {
                 }
             }
             match &mut game.scene {
-                Scene::Title { t, .. } => *t += 1,
-                // the stage is over: everything holds still behind the panel, but the
-                // smoke and light of whatever just happened play out
+                Scene::Title { t, idle, .. } => {
+                    *t += 1;
+                    *idle += 1;
+                }
+                Scene::Options { t, .. } => *t += 1,
+                // the stage is over: everything holds still behind the panel (the
+                // tally counts up), but the smoke and light of whatever just happened
+                // play out
                 Scene::Stage { world, over: Some(_), .. } if world.stage.as_ref().is_some_and(|s| s.over) => {
                     renderer.parts.tick((world.player.x, world.player.y));
+                    renderer.popups.tick();
                     renderer.fx.tick();
+                    game.end_t += 1;
+                    if let Some((id, vol)) = tally_cue(game.end_t, game.record) {
+                        audio.play(id, vol);
+                    }
                 }
+                Scene::Stage { menu: None, over: Some(_), .. } => game.end_t += 1,
                 Scene::Stage { world, menu: None, over } => {
                     let (drag, bomb) = input.take();
-                    let mut c = if game.settings.view.autopilot { bot.decide(world) } else { Controls { mv: held.mv, drag, fire: held.fire, focus: held.focus, bomb } };
+                    // HOLD TO BEAM: fire held a moment becomes the beam
+                    game.hold_t = if held.fire { game.hold_t + 1 } else { 0 };
+                    let focus = focused(held.focus, game.settings.hold_beam, game.hold_t);
+                    let bot_flies = game.settings.view.autopilot || game.run == Run::Demo;
+                    let mut c = if bot_flies { bot.decide(world) } else { Controls { mv: held.mv, drag, fire: held.fire, focus, bomb } };
                     if hooks.bomb_at == Some(world.frame + 1) {
                         c.bomb = true;
                     }
@@ -911,6 +1070,7 @@ async fn amain() {
                         game.boom = hooks.boom.map(|i| Size::ALL[i]);
                     }
                     renderer.parts.tick((world.player.x, world.player.y));
+                    renderer.popups.tick();
                     renderer.fx.tick();
                     effects(world, &mut renderer, &game.settings, &mut audio, &mut game.chains);
                     boss_effects(world, &mut renderer);
@@ -920,6 +1080,14 @@ async fn amain() {
                     if (world.life == Life::GameOver || cleared) && over.is_none() {
                         *over = Some(0);
                         ended_at = Some(frame);
+                        // a new best is saved the moment the run ends
+                        game.end_t = 0;
+                        game.record = new_record(&mut game.settings, game.run, world.score.points);
+                    }
+                    // reaching the boss unlocks Boss Practice
+                    if game.run == Run::Stage && !game.settings.boss_unlocked && world.events.contains(&Event::BossArrive) {
+                        game.settings.boss_unlocked = true;
+                        game.settings.save();
                     }
                     if let Some(size) = game.boom.take() {
                         let me = (world.player.x, world.player.y);
@@ -938,20 +1106,31 @@ async fn amain() {
                 *left = left.saturating_sub(1);
             }
         }
+        let touched = ui.confirm || ui.back || ui.pause || ui.tap.is_some() || held.fire || held.mv != (0.0, 0.0);
+        if game.attract(touched) {
+            audio.silence();
+            input.release();
+        }
         audio.update(dt, game.paused());
 
         // the scene, then the post pass, then the HUD on top
         renderer.begin(&lay);
         let time = game.sim_frame() as f32 / tune::TICK_HZ as f32;
         match &game.scene {
-            Scene::Title { t, sel } => {
+            Scene::Title { t, sel, .. } => {
                 hud::title_bg(&renderer, &lay, *t);
                 renderer.post(&lay, &PostParams { field: IRect::new(0, 0, lay.cw, lay.ch), time });
-                hud::title(&renderer, &lay, *t, mode_known.then_some(input.mode), *sel);
+                let items = hud::title_items(game.settings.boss_unlocked);
+                hud::title(&renderer, &lay, *t, mode_known.then_some(input.mode), &items, *sel, game.settings.hiscore);
+            }
+            Scene::Options { t, sel } => {
+                hud::title_bg(&renderer, &lay, *t);
+                renderer.post(&lay, &PostParams { field: IRect::new(0, 0, lay.cw, lay.ch), time });
+                hud::options(&renderer, &lay, &game.settings, input.mode, *sel);
             }
             Scene::Stage { world, menu, over } => {
                 let wrecks: Vec<(f32, f32, f32)> = game.chains.iter().map(|c| (c.x, c.y, c.t as f32 / Chain::end() as f32)).collect();
-                render::scene::draw(&renderer, &lay, world, game.settings.view.hitboxes, &wrecks);
+                render::scene::draw(&renderer, &lay, world, game.settings.view.hitboxes, game.settings.hitbox_always, &wrecks);
                 renderer.post(&lay, &PostParams { field: lay.field, time });
                 let view = HudView {
                     settings: &game.settings,
@@ -967,6 +1146,13 @@ async fn amain() {
                     hits: world.deaths,
                     grazes: world.grazes,
                     stage: world.stage.as_ref().map(|s| stage_view(world, s)),
+                    score: world.score.points,
+                    hiscore: game.settings.hiscore,
+                    end_t: game.end_t,
+                    record: game.record,
+                    tally: world.score.tally,
+                    demo: game.run == Run::Demo,
+                    ranked: game.run == Run::Stage,
                 };
                 hud::stage(&renderer, &lay, &view);
             }
@@ -989,8 +1175,9 @@ async fn amain() {
             };
             println!("{:>5.0} s  {}  particles {}  bullets {}  enemies {}", perf_at - started, perf.interval(), renderer.parts.len(), bullets, foes);
         }
-        // the bot plays on forever (PG_AUTO): two seconds after a game over or the stage's end, RETRY
-        if hooks.auto && ended_at.is_some_and(|f| frame >= f + 120) {
+        // the bot plays on forever (PG_AUTO): two seconds after a game over or the stage's
+        // tally, RETRY
+        if hooks.auto && ended_at.is_some_and(|f| frame >= f + 120 + tune::TALLY_DONE as u64) {
             ended_at = None;
             game.retry();
         }
@@ -1034,26 +1221,79 @@ mod tests {
     }
 
     #[test]
-    fn the_title_starts_the_stage_or_the_sandbox() {
+    fn the_title_starts_each_kind_of_run() {
+        use hud::TitleItem::*;
         let lay = Layout::fit(1280, 720);
+        assert_eq!(hud::title_items(false), vec![Stage, Sandbox, Options]);
+        assert_eq!(hud::title_items(true), vec![Stage, Practice, Sandbox, Options], "Boss Practice once unlocked");
         let mut g = Game::new(1, None, Settings::default());
-        // no audio device in tests: drive the menu through its own logic
-        let pick = |g: &mut Game, ui: &Ui| {
-            if let Scene::Title { sel, .. } = &mut g.scene {
-                *sel = (*sel as i32 + ui.nav.1).rem_euclid(2) as usize;
-                if ui.confirm {
-                    if *sel == 0 { g.start_stage(0.0) } else { g.start_sandbox() }
-                }
-            }
-        };
-        pick(&mut g, &Ui { nav: (0, 1), ..ui() });
-        pick(&mut g, &Ui { confirm: true, ..ui() });
-        assert!(matches!(&g.scene, Scene::Stage { world, .. } if world.stage.is_none()), "the sandbox");
-        let mut g = Game::new(1, None, Settings::default());
-        pick(&mut g, &Ui { confirm: true, ..ui() });
-        assert!(matches!(&g.scene, Scene::Stage { world, .. } if world.stage.is_some()), "stage 1");
+        g.start_stage(0.0);
+        assert!(g.run == Run::Stage && matches!(&g.scene, Scene::Stage { world, .. } if world.stage.is_some() && world.frame == 0));
+        g.start_boss(0);
+        assert!(g.run == Run::Practice && matches!(&g.scene, Scene::Stage { world, .. } if world.clock() >= sim::stage1::frames(tune::JAWS_AT) as u64 - 1));
+        g.retry();
+        assert_eq!(g.run, Run::Practice, "a retry plays the same kind of run");
+        g.start_sandbox();
+        assert!(g.run == Run::Sandbox && matches!(&g.scene, Scene::Stage { world, .. } if world.stage.is_none()));
+        g.start_stage(40.0);
+        assert_eq!(g.run, Run::Practice, "a start partway in doesn't count for the hi-score");
         let (cx, y0, rh) = hud::title_rows(&lay);
-        assert_eq!(hud::title_tap(&lay, cx as f32, (y0 + rh + 2) as f32), Some(1));
+        assert_eq!(hud::title_tap(&lay, 4, cx as f32, (y0 + rh + 2) as f32), Some(1));
+        assert_eq!(hud::title_tap(&lay, 3, cx as f32, (y0 + 3 * rh + 2) as f32), None);
+    }
+
+    #[test]
+    fn the_title_plays_a_demo_when_left_alone_and_any_button_ends_it() {
+        let mut g = Game::new(1, None, Settings::default());
+        if let Scene::Title { idle, .. } = &mut g.scene {
+            *idle = tune::ATTRACT_AFTER - 1;
+        }
+        assert!(!g.attract(false));
+        assert!(matches!(g.scene, Scene::Title { .. }), "not yet");
+        if let Scene::Title { idle, .. } = &mut g.scene {
+            *idle = tune::ATTRACT_AFTER;
+        }
+        assert!(!g.attract(false));
+        assert!(g.run == Run::Demo && matches!(&g.scene, Scene::Stage { world, .. } if world.stage.is_some()), "the demo plays Stage 1");
+        assert!(!g.attract(false), "it plays on");
+        assert!(g.attract(true), "a button ends it");
+        assert!(matches!(g.scene, Scene::Title { idle: 0, .. }));
+        g.start_demo();
+        if let Scene::Stage { world, .. } = &mut g.scene {
+            world.frame = tune::DEMO_LEN;
+        }
+        assert!(g.attract(false), "and it ends by itself after a while");
+    }
+
+    #[test]
+    fn hold_to_beam_turns_a_held_fire_into_the_beam() {
+        assert!(!focused(false, true, tune::HOLD_BEAM), "a tap is the wide shot");
+        assert!(focused(false, true, tune::HOLD_BEAM + 1), "held, the beam");
+        assert!(!focused(false, false, 1000), "not with the focus button scheme");
+        assert!(focused(true, false, 0) && focused(true, true, 0), "the focus button always works");
+    }
+
+    #[test]
+    fn only_a_full_stage_run_sets_the_hi_score() {
+        let mut s = Settings::default();
+        assert!(new_record(&mut s, Run::Stage, 1_000));
+        assert_eq!(s.hiscore, 1_000);
+        assert!(!new_record(&mut s, Run::Stage, 999), "not a record");
+        assert!(!new_record(&mut s, Run::Stage, 1_000), "a tie isn't either");
+        for run in [Run::Practice, Run::Sandbox, Run::Demo] {
+            assert!(!new_record(&mut s, run, 5_000), "{run:?} doesn't count");
+        }
+        assert_eq!(s.hiscore, 1_000);
+    }
+
+    #[test]
+    fn the_tally_ticks_slams_and_sings() {
+        let cues: Vec<(u32, Id)> = (0..tune::TALLY_DONE + 60).filter_map(|e| tally_cue(e, true).map(|c| (e, c.0))).collect();
+        assert_eq!(cues.iter().filter(|c| c.1 == Id::Slam).count(), 1, "one slam, for the rank");
+        assert!(cues.iter().any(|c| c == &(tune::TALLY_RANK, Id::Slam)));
+        assert!(cues.iter().any(|c| c.1 == Id::Extend), "a record sings");
+        assert!(cues.iter().filter(|c| c.1 == Id::Tick).count() >= 5, "a tick per line, and the count-up");
+        assert!(!(0..tune::TALLY_DONE + 60).any(|e| tally_cue(e, false).is_some_and(|c| c.0 == Id::Extend)), "no record, no jingle");
     }
 
     #[test]
@@ -1070,16 +1310,22 @@ mod tests {
         let lay = Layout::fit(1280, 720);
         let mut s = Settings::default();
         let mut sel = 0;
-        assert_eq!(menu_input(&mut sel, &Ui { nav: (0, -1), ..ui() }, &lay, &mut s), MenuAct::Nothing);
+        assert_eq!(menu_input(&mut sel, &Ui { nav: (0, -1), ..ui() }, &lay, &mut s, &ITEMS), MenuAct::Nothing);
         assert_eq!(ITEMS[sel], Item::Quit, "wraps around");
         sel = ITEMS.iter().position(|i| *i == Item::Focus).unwrap();
-        assert_eq!(menu_input(&mut sel, &Ui { nav: (1, 0), ..ui() }, &lay, &mut s), MenuAct::Changed);
+        assert_eq!(menu_input(&mut sel, &Ui { nav: (1, 0), ..ui() }, &lay, &mut s, &ITEMS), MenuAct::Changed);
         assert_eq!(s.tuning.focus_ratio, 0.60);
-        assert_eq!(menu_input(&mut sel, &Ui { back: true, ..ui() }, &lay, &mut s), MenuAct::Resume);
+        assert_eq!(menu_input(&mut sel, &Ui { back: true, ..ui() }, &lay, &mut s, &ITEMS), MenuAct::Resume);
         sel = 0;
-        assert_eq!(menu_input(&mut sel, &Ui { confirm: true, ..ui() }, &lay, &mut s), MenuAct::Resume);
+        assert_eq!(menu_input(&mut sel, &Ui { confirm: true, ..ui() }, &lay, &mut s, &ITEMS), MenuAct::Resume);
         sel = ITEMS.len() - 1;
-        assert_eq!(menu_input(&mut sel, &Ui { confirm: true, ..ui() }, &lay, &mut s), MenuAct::Quit);
+        assert_eq!(menu_input(&mut sel, &Ui { confirm: true, ..ui() }, &lay, &mut s, &ITEMS), MenuAct::Quit);
+        // the options: BACK leaves, values step
+        let mut sel = menu::OPTIONS.len() - 1;
+        assert_eq!(menu_input(&mut sel, &Ui { confirm: true, ..ui() }, &lay, &mut s, &menu::OPTIONS), MenuAct::Resume);
+        sel = 0;
+        assert_eq!(menu_input(&mut sel, &Ui { nav: (-1, 0), ..ui() }, &lay, &mut s, &menu::OPTIONS), MenuAct::Changed);
+        assert_eq!(s.music_vol, tune::VOLUME_DEFAULT - 1);
     }
 
     #[test]
@@ -1101,13 +1347,13 @@ mod tests {
     #[test]
     fn tapping_a_value_steps_it() {
         let lay = Layout::fit(390, 844);
-        let m = hud::menu_box(&lay);
+        let m = hud::menu_box(&lay, ITEMS.len());
         let row = ITEMS.iter().position(|i| *i == Item::Speed).unwrap();
         let y = (m.row0 + row as i32 * m.row_h + 3) as f32;
         let mut s = Settings::default();
         let mut sel = 0;
         let tap = Ui { tap: Some(((m.val1 - 2) as f32, y)), ..ui() };
-        assert_eq!(menu_input(&mut sel, &tap, &lay, &mut s), MenuAct::Changed);
+        assert_eq!(menu_input(&mut sel, &tap, &lay, &mut s, &ITEMS), MenuAct::Changed);
         assert_eq!((sel, s.tuning.speed), (row, tune::MOVE_SPEED + tune::SPEED_RANGE.2));
     }
 }

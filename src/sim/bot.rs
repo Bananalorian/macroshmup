@@ -215,6 +215,11 @@ pub struct StageRun {
     pub phase_time: [Option<u32>; 4],
     pub phase_deaths: [u32; 4],
     pub boss_killed: bool,
+    /// The final score, the extends it earned, each phase's grade and the stage's rank.
+    pub score: u64,
+    pub extends: u8,
+    pub grades: [Option<super::score::Grade>; 4],
+    pub rank: Option<super::score::Grade>,
 }
 
 /// The bot plays Stage 1 from the top with 3 lives, with or without bombs, shooting
@@ -273,6 +278,10 @@ pub fn stage_trial(seed: u64, bombs: bool, shoot: bool) -> StageRun {
     run.killed = s.killed;
     run.spawned = s.spawned;
     run.grazes = w.grazes;
+    run.score = w.score.points;
+    run.extends = w.score.extends;
+    run.grades = w.score.grades;
+    run.rank = w.score.tally.map(|t| t.rank);
     run
 }
 

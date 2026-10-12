@@ -44,6 +44,14 @@ the font and every sound are built when the game starts. Written in Rust on
 
 ![Every explosion size at 4 moments, and the black hole at the start and end of the stage](docs/screenshots/fx-sheet.png)
 
+![The stage-clear tally: the lines counting up, the score, the rank slamming in, and the end](docs/screenshots/tally.png)
+
+![JAWSTHIC's phase captured: an S slams in under the boss, its bonus counting up](docs/screenshots/boss-grade.png)
+
+| | |
+|---|---|
+| ![The options: volumes, shake, flashing, the hitbox, the fire scheme](docs/screenshots/options.png) | ![The title's demo: the bot flies Stage 1](docs/screenshots/demo.png) |
+
 ![The Pilgrim's animation sheet: the flight form, banking, the five frames to the laser form, and the beam](docs/screenshots/pilgrim-sheet.png)
 
 ![The split sword in play: focus, and the blades close into one sword as the teal beam fires from its tip](docs/screenshots/pilgrim-forms.png)
@@ -51,6 +59,13 @@ the font and every sound are built when the game starts. Written in Rust on
 ![Stage 1's enemies in bone white, all built in code](docs/screenshots/enemy-sheet.png)
 
 ## Status
+
+**v0.8, score & shell:** a complete arcade loop. Kills score, double point-blank;
+cancelled bullets pay as shards; grazes add up. Each of the boss's phases ends on a
+grade (S, A, B or C) that slams in with its bonus. The stage ends in a tally that
+counts up to a rank, with a saved hi-score and two extends along the way. The title
+has Boss Practice, options (volumes, the hitbox, a HOLD TO BEAM fire scheme) and a
+demo the bot plays when it's left alone.
 
 **v0.7.2, a bigger play area:** the playfield is square now, 1080 × 1080 on a
 1080p screen, top to bottom, with narrower panels either side, and the game opens
@@ -112,7 +127,7 @@ Rust is pinned to 1.91.1 in `rust-toolchain.toml`, the same version CI uses.
 
 | Hook | What it does |
 |---|---|
-| `PG_SCENE=title` / `stage:<seconds>` / `midboss` / `boss` / `boss:<phase>` / `sandbox:<pattern>` / `stress` / `shots:<n>` | jump straight there (`stage:85` starts Stage 1 at 1:25; `boss` starts at the boss's arrival, `boss:2` straight into its phase 2; `sandbox:3` or `sandbox:spiral`; `shots`: keep n player shots alive in the sandbox) |
+| `PG_SCENE=title` / `options` / `stage:<seconds>` / `midboss` / `boss` / `boss:<phase>` / `sandbox:<pattern>` / `stress` / `shots:<n>` | jump straight there (only `stage:0` counts for the hi-score; `stage:85` starts Stage 1 at 1:25; `boss` starts at the boss's arrival, `boss:2` straight into its phase 2; `sandbox:3` or `sandbox:spiral`; `shots`: keep n player shots alive in the sandbox) |
 | `PG_SHOTS=60,300` | save those frames to `./shots/` and quit |
 | `PG_AUTO=1` | the dodging bot plays (and retries forever) |
 | `PG_SIM=200` | 200 headless seeded bot runs of Stage 1: clears, deaths per section, section timing, the derelict's kill time, each boss phase's time (`PG_SIM=boss:200` plays each boss phase without bombs; `PG_SIM=patterns:200` runs every sandbox pattern) |

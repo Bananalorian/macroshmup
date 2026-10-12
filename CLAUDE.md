@@ -43,7 +43,7 @@ The toolchain is pinned in `rust-toolchain.toml` and CI uses the same version. D
 ## Debug hooks (native)
 | Hook | What it does |
 |---|---|
-| `PG_SCENE=title` / `stage:<seconds>` / `midboss` / `boss:<phase>` / `sandbox:<pattern>` / `stress` | jump straight there |
+| `PG_SCENE=title` / `options` / `stage:<seconds>` / `midboss` / `boss:<phase>` / `sandbox:<pattern>` / `stress` | jump straight there |
 | `PG_SHOTS=60,300` | save those frames to `./shots/` and quit |
 | `PG_AUTO=1` | the dodging bot plays (and retries forever) |
 | `PG_SIM=200` | 200 headless seeded bot runs with a balance report |

@@ -3,6 +3,130 @@
 Every version is one build sprint. Newest first. Versions are tagged in git, and
 each tag publishes a GitHub Release with downloads.
 
+## [0.8.0] - 2026-10-12 - Score & shell
+
+### Added
+- **Scoring** that's simple at first and has depth to find:
+  - **Kills** score by size, from 500 for a drone to 200,000 for the derelict. A
+    kill within 48 px of the Pilgrim scores double: its number shows in teal, and a
+    teal ring flashes.
+  - **Shards:** when a heavy or the derelict dies, or a boss phase breaks, its
+    bullets turn into shards worth 50 each. A bomb's cancels give nothing.
+  - **Grazes** add 100 each.
+  - **Weak points:** the derelict's gun pods score 15,000, JAWSTHIC's fins 25,000,
+    and JAWSTHIC itself 300,000.
+  - **Popups:** points float up off every kill. Big ones (20,000 and up) come twice
+    the size, flashing.
+- **Arcade grades**, as you asked:
+  - **Boss phases** ([one captured](docs/screenshots/boss-grade.png)): each of
+    JAWSTHIC's phases ends on a grade:
+    - **S:** no death or bomb, and broken inside 70% of its time. Pays double the
+      capture bonus.
+    - **A:** no death or bomb (captured). Pays the capture bonus: 150,000 to
+      300,000, depending on the phase.
+    - **B:** broken, but you died or bombed. Pays a fifth.
+    - **C:** timed out. Pays nothing.
+
+    The letter slams in over the boss, huge and white. A streak of light crosses
+    the field and a ring bursts out, then the letter settles under CAPTURED with
+    its bonus counting up. An S glows teal.
+  - **The stage's rank,** S, A, B, C or D, comes from a rating out of 100:
+    - the kill rate, up to 30;
+    - the boss's four grades, up to 40, and its kill, 10;
+    - no misses, 15;
+    - no bombs, 5.
+- **Extends:** an extra ship at 800,000 and at 1,800,000, up to six ships, with
+  EXTEND flashing and a jingle.
+- **The stage-clear tally**
+  ([its moments](docs/screenshots/tally.png), [its end](docs/screenshots/stage-end.png)):
+  1. The lines come in one by one, ticking and counting up: kills, the boss's four
+     grades popping in, NO MISS +500,000, NO BOMB +300,000, and graze.
+  2. The score counts up.
+  3. The rank slams in.
+  4. SOMEWHERE BEYOND THE EVENT HORIZON types itself in before the menu.
+
+  Any button skips to the end. A new best shows NEW RECORD with a jingle.
+- **The hi-score** is saved on the desktop and in the browser. Only Stage 1 played
+  from the top counts, not Boss Practice, the sandbox or the demo.
+- **The HUD after your sheet:**
+  - **Left panel:** PILGRIM, the score (8 digits, with the leading zeros dimmed),
+    the hi-score, lives and bombs, graze, kills and misses, and the controls.
+  - **Right panel:** SOMEWHERE BEYOND THE EVENT HORIZON, the stage and section, the
+    tuning, the palette strip, and the stamps.
+  - **On a phone,** the top strip shows the score, lives, bombs and hi-score.
+- **The title:**
+  - Its menu: STAGE 1, BOSS PRACTICE (once you've reached the boss), PATTERN
+    SANDBOX and OPTIONS.
+  - The hi-score.
+  - **A demo:** left alone for 20 seconds, the title hands over to the bot, which
+    flies Stage 1 under DEMO and PRESS START
+    ([the demo](docs/screenshots/demo.png)). Any button brings the title back.
+- **Options** ([the screen](docs/screenshots/options.png)), all saved:
+  - music and sound volume;
+  - shake and reduce flash;
+  - the hitbox: shown always, or only while focused;
+  - the fire scheme: a focus button, or HOLD TO BEAM, where holding fire for a
+    moment becomes the beam (CAVE style);
+  - touch sensitivity and the stick.
+- **Boss Practice** joins the title once you've reached the boss. It starts at its
+  arrival.
+- **Game over** shows your score and the hi-score, with NEW RECORD when you beat it.
+- **Sounds:** the tally's tick, a slam for grades and the rank, the extend's jingle.
+- **Debug hooks:** `PG_SCENE=options`. `PG_SIM=200` now reports the score, the
+  extends, each phase's grades and the stage's ranks.
+
+### Changed
+- `PG_AUTO` waits for the tally to finish before it plays again.
+
+### Fixed
+- **My mistake with your save file.** While I built this, a test wrote to your real
+  save file (`%APPDATA%\.pilgrim\save.txt`). The options and tuning you'd saved
+  were reset to their defaults, and it saved a fake hi-score of 1,000, which I've put
+  back to 0. Tests can't reach the save file any more: a test proves it, and the
+  file's timestamp stays put through the whole suite. **If you'd changed the speed,
+  focus, blend, stick, flashing, shake or mute, please set them again.**
+
+### Checked
+- **Tests prove:**
+  - a kill scores its points, double within 48 px;
+  - a heavy's cancelled bullets pay as shards;
+  - grazes add up quietly, and the sandbox keeps no score;
+  - each extend comes once, never past six ships, and the stage-end bonuses never
+    earn one;
+  - each boss phase is graded once, with the right bonus: S when broken clean and
+    fast, A when clean, B after a bomb, C when it times out;
+  - the stage's end pays the no-miss and no-bomb bonuses, and ranks the run from
+    its rating;
+  - only Stage 1 from the top sets the hi-score;
+  - the hi-score, the options, the fire scheme and Boss Practice's unlock are saved
+    and read back;
+  - the title offers Boss Practice once it's unlocked;
+  - the demo starts after 20 seconds, and any button, its end, or a minute ends it;
+  - HOLD TO BEAM turns a held fire into the beam;
+  - volumes step from silent to full;
+  - the tally ticks, slams once and sings for a record;
+  - every label has its glyphs and fits its panel.
+- **The bot** (`PG_SIM=200`):
+  - **Scores:** a median of 2,971,850. 80% of runs land between 2.75M and 3.27M.
+  - **Extends:** both in 98% of runs.
+  - **Grades:**
+    - phase 1 always grades A;
+    - phase 2 grades S in 92% of runs;
+    - phases 3 and 4 split between S and A.
+  - **Rank:** A in 84% of runs, S in 15%.
+  - **Unchanged:** it still clears the stage 100% of the time with no misses.
+
+  The bot dodges better than any human, so a strong human run should land around
+  B or A.
+- **A full Stage 1 run by the bot**, screenshotted in real time: JAWSTHIC's last
+  grade crosses an extend, then the white-out, then the tally with NEW RECORD and
+  rank A.
+- Native and web builds are warning-free, and all 236 tests pass.
+- **Not checked by ear or by hand:**
+  - I couldn't listen to the new sounds. Please give them a listen.
+  - The new screens' keyboard, controller and touch input is covered by tests of
+    the menu logic, not tried on a device.
+
 ## [0.7.3] - 2026-10-12 - A fifth smaller
 
 ### Changed

@@ -206,7 +206,7 @@ pub fn export_mockup(r: &mut Renderer) {
         r.parts = Particles::new();
         r.fx = Fx::new();
         r.begin(&lay);
-        scene::draw(r, &lay, world, false, &[]);
+        scene::draw(r, &lay, world, false, false, &[]);
         r.post(&lay, &PostParams { field: lay.field, time: world.frame as f32 / 60.0 });
         r.read_post(&lay)
     };

@@ -1,6 +1,7 @@
 //! The pause menu, which is also the pattern sandbox's controls and the live
 //! tuning panel: speed, focus ratio and blend frames change the game the moment
-//! you resume (and are saved). The sandbox switches last for the session.
+//! you resume (and are saved). The sandbox switches last for the session. And the
+//! title's options: volumes, shake, flashing, the hitbox, the fire scheme, touch.
 
 use crate::render::post::ShakeSetting;
 use crate::storage::Settings;
@@ -26,6 +27,11 @@ pub enum Item {
     Stick,
     Reset,
     Quit,
+    Music,
+    Sound,
+    ShowHitbox,
+    Fire,
+    Back,
 }
 
 pub const ITEMS: [Item; 18] = [
@@ -49,6 +55,9 @@ pub const ITEMS: [Item; 18] = [
     Item::Quit,
 ];
 
+/// The title's options screen.
+pub const OPTIONS: [Item; 9] = [Item::Music, Item::Sound, Item::Shake, Item::ReduceFlash, Item::ShowHitbox, Item::Fire, Item::Touch, Item::Stick, Item::Back];
+
 impl Item {
     pub fn label(self) -> &'static str {
         match self {
@@ -70,12 +79,17 @@ impl Item {
             Item::Stick => "STICK",
             Item::Reset => "RESET TUNING",
             Item::Quit => "QUIT TO TITLE",
+            Item::Music => "MUSIC",
+            Item::Sound => "SOUND",
+            Item::ShowHitbox => "HITBOX",
+            Item::Fire => "FIRE",
+            Item::Back => "BACK",
         }
     }
 
     /// Items with a value you change with left and right.
     pub fn adjustable(self) -> bool {
-        !matches!(self, Item::Resume | Item::Reset | Item::Quit)
+        !matches!(self, Item::Resume | Item::Reset | Item::Quit | Item::Back)
     }
 }
 
@@ -107,8 +121,17 @@ pub fn value(s: &Settings, item: Item) -> String {
         Item::Blend => format!("{} F", s.tuning.focus_blend),
         Item::Touch => format!("{:.1}X", s.touch_sens),
         Item::Stick => (if s.analog { "ANALOG" } else { "8-WAY" }).to_string(),
+        Item::Music => volume(s.music_vol),
+        Item::Sound => volume(s.sound_vol),
+        Item::ShowHitbox => (if s.hitbox_always { "ALWAYS" } else { "FOCUSED" }).to_string(),
+        Item::Fire => (if s.hold_beam { "HOLD TO BEAM" } else { "FOCUS BUTTON" }).to_string(),
         _ => String::new(),
     }
+}
+
+/// A volume, 0-10, as a percentage.
+fn volume(v: u8) -> String {
+    if v == 0 { "OFF".to_string() } else { format!("{}%", v as u32 * 10) }
 }
 
 fn step(v: f32, (lo, hi, by): (f32, f32, f32), dir: i32) -> f32 {
@@ -158,6 +181,10 @@ pub fn adjust(s: &mut Settings, item: Item, dir: i32) {
         Item::Touch => s.touch_sens = step(s.touch_sens, TOUCH_SENS_RANGE, dir),
         Item::Stick => s.analog = !s.analog,
         Item::Reset => s.tuning = Default::default(),
+        Item::Music => s.music_vol = (s.music_vol as i32 + dir).clamp(0, 10) as u8,
+        Item::Sound => s.sound_vol = (s.sound_vol as i32 + dir).clamp(0, 10) as u8,
+        Item::ShowHitbox => s.hitbox_always = !s.hitbox_always,
+        Item::Fire => s.hold_beam = !s.hold_beam,
         _ => {}
     }
 }
@@ -241,6 +268,24 @@ mod tests {
         assert_eq!(value(&s, Item::Boom), "BOSS");
         let saved = Settings::parse(&s.format());
         assert!(saved.reduce_flash && saved.shake == ShakeSetting::Off, "the options are saved");
+    }
+
+    #[test]
+    fn the_options_change_and_are_saved() {
+        let mut s = Settings::default();
+        for _ in 0..20 {
+            adjust(&mut s, Item::Music, -1);
+            adjust(&mut s, Item::Sound, 1);
+        }
+        assert_eq!((s.music_vol, s.sound_vol), (0, 10), "volumes stop at their ends");
+        assert_eq!((value(&s, Item::Music).as_str(), value(&s, Item::Sound).as_str()), ("OFF", "100%"));
+        assert_eq!(value(&s, Item::Fire), "FOCUS BUTTON");
+        adjust(&mut s, Item::Fire, 1);
+        adjust(&mut s, Item::ShowHitbox, 1);
+        assert_eq!((value(&s, Item::Fire).as_str(), value(&s, Item::ShowHitbox).as_str()), ("HOLD TO BEAM", "ALWAYS"));
+        let saved = Settings::parse(&s.format());
+        assert_eq!((saved.music_vol, saved.sound_vol, saved.hold_beam, saved.hitbox_always), (0, 10, true, true));
+        assert!(OPTIONS.iter().all(|i| !i.label().is_empty()) && OPTIONS.last() == Some(&Item::Back));
     }
 
     #[test]

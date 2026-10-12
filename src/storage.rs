@@ -1,4 +1,5 @@
-//! What survives between sessions: the tuning panel's values and the options.
+//! What survives between sessions: the hi-score, Boss Practice once it's unlocked,
+//! the tuning panel's values and the options.
 //! Ported from Last Train to Shinjuku: the browser build keeps it in localStorage
 //! through a tiny JS plugin in web/template.html; desktop builds keep a text file.
 
@@ -33,11 +34,22 @@ pub struct Settings {
     pub view: View,
     /// Full screen (the default) or a window, as F11 last left it (desktop only).
     pub fullscreen: bool,
+    /// Music and sound effects volume, 0-10.
+    pub music_vol: u8,
+    pub sound_vol: u8,
+    /// Show the hitbox dot all the time, not just while focused.
+    pub hitbox_always: bool,
+    /// Fire schemes: a focus button (false), or hold fire to beam (CAVE style).
+    pub hold_beam: bool,
+    /// The best score (Stage 1 from the top), and Boss Practice, unlocked once you've
+    /// reached the boss.
+    pub hiscore: u64,
+    pub boss_unlocked: bool,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Settings { tuning: Tuning::default(), touch_sens: TOUCH_SENS, analog: false, muted: false, reduce_flash: false, shake: ShakeSetting::Full, view: View::default(), fullscreen: true }
+        Settings { tuning: Tuning::default(), touch_sens: TOUCH_SENS, analog: false, muted: false, reduce_flash: false, shake: ShakeSetting::Full, view: View::default(), fullscreen: true, music_vol: VOLUME_DEFAULT, sound_vol: VOLUME_DEFAULT, hitbox_always: false, hold_beam: false, hiscore: 0, boss_unlocked: false }
     }
 }
 
@@ -81,6 +93,24 @@ impl Settings {
                 }
                 "muted" => s.muted = v == "1",
                 "fullscreen" => s.fullscreen = v != "0",
+                "music" => {
+                    if let Ok(n) = v.parse::<u8>() {
+                        s.music_vol = n.min(10);
+                    }
+                }
+                "sound" => {
+                    if let Ok(n) = v.parse::<u8>() {
+                        s.sound_vol = n.min(10);
+                    }
+                }
+                "hitbox" => s.hitbox_always = v == "always",
+                "fire" => s.hold_beam = v == "hold",
+                "hiscore" => {
+                    if let Ok(n) = v.parse::<u64>() {
+                        s.hiscore = n;
+                    }
+                }
+                "boss" => s.boss_unlocked = v == "1",
                 _ => {}
             }
         }
@@ -94,7 +124,7 @@ impl Settings {
             ShakeSetting::Full => "full",
         };
         format!(
-            "speed={}\nfocus_ratio={}\nfocus_blend={}\ntouch_sens={}\nstick={}\nmuted={}\nreduce_flash={}\nshake={}\nfullscreen={}\n",
+            "speed={}\nfocus_ratio={}\nfocus_blend={}\ntouch_sens={}\nstick={}\nmuted={}\nreduce_flash={}\nshake={}\nfullscreen={}\nmusic={}\nsound={}\nhitbox={}\nfire={}\nhiscore={}\nboss={}\n",
             self.tuning.speed,
             self.tuning.focus_ratio,
             self.tuning.focus_blend,
@@ -103,7 +133,13 @@ impl Settings {
             self.muted as u8,
             self.reduce_flash as u8,
             shake,
-            self.fullscreen as u8
+            self.fullscreen as u8,
+            self.music_vol,
+            self.sound_vol,
+            if self.hitbox_always { "always" } else { "focus" },
+            if self.hold_beam { "hold" } else { "button" },
+            self.hiscore,
+            self.boss_unlocked as u8
         )
     }
 
@@ -124,7 +160,8 @@ fn path() -> Option<std::path::PathBuf> {
 
 #[cfg(not(target_arch = "wasm32"))]
 fn read() -> String {
-    if std::env::var("PG_FRESH").is_ok() {
+    // tests and screenshot runs never touch the player's save
+    if cfg!(test) || std::env::var("PG_FRESH").is_ok() {
         return String::new(); // screenshots and bot runs use the defaults
     }
     path().and_then(|p| std::fs::read_to_string(p).ok()).unwrap_or_default()
@@ -132,7 +169,7 @@ fn read() -> String {
 
 #[cfg(not(target_arch = "wasm32"))]
 fn write(data: &str) {
-    if std::env::var("PG_FRESH").is_ok() {
+    if cfg!(test) || std::env::var("PG_FRESH").is_ok() {
         return;
     }
     if let Some(p) = path() {
@@ -166,6 +203,15 @@ fn write(data: &str) {
 mod tests {
     use super::*;
 
+    /// Tests never touch the player's save file: saving does nothing and loading
+    /// finds nothing (a test once wrote over Jason's real save).
+    #[test]
+    fn tests_never_touch_the_save_file() {
+        let s = Settings { hiscore: 42, boss_unlocked: true, ..Settings::default() };
+        s.save();
+        assert_eq!(Settings::load(), Settings::default());
+    }
+
     /// The game opens full screen, an old save without the line too, until F11
     /// chooses a window, which is remembered.
     #[test]
@@ -187,6 +233,12 @@ mod tests {
             shake: ShakeSetting::Low,
             view: View::default(),
             fullscreen: false,
+            music_vol: 3,
+            sound_vol: 10,
+            hitbox_always: true,
+            hold_beam: true,
+            hiscore: 12_345_670,
+            boss_unlocked: true,
         };
         assert_eq!(Settings::parse(&s.format()), s);
         assert_eq!(Settings::parse(&Settings::default().format()), Settings::default());

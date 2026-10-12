@@ -258,7 +258,7 @@ F6 skip to the next section · F7 next sandbox pattern · F8 performance overlay
 2. **Contrast as a mechanic** (Ikaruga-style polarity): **no, contrast stays visual.** A yes would reshape Sprints 2, 4 and 6.
 3. **Power-ups:** **none; full power from the start.**
 4. **Boss:** **JAWSTHIC**, your concept (Sprint 6, v0.7.0). The Cathedral proposal is retired.
-5. **Shot controls:** **a separate Focus button** (Touhou-style), with a CAVE-style "hold Fire to beam" option.
+5. **Shot controls:** **a separate Focus button** (Touhou-style), with a CAVE-style "hold Fire to beam" option (both in the options since v0.8.0).
 6. **Continues:** **none (arcade retry)**, plus Boss Practice once you've reached the boss.
 
 ---
@@ -455,6 +455,7 @@ Build
   - No-miss and no-bomb stage bonuses.
   - One or two score extends.
   - Big flashing numbers for big kills.
+- **Grades, arcade style** (your call, added before the sprint): each boss phase ends on S, A, B or C, slamming in with its bonus, and the stage tally ends on a rank, S to D, with a flare.
 - **HUD styled after your sheet.** Left panel: score, hi-score, lives, bombs. Right panel: stage name, the palette strip, `V0.x // PILGRIM`, HUMANITY STILL LOOKS UP. Portrait gets a compact top strip.
 - **Screens:** title (the black hole, the tagline, press start, a bot-played attract demo after 20 s idle), options (volumes, shake, flashing, always-show hitbox, fire scheme, touch sensitivity), pause, game over, and the stage clear tally ending on SOMEWHERE BEYOND THE EVENT HORIZON.
 - **Saves** (ported `storage.rs`): hi-score and options. Boss Practice unlocks once you've reached the boss.

@@ -79,7 +79,7 @@ fn breather(a: &Atlas, ox: i32, oy: i32, t: u32) {
 }
 
 /// `wrecks`: the derelict's wreck during its death, (x, y, 0..1 of the way to the end).
-pub fn draw(r: &Renderer, lay: &Layout, w: &World, hitboxes: bool, wrecks: &[(f32, f32, f32)]) {
+pub fn draw(r: &Renderer, lay: &Layout, w: &World, hitboxes: bool, show_dot: bool, wrecks: &[(f32, f32, f32)]) {
     let a = &r.atlas;
     let (ox, oy) = (lay.field.x, lay.field.y);
     let dim = dim_for(w.hazards.bullets.len());
@@ -191,6 +191,8 @@ pub fn draw(r: &Renderer, lay: &Layout, w: &World, hitboxes: bool, wrecks: &[(f3
         let f = lay.field;
         a.fill(f.x, f.y, f.w, f.h, Color { a: white, ..CREAM });
     }
+    // the score's popups and grades, under the bullets so they never hide one
+    r.popups.draw(a, ox, oy);
     // enemy bullets above everything but the HUD (and the hitbox dot, which is HUD),
     // the boss's laser among them
     if let Some(l) = w.boss.as_ref().and_then(|b| b.laser) {
@@ -198,7 +200,8 @@ pub fn draw(r: &Renderer, lay: &Layout, w: &World, hitboxes: bool, wrecks: &[(f3
     }
     super::bullets::draw_bullets(a, w, ox, oy);
     if w.alive() {
-        ship::draw_hitbox(a, px, py, p.blend(&w.tuning), w.frame);
+        let blend = if show_dot { 1.0 } else { p.blend(&w.tuning) };
+        ship::draw_hitbox(a, px, py, blend, w.frame);
     }
 
     if hitboxes {

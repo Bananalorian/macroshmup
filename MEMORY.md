@@ -3,6 +3,58 @@
 Session notes for Claude Code: what shipped, tuning that changed, known issues, what's next.
 Newest first.
 
+## v0.8.0 Score & shell (Sprint 7) - 2026-10-12
+
+**Jason's calls:** the score sprint with arcade grades: "s/a/b/ etc. flare when the score
+happens. think arcade like". (He called it "sprint 6"; it's Sprint 7.)
+
+**Shipped**
+- `sim/score.rs`: Grade (S A B C D), Award (Kill, Blank, Part, Shards, Grade(p, g),
+  BossKill, Graze), Score {points, extends, grades, tally}, Tally, kill_points (x2 within
+  POINT_BLANK 48 px), phase_grade (S clean inside GRADE_S_TIME 0.7 of the limit, A clean, B
+  not, C timeout), phase_bonus (CAPTURE x2/x1/x0.2/0), rating (kills 30, grades 10/7/4/0
+  each, destroyed 10, no miss 15 -5 a death, no bomb 5 -2 a bomb), rank (RANKS 90/75/55/35).
+- World: `score`, `award()` (Stage 1 only; Event::Points, extends -> lives up to
+  MAX_LIVES 6 + Event::Extend), kill/part/fin/boss-kill points, shards from heavy kills and
+  boss breaks (not bombs), silent graze points, `grade_phase()` once per phase (Boss.took[]
+  records the frames each phase took), `finish_stage()` at BossGone: no-miss/no-bomb
+  bonuses added straight to points (no extend), the tally.
+- Tunables (tune.rs "scoring"): KILL_POINTS [500, 750, 1.5k, 7.5k, 10k, 40k, 200k], PART 15k,
+  SHARD 50, GRAZE 100, FIN 25k, BOSS_KILL 300k, CAPTURE [150k, 200k, 200k, 300k], NO_MISS
+  500k, NO_BOMB 300k, EXTENDS [800k, 1.8M], BIG_POINTS 20k; TALLY_STEP 18 / COUNT 16 /
+  SCORE 108 / RANK 148 / LINE 188 / DONE 228; ATTRACT_AFTER 1200; DEMO_LEN 3600; HOLD_BEAM 18;
+  VOLUME_DEFAULT 8; VOL_TICK/SLAM/EXTEND.
+- `render/popups.rs`: kill numbers (cream; teal point-blank; 2x flashing for big), shards,
+  `draw_grade`/`slam_letter` (scale 12 -> 6, streak, ring, S teal glow, glint), EXTEND; drawn
+  under the bullets. `commas()`, `grade_color()`.
+- HUD: left panel score (`score_digits`, 8 digits, zeros DUSK) / hi-score / lives / bombs /
+  stats / controls; right panel voyage / stage / tuning / strip / stamps. `HudView` gained
+  score, hiscore, end_t, record, tally, demo, ranked (`best()` shows this run's score only
+  when it counts). Tally (`stage_end`) on end_t; game over with score; DEMO overlay; menus
+  generalised (`menu_box(lay, n)`, `menu_tap(lay, items, ..)`, `menu_panel`); `TitleItem`,
+  `title_items(practice)`, `options()`.
+- main.rs: `Run` (Stage / Practice / Sandbox / Demo), `Scene::Options`, Title `idle`,
+  `begin()`, `start_boss`, `start_demo`, `to_title`, `attract()` (demo after 20 s idle, any
+  button / end / a minute ends it), `new_record()`, `tally_cue()`, `focused()` (HOLD TO BEAM),
+  BossArrive in a Stage run unlocks Boss Practice. PG_AUTO retries after the tally.
+- storage: music, sound, hitbox (always/focus), fire (hold/button), hiscore, boss. **read() and
+  write() do nothing under cfg(test)** (see below).
+- synth: tally_tick, slam, extend_jingle (Id Tick, Slam, Extend); audio `volumes()`, `gain()`.
+- debug: PG_SCENE=options; PG_SIM stage report prints score / extends / grades / ranks.
+
+**Incident:** a test (`only_a_full_stage_run_sets_the_hi_score`) called Settings::save and
+overwrote Jason's real `%APPDATA%\.pilgrim\save.txt` (his options and tuning reset to
+defaults, hiscore=1000). I set hiscore back to 0, made storage a no-op in tests, verified the
+file's timestamp doesn't change across `cargo test`, and told him to re-set his options.
+Lesson: anything that touches the user's disk must be inert in tests.
+
+**Measured:** PG_SIM=200 score median 2,971,850 (2.75M-3.27M), extends 100% / 98%, rank A 84%
+S 15%, phase grades P1 A, P2 S 92%, P3 S 58%, P4 S 37%; stage still 100% clear / no-miss.
+Full bot run seed 7 from the top: stage ends at screen frame 16156, rank A, NEW RECORD.
+
+**Open:** listen to the new sounds; human difficulty and score feel (Sprint 9); red or teal
+wide shot? Next: Sprint 8, Music & mix.
+
 ## v0.7.3 A fifth smaller - 2026-10-12
 
 **Jason:** "make the ship about 20% smaller while keeping the detail; everything about the

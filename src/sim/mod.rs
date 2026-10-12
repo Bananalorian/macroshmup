@@ -17,6 +17,7 @@ mod lives;
 pub mod pattern;
 pub mod player;
 pub mod rng;
+pub mod score;
 pub mod shots;
 pub mod stage1;
 #[cfg(test)]
@@ -31,6 +32,7 @@ use stage1::Stage;
 use pattern::Hazards;
 use player::{Controls, Player, Tuning};
 use rng::Rng;
+use score::{Award, Score, Tally};
 use shots::{Shot, ShotKind};
 
 /// What happened this frame, for sound and effects to pick up.
@@ -99,6 +101,10 @@ pub enum Event {
     BossFall,
     /// It's gone (destroyed or swallowed): the stage ends.
     BossGone,
+    /// Points scored at `(x, y)`, and what for.
+    Points { x: f32, y: f32, n: u32, how: Award },
+    /// The score passed an extend: an extra ship.
+    Extend,
 }
 
 /// Something shots can hit: a target dummy, part `p` of enemy `i` (0 is its body), or
@@ -207,6 +213,8 @@ pub struct World {
     pub boss: Option<Boss>,
     /// Ticks left of the boss's death in slow motion (the caller runs them at quarter speed).
     pub slow: u32,
+    /// Points, grades and the stage's tally (Stage 1 only; the sandbox doesn't score).
+    pub score: Score,
     /// Everything shots can hit this frame, weak points before bodies.
     boxes: Vec<(Target, Rect)>,
     hits_now: Vec<Target>,
@@ -244,6 +252,7 @@ impl World {
             stage: None,
             boss: None,
             slow: 0,
+            score: Score::default(),
             boxes: Vec::with_capacity(64),
             hits_now: Vec::with_capacity(64),
         }
@@ -438,7 +447,8 @@ impl World {
         for k in from..self.events.len() {
             let mut out = std::mem::take(&mut self.cancelled);
             let before = out.len();
-            match self.events[k] {
+            let event = self.events[k];
+            match event {
                 Event::BossBreak { .. } | Event::BossFall => self.hazards.cancel_owner(BOSS_ID, &mut out),
                 Event::BossDown { .. } => {
                     self.hazards.cancel_within(0.0, 0.0, f32::MAX, &mut out);
@@ -448,13 +458,88 @@ impl World {
                     if let Some(s) = self.stage.as_mut().filter(|s| !s.over) {
                         s.over = true;
                         self.events.push(Event::StageEnd);
+                        self.finish_stage();
                     }
                 }
+                Event::FinBreak { x, y, .. } => self.award(x, y, FIN_POINTS, Award::Part),
                 _ => {}
             }
-            self.cancel_shards |= out.len() > before;
+            let shards = out.len() - before;
+            self.cancel_shards |= shards > 0;
             self.cancelled = out;
+            // a phase over: its grade and bonus, then its bullets' shards
+            if matches!(event, Event::BossBreak { .. } | Event::BossDown { .. } | Event::BossFall) {
+                self.grade_phase();
+                if let Event::BossDown { x, y } = event {
+                    self.award(x, y, BOSS_KILL_POINTS, Award::BossKill);
+                }
+            }
+            self.award_shards(shards);
         }
+    }
+
+    /// Score `n` points at `(x, y)` (Stage 1 only), and give any extends they earn.
+    fn award(&mut self, x: f32, y: f32, n: u32, how: Award) {
+        if self.stage.is_none() || n == 0 {
+            return;
+        }
+        let extends = self.score.add(n);
+        if how != Award::Graze {
+            self.events.push(Event::Points { x, y, n, how });
+        }
+        for _ in 0..extends {
+            self.lives = (self.lives + 1).min(MAX_LIVES);
+            self.events.push(Event::Extend);
+        }
+    }
+
+    /// Cancelled bullets turned into shards that fly to you.
+    fn award_shards(&mut self, n: usize) {
+        let (x, y) = (self.player.x, self.player.y);
+        self.award(x, y, n as u32 * SHARD_POINTS, Award::Shards);
+    }
+
+    /// The boss's phase just ended: grade it once, and pay its bonus.
+    fn grade_phase(&mut self) {
+        let Some(b) = &self.boss else { return };
+        let p = b.phase;
+        let i = p as usize - 1;
+        let (Some(outcome), false) = (b.outcomes[i], self.score.grades[i].is_some()) else { return };
+        let grade = score::phase_grade(outcome, b.clean[i], b.took[i], JAWS_PHASES[i].1 * TICK_HZ);
+        self.score.grades[i] = Some(grade);
+        let (x, y) = (b.x, b.y);
+        self.award(x, y, score::phase_bonus(p, grade), Award::Grade(p, grade));
+        // even a C shows its letter
+        if score::phase_bonus(p, grade) == 0 && self.stage.is_some() {
+            self.events.push(Event::Points { x, y, n: 0, how: Award::Grade(p, grade) });
+        }
+    }
+
+    /// The stage is over: the no-miss and no-bomb bonuses, the rating and the rank.
+    fn finish_stage(&mut self) {
+        let Some(s) = &self.stage else { return };
+        let (killed, spawned) = (s.killed, s.spawned);
+        let destroyed = self.boss.as_ref().is_some_and(|b| b.outcomes[3] == Some(boss::Outcome::Broken));
+        let grades = self.score.grades;
+        let no_miss = if self.deaths == 0 { NO_MISS_BONUS } else { 0 };
+        let no_bomb = if self.bombs_used == 0 { NO_BOMB_BONUS } else { 0 };
+        // too late for an extend to help, so they don't earn one
+        self.score.points += (no_miss + no_bomb) as u64;
+        let rating = score::rating(killed, spawned, destroyed, &grades, self.deaths, self.bombs_used);
+        self.score.tally = Some(Tally {
+            killed,
+            spawned,
+            destroyed,
+            grades,
+            misses: self.deaths,
+            bombs: self.bombs_used,
+            grazes: self.grazes,
+            no_miss,
+            no_bomb,
+            rating,
+            rank: score::rank(rating),
+            total: self.score.points,
+        });
     }
 
     /// The boss is fighting a phase you just died or bombed in: no capture for it.
@@ -640,7 +725,9 @@ impl World {
                 Hurt::Died => self.kill(i),
                 Hurt::Broke => {
                     let r = self.foes.list[i].rect(p);
-                    self.events.push(Event::PartBreak { x: (r.x0 + r.x1) * 0.5, y: (r.y0 + r.y1) * 0.5 });
+                    let (x, y) = ((r.x0 + r.x1) * 0.5, (r.y0 + r.y1) * 0.5);
+                    self.events.push(Event::PartBreak { x, y });
+                    self.award(x, y, PART_POINTS, Award::Part);
                     self.boxes.retain(|b| b.0 != t);
                 }
                 Hurt::Hit | Hurt::Nothing => {}
@@ -651,15 +738,19 @@ impl World {
     /// Enemy `i` is destroyed. A high-HP one takes its bullets with it, as shards.
     fn kill(&mut self, i: usize) {
         let e = &self.foes.list[i];
-        let (id, kind) = (e.id, e.kind);
-        self.events.push(Event::Kill { x: e.x, y: e.y, kind });
+        let (id, kind, x, y) = (e.id, e.kind, e.x, e.y);
+        self.events.push(Event::Kill { x, y, kind });
+        let (n, blank) = score::kill_points(kind, (x - self.player.x).hypot(y - self.player.y));
+        self.award(x, y, n, if blank { Award::Blank } else { Award::Kill });
         self.boxes.retain(|b| !matches!(b.0, Target::Foe(j, _) if j == i));
         if kind.heavy() {
             let mut out = std::mem::take(&mut self.cancelled);
             let before = out.len();
             self.hazards.cancel_owner(id, &mut out);
-            self.cancel_shards |= out.len() > before;
+            let shards = out.len() - before;
+            self.cancel_shards |= shards > 0;
             self.cancelled = out;
+            self.award_shards(shards);
         }
         if let Some(s) = &mut self.stage {
             s.killed += 1;
@@ -735,6 +826,7 @@ impl World {
         let safe = !self.vulnerable();
         let b = &mut self.hazards.bullets;
         let mut hit = false;
+        let mut grazed = 0;
         for i in 0..b.len() {
             if b.age[i] < BLOOM_FRAMES {
                 continue; // still blooming: harmless
@@ -745,9 +837,11 @@ impl World {
             } else if d <= GRAZE_R && !b.grazed[i] {
                 b.grazed[i] = true;
                 self.grazes += 1;
+                grazed += 1;
                 self.events.push(Event::Graze { x: b.x[i], y: b.y[i] });
             }
         }
+        self.award(px, py, grazed * GRAZE_POINTS, Award::Graze);
         // crashing into an enemy's body is as bad as a bullet, and so is the boss's laser
         if !safe {
             hit |= self.foes.list.iter().any(|e| e.alive() && e.body().dist(px, py) < HITBOX_R);
@@ -793,6 +887,121 @@ mod tests {
         let mut w = World::new(1, Tuning::default());
         w.dummies = vec![Dummy::new(kind, x, y)];
         w
+    }
+
+    // ---------------------------------------------------------------- the score
+
+    /// Stage 1 in the breather: nobody else about.
+    fn quiet_stage() -> World {
+        World::stage_at(1, Tuning::default(), SECTIONS[3].0 + 1.0)
+    }
+
+    fn points(w: &World) -> Vec<(u32, Award)> {
+        w.events.iter().filter_map(|e| if let Event::Points { n, how, .. } = e { Some((*n, *how)) } else { None }).collect()
+    }
+
+    /// An enemy of `kind` parked at `(x, y)`; returns its index.
+    fn parked(w: &mut World, kind: EnemyKind, x: f32, y: f32) -> usize {
+        w.foes.add(kind, 0, enemy::Path::Drift { x, y, vy: 0.0, sway: 0.0 });
+        let i = w.foes.list.len() - 1;
+        (w.foes.list[i].x, w.foes.list[i].y) = (x, y);
+        i
+    }
+
+    #[test]
+    fn kills_score_and_point_blank_ones_score_double() {
+        let mut w = quiet_stage();
+        let (px, py) = (w.player.x, w.player.y);
+        let far = parked(&mut w, EnemyKind::Gunship, px, py - 200.0);
+        let near = parked(&mut w, EnemyKind::Gunship, px, py - (POINT_BLANK.0 - 10.0));
+        w.kill(far);
+        w.kill(near);
+        let base = KILL_POINTS[EnemyKind::Gunship as usize];
+        assert_eq!(points(&w), vec![(base, Award::Kill), (base * POINT_BLANK.1, Award::Blank)]);
+        assert_eq!(w.score.points, (base + base * POINT_BLANK.1) as u64);
+    }
+
+    #[test]
+    fn a_big_kill_turns_its_bullets_into_shard_points() {
+        let mut w = quiet_stage();
+        let i = parked(&mut w, EnemyKind::Heavy, 100.0, 80.0);
+        let id = w.foes.list[i].id;
+        for k in 0..12 {
+            w.hazards.bullets.push(bullets::Spawn { x: 20.0 + k as f32 * 10.0, y: 150.0, vx: 0.0, vy: 1.0, kind: bullets::Kind::Small, behavior: bullets::Behavior::Straight, owner: id, hue: Default::default() });
+        }
+        w.kill(i);
+        assert!(points(&w).contains(&(12 * SHARD_POINTS, Award::Shards)), "{:?}", points(&w));
+        assert!(w.cancel_shards);
+    }
+
+    #[test]
+    fn grazes_score_quietly_and_the_sandbox_keeps_no_score() {
+        let mut w = quiet_stage();
+        w.award(0.0, 0.0, GRAZE_POINTS, Award::Graze);
+        assert_eq!(w.score.points, GRAZE_POINTS as u64);
+        assert!(points(&w).is_empty(), "no popup for a graze");
+        let mut w = with_dummy(DummyKind::Still, 135.0, 100.0);
+        w.award(10.0, 10.0, 1_000_000, Award::Kill);
+        assert_eq!((w.score.points, w.lives), (0, LIVES));
+    }
+
+    #[test]
+    fn extends_give_a_ship_once_each_up_to_the_most() {
+        let mut w = quiet_stage();
+        w.award(0.0, 0.0, EXTENDS[0] as u32, Award::Kill);
+        assert_eq!(w.lives, LIVES + 1);
+        assert_eq!(w.events.iter().filter(|e| **e == Event::Extend).count(), 1);
+        w.award(0.0, 0.0, 10, Award::Kill);
+        assert_eq!(w.lives, LIVES + 1, "once");
+        w.lives = MAX_LIVES;
+        w.award(0.0, 0.0, EXTENDS[1] as u32, Award::Kill);
+        assert_eq!((w.lives, w.score.extends), (MAX_LIVES, 2), "never past the most");
+    }
+
+    #[test]
+    fn each_boss_phase_is_graded_once_and_paid() {
+        // broken at once without a death or a bomb: an S, double its capture
+        let mut w = World::boss_at(1, Tuning::default(), 1);
+        w.skip_section();
+        assert_eq!(w.score.grades[0], Some(score::Grade::S));
+        let bonus = score::phase_bonus(1, score::Grade::S);
+        assert!(points(&w).contains(&(bonus, Award::Grade(1, score::Grade::S))));
+        w.events.clear();
+        for _ in 0..JAWS_BREAK + 30 {
+            w.tick(Controls::default());
+            assert!(!points(&w).iter().any(|p| matches!(p.1, Award::Grade(1, _))), "graded once");
+            w.events.clear();
+        }
+        // a bomb in the phase costs the capture: a B
+        let mut w = World::boss_at(1, Tuning::default(), 2);
+        w.start_bomb();
+        w.skip_section();
+        assert_eq!(w.score.grades[1], Some(score::Grade::B));
+        assert!(points(&w).contains(&(score::phase_bonus(2, score::Grade::B), Award::Grade(2, score::Grade::B))));
+    }
+
+    #[test]
+    fn the_stage_end_pays_its_bonuses_and_ranks_the_run() {
+        let mut w = World::boss_at(1, Tuning::default(), 4);
+        w.skip_section();
+        for _ in 0..JAWS_DEATH + 60 {
+            if w.score.tally.is_some() {
+                break;
+            }
+            w.tick(Controls::default());
+            w.events.clear();
+        }
+        let t = w.score.tally.expect("the stage ended");
+        assert!(t.destroyed);
+        assert_eq!((t.no_miss, t.no_bomb), (NO_MISS_BONUS, NO_BOMB_BONUS));
+        assert_eq!(t.grades, [None, None, None, Some(score::Grade::S)], "practice from phase 4");
+        assert_eq!((t.total, t.rank), (w.score.points, score::rank(t.rating)));
+        // the bonuses come too late for an extend
+        let (lives, extends) = (w.lives, w.score.extends);
+        w.score.points = EXTENDS[1] - 1;
+        w.finish_stage();
+        assert!(w.score.points > EXTENDS[1]);
+        assert_eq!((w.lives, w.score.extends), (lives, extends));
     }
 
     #[test]

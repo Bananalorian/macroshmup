@@ -35,7 +35,15 @@ fn mix(id: Id) -> (f32, f64) {
         Id::LaserBeam => (VOL_LASER, 0.3),
         Id::Glitch => (VOL_GLITCH, 0.12),
         Id::Swallowed => (VOL_SWALLOWED, 2.0),
+        Id::Tick => (VOL_TICK, 0.03),
+        Id::Slam => (VOL_SLAM, 0.3),
+        Id::Extend => (VOL_EXTEND, 1.0),
     }
+}
+
+/// An options volume (0-10) as a gain: a gentle curve, so the low steps stay usable.
+pub fn gain(v: u8) -> f32 {
+    (v.min(10) as f32 / 10.0).powf(1.5)
 }
 
 /// Lets a sound through at most once every `gap` seconds.
@@ -66,6 +74,9 @@ pub struct Audio {
     music_target: f32,
     music_playing: bool,
     pub muted: bool,
+    /// The options' music and sound volumes, as gains.
+    music_gain: f32,
+    sfx_gain: f32,
 }
 
 impl Audio {
@@ -88,7 +99,15 @@ impl Audio {
             music_target: 0.0,
             music_playing: false,
             muted: false,
+            music_gain: gain(VOLUME_DEFAULT),
+            sfx_gain: gain(VOLUME_DEFAULT),
         }
+    }
+
+    /// The options' volumes, 0-10.
+    pub fn volumes(&mut self, music: u8, sound: u8) {
+        self.music_gain = gain(music);
+        self.sfx_gain = gain(sound);
     }
 
     pub fn play(&mut self, id: Id, vol: f32) {
@@ -104,7 +123,7 @@ impl Audio {
         let k = self.next_variant.entry(id).or_insert(0);
         let s = &list[*k % list.len()];
         *k += 1;
-        play_sound(s, PlaySoundParams { looped: false, volume: (base * vol).min(1.0) });
+        play_sound(s, PlaySoundParams { looped: false, volume: (base * vol * self.sfx_gain).min(1.0) });
     }
 
     /// Turn this frame's events into sounds.
@@ -141,6 +160,9 @@ impl Audio {
                 }
                 // fins breaking and the death's blasts are blasts too
                 Event::FinBreak { .. } | Event::BossPhase(_) | Event::BossBlast { .. } | Event::BossGone => {}
+                Event::Points { how: crate::sim::score::Award::Grade(..), .. } => self.play(Id::Slam, 1.0),
+                Event::Points { .. } => {}
+                Event::Extend => self.play(Id::Extend, 1.0),
             }
         }
         self.beam_target = if w.player.beaming { 1.0 } else { 0.0 };
@@ -166,9 +188,9 @@ impl Audio {
         let Some(s) = self.bank.get(&Id::BossTheme).and_then(|l| l.first()) else { return };
         if self.music > 0.001 {
             if self.music_playing {
-                set_sound_volume(s, self.music * VOL_MUSIC);
+                set_sound_volume(s, self.music * VOL_MUSIC * self.music_gain);
             } else if self.music_target > 0.0 {
-                play_sound(s, PlaySoundParams { looped: true, volume: self.music * VOL_MUSIC });
+                play_sound(s, PlaySoundParams { looped: true, volume: self.music * VOL_MUSIC * self.music_gain });
                 self.music_playing = true;
             }
         } else if self.music_playing && self.music_target == 0.0 {
@@ -184,7 +206,7 @@ impl Audio {
         let step = BEAM_FADE * dt;
         self.beam = if self.beam < target { (self.beam + step).min(target) } else { (self.beam - step).max(target) };
         let Some(s) = self.bank.get(&Id::Beam).and_then(|l| l.first()) else { return };
-        let vol = self.beam * VOL_BEAM;
+        let vol = self.beam * VOL_BEAM * self.sfx_gain;
         if self.beam > 0.001 {
             if self.beam_playing {
                 set_sound_volume(s, vol);
@@ -231,6 +253,14 @@ pub fn dump() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn volumes_curve_from_silent_to_full() {
+        assert_eq!(gain(0), 0.0);
+        assert_eq!(gain(10), 1.0);
+        assert!((1..=10).all(|v| gain(v) > gain(v - 1)), "every step is louder");
+        assert!(gain(5) < 0.5, "a gentle curve");
+    }
 
     #[test]
     fn the_shot_sound_is_throttled() {

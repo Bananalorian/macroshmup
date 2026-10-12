@@ -756,9 +756,77 @@ pub enum Id {
     LaserBeam,
     Glitch,
     Swallowed,
+    /// The score: a tally line's tick, a grade's slam, an extend's jingle.
+    Tick,
+    Slam,
+    Extend,
 }
 
 /// Every sound as (id, wav bytes). Variants share an id.
+// ---------------------------------------------------------------- the score
+
+/// A tally line counting in: a short bright blip.
+pub fn tally_tick() -> Vec<f32> {
+    let mut b = buf(0.05);
+    for (i, s) in b.iter_mut().enumerate() {
+        let t = i as f32 / SR;
+        *s = sq(1567.98 * t, 0.25) * (-t * 70.0).exp() * attack(t, 0.002) * 0.5;
+    }
+    normalize(&mut b, 0.45);
+    b
+}
+
+/// A grade slamming in: a low thump dropping away, a burst of grit, and a bright
+/// major chord ringing over it.
+pub fn slam(seed: u32) -> Vec<f32> {
+    let len = 0.9;
+    let mut b = buf(len);
+    let mut rng = seed.wrapping_mul(747796405).wrapping_add(2891336453);
+    let mut lp = Lp::default();
+    let mut ph = 0.0f32;
+    for (i, s) in b.iter_mut().enumerate() {
+        let t = i as f32 / SR;
+        let f = 45.0 + 70.0 * (-t * 14.0).exp();
+        ph += f / SR;
+        let thump = (TAU * ph).sin() * (-t * 7.0).exp() * 0.9;
+        rng ^= rng << 13;
+        rng ^= rng >> 17;
+        rng ^= rng << 5;
+        let noise = (rng as f32 / u32::MAX as f32 * 2.0 - 1.0) * (-t * 30.0).exp() * 0.5;
+        *s = thump + lp.run(noise, 2400.0);
+    }
+    for (k, f) in [659.25f32, 830.61, 987.77, 1318.51].iter().enumerate() {
+        for (i, s) in b.iter_mut().enumerate() {
+            let t = i as f32 / SR - 0.01 * k as f32;
+            if t > 0.0 {
+                *s += sq(f * t, 0.3) * (-t * 4.5).exp() * attack(t, 0.004) * 0.12;
+            }
+        }
+    }
+    let mut b = reverb(&b, 0.3, 1.1, 0.55);
+    normalize(&mut b, 0.8);
+    b
+}
+
+/// An extend: a bright arpeggio climbing an octave and a half, the last note held.
+pub fn extend_jingle() -> Vec<f32> {
+    let mut b = buf(1.0);
+    let notes = [659.25f32, 987.77, 1318.51, 1661.22, 1975.53];
+    for (k, f) in notes.iter().enumerate() {
+        let t0 = k as f32 * 0.065;
+        let decay = if k == notes.len() - 1 { 3.5 } else { 14.0 };
+        for (i, s) in b.iter_mut().enumerate() {
+            let t = i as f32 / SR - t0;
+            if t > 0.0 {
+                *s += sq(f * t, 0.25) * (-t * decay).exp() * attack(t, 0.003) * 0.3;
+            }
+        }
+    }
+    let mut b = reverb(&b, 0.3, 1.0, 0.5);
+    normalize(&mut b, 0.65);
+    b
+}
+
 pub fn bank() -> Vec<(Id, Vec<u8>)> {
     let mono = |b: Vec<f32>| wav(&b, 1);
     let mut v = Vec::new();
@@ -796,6 +864,9 @@ pub fn bank() -> Vec<(Id, Vec<u8>)> {
         v.push((Id::Glitch, mono(glitch(1300 + k))));
     }
     v.push((Id::Swallowed, mono(swallowed(1400))));
+    v.push((Id::Tick, mono(tally_tick())));
+    v.push((Id::Slam, mono(slam(1500))));
+    v.push((Id::Extend, mono(extend_jingle())));
     v
 }
 
@@ -814,7 +885,7 @@ mod tests {
 
     #[test]
     fn nothing_clips() {
-        for b in [pilgrim_shot(1, 900.0), beam_hum(), not_yet(), tick(2), explosion(3, true), graze(4), death(5), pop(6), boss_blast(7), bomb(8), struck(9), respawn_chime(), game_over(), warning(), boss_theme(), approach(), roar(1), laser_charge(), laser_beam(2), glitch(3), swallowed(4)] {
+        for b in [pilgrim_shot(1, 900.0), beam_hum(), not_yet(), tick(2), explosion(3, true), graze(4), death(5), pop(6), boss_blast(7), bomb(8), struck(9), respawn_chime(), game_over(), warning(), boss_theme(), approach(), roar(1), laser_charge(), laser_beam(2), glitch(3), swallowed(4), tally_tick(), slam(5), extend_jingle()] {
             assert!(b.iter().all(|s| s.is_finite() && s.abs() <= 1.0));
         }
     }

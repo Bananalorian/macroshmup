@@ -1,7 +1,7 @@
 //! Debug hooks. Environment variables work in native builds only (the browser has
 //! none); the debug keys work in debug builds only.
 //!
-//!   PG_SCENE=title | stage:<seconds> | midboss | boss[:<phase>] | shots:<n> | sandbox:<pattern> | stress   jump straight there
+//!   PG_SCENE=title | options | stage:<seconds> | midboss | boss[:<phase>] | shots:<n> | sandbox:<pattern> | stress   jump straight there
 //!   PG_SHOTS=60,300                    save those frames to ./shots/ and quit
 //!   PG_AUTO=1                          the dodging bot plays
 //!   PG_SIM=<n>                         n seeded bot runs of Stage 1, headless, with a report
@@ -41,6 +41,8 @@ use macroquad::prelude::*;
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum SceneReq {
     Title,
+    /// The title's options screen.
+    Options,
     /// Stage 1, starting this many seconds in.
     Stage(f32),
     /// Boss practice: JAWSTHIC from its intro (0) or straight into phase 1-4.
@@ -66,6 +68,7 @@ pub fn parse_scene(s: &str) -> Result<SceneReq, String> {
     let (name, arg) = s.split_once(':').map_or((s.as_str(), None), |(n, a)| (n, Some(a)));
     match name {
         "title" => Ok(SceneReq::Title),
+        "options" => Ok(SceneReq::Options),
         "midboss" => Ok(SceneReq::Stage(crate::tune::SECTIONS[4].0)),
         "boss" => match arg {
             None => Ok(SceneReq::Boss(0)),
@@ -89,7 +92,7 @@ pub fn parse_scene(s: &str) -> Result<SceneReq, String> {
             .ok_or_else(|| "PG_SCENE=shots:<n> wants a count up to 5000".to_string()),
         "sandbox" => find_pattern(arg.unwrap_or("1")).map(SceneReq::Sandbox).ok_or_else(|| format!("no sandbox pattern {arg:?}")),
         "stress" => Ok(SceneReq::Sandbox(SANDBOX.iter().position(|p| p.fill >= 4000).unwrap_or(0))),
-        _ => Err(format!("unknown PG_SCENE {s:?} (try title, stage:<seconds>, midboss, boss:<phase>, shots:<n>, sandbox:<pattern> or stress)")),
+        _ => Err(format!("unknown PG_SCENE {s:?} (try title, options, stage:<seconds>, midboss, boss:<phase>, shots:<n>, sandbox:<pattern> or stress)")),
     }
 }
 
@@ -330,8 +333,25 @@ fn stage_report(seeds: u32) {
         let deaths: u32 = runs.iter().map(|r| r.phase_deaths[p]).sum();
         println!("{:<16} {:>7.0}% {:>18} {:>11.2}", format!("{} {}", p + 1, JAWS_PHASE_NAMES[p]), pct(t.len()), time, deaths as f32 / n);
     }
+    // the score: its spread, the extends, the phases' grades and the stage's ranks
+    use crate::sim::score::Grade;
+    let mut scores: Vec<u64> = runs.iter().map(|r| r.score).collect();
+    scores.sort();
+    let at = |k: f32| scores[((scores.len() - 1) as f32 * k) as usize];
+    println!("SCORE: median {}, 10% {}, 90% {}, best {}", at(0.5), at(0.1), at(0.9), at(1.0));
+    let ext = |k: u8| pct(runs.iter().filter(|r| r.extends >= k).count());
+    println!("EXTENDS: the first in {:.0}% of runs, the second in {:.0}%", ext(1), ext(2));
+    let grades = [Grade::S, Grade::A, Grade::B, Grade::C, Grade::D];
+    let spread = |f: &dyn Fn(&StageRunRef) -> Option<Grade>| grades.iter().map(|g| format!("{} {:.0}%", g.letter(), pct(runs.iter().filter(|r| f(r) == Some(*g)).count()))).collect::<Vec<_>>().join("  ");
+    for p in 0..4 {
+        println!("PHASE {} GRADES: {}", p + 1, spread(&|r| r.grades[p]));
+    }
+    println!("STAGE RANK: {}", spread(&|r| r.rank));
     println!("done in {:.1} s", start.elapsed().as_secs_f32());
 }
+
+#[cfg(not(target_arch = "wasm32"))]
+type StageRunRef = crate::sim::bot::StageRun;
 
 /// Every sandbox pattern for 60 s without bombs (and endless lives).
 #[cfg(not(target_arch = "wasm32"))]

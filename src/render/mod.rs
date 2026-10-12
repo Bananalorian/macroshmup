@@ -17,6 +17,7 @@ pub mod jawsthic;
 pub mod layout;
 pub mod palette;
 pub mod particles;
+pub mod popups;
 pub mod post;
 pub mod scene;
 pub mod ship;
@@ -53,6 +54,8 @@ pub struct Renderer {
     pub jaws: jawsthic::JawsArt,
     pub stars: bg::Starfield,
     pub parts: particles::Particles,
+    /// Score popups and grades.
+    pub popups: popups::Popups,
     pub fx: Fx,
     /// Show the canvas in grayscale (F2).
     pub gray: bool,
@@ -115,6 +118,7 @@ impl Renderer {
             // enough sky for the biggest canvas (portrait is 270x480, landscape 640x360)
             stars: bg::Starfield::new(640.0 * 480.0),
             parts: particles::Particles::new(),
+            popups: popups::Popups::new(),
             fx: Fx::new(),
             gray: false,
             gray_mat: material(GRAY_FRAG, &[], None),

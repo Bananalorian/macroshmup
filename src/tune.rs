@@ -596,6 +596,64 @@ pub const JAWS_P4: &[BossGun] = &[
 ];
 pub const JAWS_GUNS: [&[BossGun]; 4] = [JAWS_P1, JAWS_P2, JAWS_P3, JAWS_P4];
 
+// ------------------------------------------------------------------ scoring
+// Clear before deep: kill things (closer is worth double), break the boss's phases
+// clean and fast, don't die, don't bomb. Arcade grades: S A B C (D for the stage).
+
+/// Points for destroying each kind of enemy: drone, courier, usher, gunship, buoy,
+/// heavy, the derelict.
+pub const KILL_POINTS: [u32; 7] = [500, 750, 1_500, 7_500, 10_000, 40_000, 200_000];
+/// A kill this close to the Pilgrim (px) scores this many times over (a teal ring flashes).
+pub const POINT_BLANK: (f32, u32) = (48.0, 2);
+/// Each of the derelict's gun pods and its nose gun.
+pub const PART_POINTS: u32 = 15_000;
+/// Each bullet cancelled when a heavy or the derelict dies, or a boss phase breaks:
+/// a shard that flies to you. (A bomb's cancels give nothing.)
+pub const SHARD_POINTS: u32 = 50;
+/// Each graze.
+pub const GRAZE_POINTS: u32 = 100;
+/// JAWSTHIC: each fin turret broken, and the kill.
+pub const FIN_POINTS: u32 = 25_000;
+pub const BOSS_KILL_POINTS: u32 = 300_000;
+/// Each phase's capture bonus: grade A, broken without a death or a bomb. Grade S
+/// (captured inside this share of its time) doubles it; B (broken, not clean) gets
+/// a fifth; C (timed out) nothing.
+pub const CAPTURE: [u32; 4] = [150_000, 200_000, 200_000, 300_000];
+pub const GRADE_S_TIME: f32 = 0.7;
+/// The stage's end: no deaths, no bombs.
+pub const NO_MISS_BONUS: u32 = 500_000;
+pub const NO_BOMB_BONUS: u32 = 300_000;
+/// The stage's rating out of 100: kill rate (up to `RATE_KILLS`), JAWSTHIC destroyed,
+/// each phase's grade (S A B C), no misses, no bombs (each death or bomb takes a share).
+pub const RATE_KILLS: u32 = 30;
+pub const RATE_DESTROYED: u32 = 10;
+pub const RATE_GRADES: [u32; 4] = [10, 7, 4, 0];
+pub const RATE_NO_MISS: (u32, u32) = (15, 5);
+pub const RATE_NO_BOMB: (u32, u32) = (5, 2);
+/// The rank for a rating: S, A, B, C at these or more, else D.
+pub const RANKS: [u32; 4] = [90, 75, 55, 35];
+/// An extra ship at each of these scores, up to this many ships. (The stage-end
+/// bonuses come too late to count.)
+pub const EXTENDS: [u64; 2] = [800_000, 1_800_000];
+pub const MAX_LIVES: u8 = 6;
+/// Points worth a big flashing number.
+pub const BIG_POINTS: u32 = 20_000;
+/// The stage-clear tally (frames from the stage's end): each line comes this long
+/// after the last and counts up over `TALLY_COUNT`; then the score, the rank's slam,
+/// the last line, and its menu.
+pub const TALLY_STEP: u32 = 18;
+pub const TALLY_COUNT: u32 = 16;
+pub const TALLY_SCORE: u32 = 6 * TALLY_STEP;
+pub const TALLY_RANK: u32 = TALLY_SCORE + 40;
+pub const TALLY_LINE: u32 = TALLY_RANK + 40;
+pub const TALLY_DONE: u32 = TALLY_LINE + 40;
+/// The title waits this long untouched (frames) before the bot plays a demo, which
+/// runs this long at most.
+pub const ATTRACT_AFTER: u64 = 20 * 60;
+pub const DEMO_LEN: u64 = 60 * 60;
+/// The HOLD TO BEAM fire scheme: fire held this many frames becomes the beam.
+pub const HOLD_BEAM: u32 = 18;
+
 // ------------------------------------------------------------------ the bot
 // A dodger: tries 9 directions at two speeds, looking this many frames ahead.
 
@@ -624,6 +682,9 @@ pub const AFTERIMAGE_MIN: f32 = 0.9;
 
 // ------------------------------------------------------------------ sound
 
+/// The options' volume steps (0-10) start here.
+pub const VOLUME_DEFAULT: u8 = 8;
+
 /// Seconds between plays of each sound, so rapid fire never machine-guns.
 pub const SHOT_SOUND_GAP: f64 = 0.095;
 pub const HIT_SOUND_GAP: f64 = 0.06;
@@ -650,6 +711,10 @@ pub const VOL_ROAR: f32 = 0.7;
 pub const VOL_LASER: f32 = 0.38;
 pub const VOL_GLITCH: f32 = 0.22;
 pub const VOL_SWALLOWED: f32 = 0.7;
+/// The score: the tally's ticks, a grade's or the rank's slam, an extend.
+pub const VOL_TICK: f32 = 0.3;
+pub const VOL_SLAM: f32 = 0.6;
+pub const VOL_EXTEND: f32 = 0.55;
 pub const MUSIC_FADE: f32 = 0.8;
 /// How fast the beam hum fades in and out (volume per second).
 pub const BEAM_FADE: f32 = 6.0;

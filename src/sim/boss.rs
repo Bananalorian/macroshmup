@@ -217,9 +217,11 @@ pub struct Boss {
     guns: Vec<Gunner>,
     /// Where its rings and spirals start turning from (seeded per run).
     spin: f32,
-    /// How each phase ended, and whether you got through it without a death or a bomb.
+    /// How each phase ended, whether you got through it without a death or a bomb,
+    /// and how many frames it took.
     pub outcomes: [Option<Outcome>; 4],
     pub clean: [bool; 4],
+    pub took: [u32; 4],
 }
 
 impl Boss {
@@ -252,6 +254,7 @@ impl Boss {
             spin,
             outcomes: [None; 4],
             clean: [true; 4],
+            took: [0; 4],
         }
     }
 
@@ -443,6 +446,7 @@ impl Boss {
     fn end(&mut self, how: Outcome, events: &mut Vec<Event>) {
         let p = self.phase;
         self.outcomes[p as usize - 1] = Some(how);
+        self.took[p as usize - 1] = self.t;
         self.hp = floor(p);
         self.laser = None;
         self.turn = 0;

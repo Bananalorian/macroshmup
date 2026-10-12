@@ -5,13 +5,13 @@ use super::Renderer;
 use super::art::Atlas;
 use super::font::{self, text_width};
 use super::layout::{IRect, Layout, Orient};
-use super::palette::{ASH, CREAM, DUSK, SIGNAL, SLATE, STRIP, VOID, WHITE_A, tone};
+use super::palette::{ASH, CREAM, DUSK, SIGNAL, SLATE, STRIP, TEAL_HOT, VOID, WHITE_A, tone};
 use macroquad::math::Rect;
 use crate::input::{Button, Mode, touch_buttons};
 use crate::menu::{self, ITEMS};
 use crate::storage::Settings;
 use crate::storage::View;
-use crate::tune::{BLINK_FRAMES, BOSS_NAME, JAWS_PHASES, JAWS_PHASE_NAMES, SANDBOX, SECTIONS, STAGE_NAME, TICK_HZ, TITLE_CARD, TITLE_SCALE, TITLE_TRACK, TRACK};
+use crate::tune::{BLINK_FRAMES, BOSS_NAME, JAWS_PHASES, JAWS_PHASE_NAMES, SANDBOX, SECTIONS, STAGE_NAME, TALLY_COUNT, TALLY_DONE, TALLY_LINE, TALLY_RANK, TALLY_SCORE, TALLY_STEP, TICK_HZ, TITLE_CARD, TITLE_SCALE, TITLE_TRACK, TRACK};
 
 /// The sandbox switches that change how the game plays, as one line.
 fn sandbox_flags(v: &View) -> String {
@@ -96,6 +96,17 @@ fn stamps(a: &Atlas, x0: i32, x1: i32, y: i32, right: bool) {
 const LEFT_STAMP: [&str; 2] = ["HUMANITY", "STILL LOOKS UP"];
 const RIGHT_STAMP: [&str; 3] = ["A SMALL SHIP", "A LONG WAY", "FROM HOME"];
 
+/// A score as 8 digits, the leading zeros dimmed (the arcade way).
+fn score_digits(a: &Atlas, n: u64, x: i32, y: i32, scale: i32) {
+    let s = format!("{:08}", n.min(99_999_999));
+    let lead = s.find(|c| c != '0').unwrap_or(s.len() - 1);
+    let track = if scale > 1 { 1 } else { TRACK };
+    a.fill(x - 1, y - 1, text_width(&s, scale, track) + 2, font::GH as i32 * scale + 2, VOID);
+    text(a, &s[..lead], x, y, scale, track, DUSK);
+    let step = (font::GW as i32 + track) * scale;
+    text(a, &s[lead..], x + lead as i32 * step, y, scale, track, if scale > 1 { CREAM } else { ASH });
+}
+
 /// The stamps for a side panel: three short lines under the rule at `y`.
 fn panel_stamps(a: &Atlas, x0: i32, x1: i32, y: i32, right: bool) {
     hrule(a, x0, x1, y);
@@ -131,31 +142,58 @@ pub fn title_bg(r: &Renderer, lay: &Layout, t: u64) {
     r.hole(full, lay.cw as f32 * 0.5, cy, rad, super::scene::hole_bright(1.0), t as f32 / 60.0, 0.0);
 }
 
-/// The title's choices.
-pub const TITLE_ITEMS: [&str; 2] = ["STAGE 1", "PATTERN SANDBOX"];
+/// The title's choices (Boss Practice once you've reached the boss).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TitleItem {
+    Stage,
+    Practice,
+    Sandbox,
+    Options,
+}
+
+impl TitleItem {
+    pub fn label(self) -> &'static str {
+        match self {
+            TitleItem::Stage => "STAGE 1",
+            TitleItem::Practice => "BOSS PRACTICE",
+            TitleItem::Sandbox => "PATTERN SANDBOX",
+            TitleItem::Options => "OPTIONS",
+        }
+    }
+}
+
+pub fn title_items(practice: bool) -> Vec<TitleItem> {
+    let mut v = vec![TitleItem::Stage];
+    if practice {
+        v.push(TitleItem::Practice);
+    }
+    v.extend([TitleItem::Sandbox, TitleItem::Options]);
+    v
+}
 
 /// The title menu's geometry: (center x, first row's y, row height).
 pub fn title_rows(lay: &Layout) -> (i32, i32, i32) {
     match lay.orient {
-        Orient::Landscape => (lay.cw / 2, 226, 13),
-        Orient::Portrait => (lay.cw / 2, 290, 15),
+        Orient::Landscape => (lay.cw / 2, 204, 13),
+        Orient::Portrait => (lay.cw / 2, 262, 15),
     }
 }
 
-/// Which title row a tap at canvas `(x, y)` lands on.
-pub fn title_tap(lay: &Layout, x: f32, y: f32) -> Option<usize> {
+/// Which of `n` title rows a tap at canvas `(x, y)` lands on.
+pub fn title_tap(lay: &Layout, n: usize, x: f32, y: f32) -> Option<usize> {
     let (cx, y0, row_h) = title_rows(lay);
     let (x, y) = (x as i32, y as i32);
     if (x - cx).abs() > 90 || y < y0 - 4 {
         return None;
     }
     let i = ((y - y0 + 4) / row_h) as usize;
-    (i < TITLE_ITEMS.len()).then_some(i)
+    (i < n).then_some(i)
 }
 
-fn title_menu(a: &Atlas, lay: &Layout, sel: usize, blink_on: bool) {
+fn title_menu(a: &Atlas, lay: &Layout, items: &[TitleItem], sel: usize, blink_on: bool) {
     let (cx, y0, row_h) = title_rows(lay);
-    for (i, label) in TITLE_ITEMS.iter().enumerate() {
+    for (i, item) in items.iter().enumerate() {
+        let label = item.label();
         let y = y0 + i as i32 * row_h;
         let on = i == sel;
         text_c(a, label, cx, y, 1, TRACK, if on { CREAM } else { SLATE });
@@ -167,8 +205,13 @@ fn title_menu(a: &Atlas, lay: &Layout, sel: usize, blink_on: bool) {
     }
 }
 
-/// The title: the name, the tagline, the menu (drawn over the post pass).
-pub fn title(r: &Renderer, lay: &Layout, t: u64, mode: Option<Mode>, sel: usize) {
+/// The best score, centered on `cx`.
+fn hiscore_line(a: &Atlas, cx: i32, y: i32, hiscore: u64) {
+    text_c(a, &format!("HI-SCORE  {}", super::popups::commas(hiscore)), cx, y, 1, TRACK, ASH);
+}
+
+/// The title: the name, the tagline, the menu, the best score (drawn over the post pass).
+pub fn title(r: &Renderer, lay: &Layout, t: u64, mode: Option<Mode>, items: &[TitleItem], sel: usize, hiscore: u64) {
     let a = &r.atlas;
     let blink_on = t % (BLINK_FRAMES * 3) < BLINK_FRAMES * 2;
     let cx = lay.cw / 2;
@@ -180,13 +223,14 @@ pub fn title(r: &Renderer, lay: &Layout, t: u64, mode: Option<Mode>, sel: usize)
             strip(a, m, m + 24, 12, 6);
             sparkle(a, lay.cw - m - 7, m);
 
-            let ty = 132;
+            let ty = 126;
             text_c(a, "PILGRIM", cx, ty, TITLE_SCALE, TITLE_TRACK, CREAM);
             let w = text_width("PILGRIM", TITLE_SCALE, TITLE_TRACK);
             hrule(a, cx - w / 2, cx + w / 2, ty + 32);
             text_c(a, "SOMEWHERE BEYOND THE EVENT HORIZON", cx, ty + 42, 1, TRACK, ASH);
-            title_menu(a, lay, sel, blink_on);
-            text_c(a, start_hint(mode), cx, 260, 1, TRACK, SLATE);
+            title_menu(a, lay, items, sel, blink_on);
+            text_c(a, start_hint(mode), cx, 266, 1, TRACK, SLATE);
+            hiscore_line(a, cx, 284, hiscore);
             stamps(a, m, lay.cw - m, lay.ch - 32, true);
         }
         Orient::Portrait => {
@@ -195,17 +239,23 @@ pub fn title(r: &Renderer, lay: &Layout, t: u64, mode: Option<Mode>, sel: usize)
             strip(a, m, m + 12, 10, 4);
             sparkle(a, lay.cw - m - 7, m);
 
-            let ty = 176;
+            let ty = 170;
             text_c(a, "PILGRIM", cx, ty, TITLE_SCALE, TITLE_TRACK, CREAM);
             let w = text_width("PILGRIM", TITLE_SCALE, TITLE_TRACK);
             hrule(a, cx - w / 2, cx + w / 2, ty + 32);
             text_c(a, "SOMEWHERE BEYOND", cx, ty + 42, 1, TRACK, ASH);
             text_c(a, "THE EVENT HORIZON", cx, ty + 52, 1, TRACK, ASH);
-            title_menu(a, lay, sel, blink_on);
-            text_c(a, if mode == Some(Mode::Pad) { "PRESS A TO START" } else { "TAP TO START" }, cx, 330, 1, TRACK, SLATE);
+            title_menu(a, lay, items, sel, blink_on);
+            text_c(a, if mode == Some(Mode::Pad) { "PRESS A TO START" } else { "TAP TO START" }, cx, 338, 1, TRACK, SLATE);
+            hiscore_line(a, cx, 356, hiscore);
             stamps(a, m, lay.cw - m, lay.ch - 32, false);
         }
     }
+}
+
+/// The options screen, over the title's sky.
+pub fn options(r: &Renderer, lay: &Layout, s: &Settings, mode: Mode, sel: usize) {
+    menu_panel(&r.atlas, lay, s, mode, &menu::OPTIONS, sel, "OPTIONS");
 }
 
 /// Everything the stage HUD shows besides the playfield.
@@ -228,6 +278,25 @@ pub struct HudView<'a> {
     pub grazes: u32,
     /// Stage 1's state (none in the sandbox).
     pub stage: Option<StageView>,
+    /// The score, and the best so far.
+    pub score: u64,
+    pub hiscore: u64,
+    /// Frames since the run ended (the tally and game over count up on it), whether
+    /// it set a new record, and the stage's tally.
+    pub end_t: u32,
+    pub record: bool,
+    pub tally: Option<crate::sim::score::Tally>,
+    /// The title's demo: the bot plays, PRESS START over it.
+    pub demo: bool,
+    /// The run counts for the hi-score (Stage 1 from the top).
+    pub ranked: bool,
+}
+
+impl HudView<'_> {
+    /// The best score to show: this run's, once it passes the saved one, if it counts.
+    fn best(&self) -> u64 {
+        if self.ranked { self.hiscore.max(self.score) } else { self.hiscore }
+    }
 }
 
 /// What the HUD shows of Stage 1.
@@ -238,7 +307,6 @@ pub struct StageView {
     pub section: usize,
     pub killed: u32,
     pub spawned: u32,
-    pub bombs_used: u32,
     /// Reached the end.
     pub over: bool,
     /// The derelict's health while it's here: the hull, and each turret (0 when broken).
@@ -247,9 +315,6 @@ pub struct StageView {
     pub warned: Option<u32>,
     /// JAWSTHIC's bar while it's here.
     pub jaws: Option<JawsView>,
-    /// How the boss fight ended: destroyed (or lost to the hole), phases broken, and
-    /// phases got through without a death or a bomb.
-    pub jaws_end: Option<(bool, u8, u8)>,
 }
 
 /// JAWSTHIC's health bar: each phase's segment (0..1 full), the phase it's in (0 in
@@ -324,75 +389,92 @@ pub fn stage(r: &Renderer, lay: &Layout, v: &HudView) {
             a.fill(f.x - 1, 0, 1, lay.ch, DUSK);
             a.fill(f.right(), 0, 1, lay.ch, DUSK);
 
-            // the side panels are narrow: long lines break, and the stamps stack
+            // after the sheet: the left panel is the ship (score, lives, bombs, how
+            // it's going, the controls), the right the voyage (where, the tuning, the
+            // palette strip, the stamps)
             let (l0, l1) = (12, f.x - 13);
             small(a, "PILGRIM", l0, 12, CREAM);
             small(a, "TYPE-07", l0, 22, ASH);
             hrule(a, l0, l1, 34);
-            match v.stage {
-                Some(_) => {
-                    small(a, "STAGE 1", l0, 42, SLATE);
-                    small(a, STAGE_NAME, l0, 52, SLATE);
-                }
-                None => small(a, "PATTERN SANDBOX", l0, 42, SLATE),
-            }
-            small(a, "LIVES", l0, 66, ASH);
-            icons(a, a.r.life_icon, v.lives, l1, 66);
-            small(a, "BOMBS", l0, 76, ASH);
-            icons(a, a.r.bomb_icon, v.bombs, l1, 76);
-            if let Some(s) = v.stage {
-                small(a, "SECTION", l0, 92, ASH);
-                text_r(a, &clock(s.t), l1, 92, SLATE);
-                small(a, SECTIONS[s.section].1, l0, 104, CREAM);
-                small(a, "KILLS", l0, 116, SLATE);
-                text_r(a, &format!("{}/{}", s.killed, s.spawned), l1, 116, ASH);
-                small(a, "MISSES", l0, 126, SLATE);
-                text_r(a, &v.hits.to_string(), l1, 126, ASH);
+            let mut y = 42;
+            if v.stage.is_some() {
+                small(a, "SCORE", l0, y, ASH);
+                score_digits(a, v.score, l0, y + 11, 2);
+                small(a, "HI-SCORE", l0, y + 32, SLATE);
+                score_digits(a, v.best(), l0, y + 42, 1);
+                y += 58;
             } else {
-                let n = SANDBOX.len();
-                small(a, "PATTERN", l0, 92, ASH);
-                text_r(a, &format!("{}/{}", v.pattern % n + 1, n), l1, 92, SLATE);
-                small(a, SANDBOX[v.pattern % n].name, l0, 104, CREAM);
-                small(a, "BULLETS", l0, 116, SLATE);
-                text_r(a, &v.bullets.to_string(), l1, 116, ASH);
-                small(a, "HITS", l0, 126, SLATE);
-                text_r(a, &v.hits.to_string(), l1, 126, ASH);
+                small(a, "PATTERN SANDBOX", l0, y, SLATE);
+                y += 16;
             }
-            small(a, "GRAZE", l0, 136, SLATE);
-            text_r(a, &v.grazes.to_string(), l1, 136, ASH);
+            hrule(a, l0, l1, y);
+            small(a, "LIVES", l0, y + 8, ASH);
+            icons(a, a.r.life_icon, v.lives, l1, y + 8);
+            small(a, "BOMBS", l0, y + 18, ASH);
+            icons(a, a.r.bomb_icon, v.bombs, l1, y + 18);
+            y += 32;
+            hrule(a, l0, l1, y);
+            let stats: [(&str, String); 3] = match v.stage {
+                Some(s) => [("GRAZE", v.grazes.to_string()), ("KILLS", format!("{}/{}", s.killed, s.spawned)), ("MISSES", v.hits.to_string())],
+                None => [("BULLETS", v.bullets.to_string()), ("HITS", v.hits.to_string()), ("GRAZE", v.grazes.to_string())],
+            };
+            for (i, (k, val)) in stats.iter().enumerate() {
+                let ry = y + 8 + i as i32 * 10;
+                small(a, k, l0, ry, SLATE);
+                text_r(a, val, l1, ry, ASH);
+            }
+            y += 40;
             let flags = sandbox_flags(&v.settings.view);
             if !flags.is_empty() {
                 // set tighter than the rest, so all three fit
-                a.fill(l0 - 1, 147, text_width(&flags, 1, 1) + 2, font::GH as i32 + 2, VOID);
-                text(a, &flags, l0, 148, 1, 1, CREAM);
+                a.fill(l0 - 1, y - 1, text_width(&flags, 1, 1) + 2, font::GH as i32 + 2, VOID);
+                text(a, &flags, l0, y, 1, 1, CREAM);
             }
-            small(a, "TUNING", l0, 162, ASH);
-            for (i, (k, val)) in tuning_lines(v.settings).iter().enumerate() {
-                let y = 174 + i as i32 * 10;
-                small(a, k, l0, y, SLATE);
-                text_r(a, val, l1, y, CREAM);
-            }
-            let hint = match v.mode {
-                Mode::Keys => "1-6 TO CHANGE",
-                _ => "PAUSE TO CHANGE",
-            };
-            small(a, hint, l0, 206, SLATE);
             // the pattern keys only matter in the sandbox
             let rows: Vec<&(&str, &str)> = controls(v.mode).iter().filter(|(_, act)| v.stage.is_none() || *act != "PATTERN").collect();
-            let y0 = lay.ch - 52 - rows.len() as i32 * 10;
+            let y0 = lay.ch - 14 - rows.len() as i32 * 10;
+            hrule(a, l0, l1, y0 - 8);
             for (i, (k, act)) in rows.iter().enumerate() {
-                let y = y0 + i as i32 * 10;
-                small(a, k, l0, y, ASH);
-                text_r(a, act, l1, y, SLATE);
+                let ry = y0 + i as i32 * 10;
+                small(a, k, l0, ry, ASH);
+                text_r(a, act, l1, ry, SLATE);
             }
-            panel_stamps(a, l0, l1, lay.ch - 42, false);
 
             let (r0, r1) = (f.right() + 13, lay.cw - 12);
             for (i, s) in ["SOMEWHERE", "BEYOND", "THE", "EVENT HORIZON"].iter().enumerate() {
                 small(a, s, r0, 12 + i as i32 * 10, ASH);
             }
             sparkle(a, r1 - 7, 12);
-            panel_stamps(a, r0, r1, lay.ch - 42, true);
+            hrule(a, r0, r1, 56);
+            match v.stage {
+                Some(s) => {
+                    small(a, "STAGE 1", r0, 64, SLATE);
+                    small(a, STAGE_NAME, r0, 74, SLATE);
+                    small(a, "SECTION", r0, 90, ASH);
+                    text_r(a, &clock(s.t), r1, 90, SLATE);
+                    small(a, SECTIONS[s.section].1, r0, 102, CREAM);
+                }
+                None => {
+                    let n = SANDBOX.len();
+                    small(a, "PATTERN", r0, 64, ASH);
+                    text_r(a, &format!("{}/{}", v.pattern % n + 1, n), r1, 64, SLATE);
+                    small(a, SANDBOX[v.pattern % n].name, r0, 76, CREAM);
+                }
+            }
+            hrule(a, r0, r1, 118);
+            small(a, "TUNING", r0, 126, ASH);
+            for (i, (k, val)) in tuning_lines(v.settings).iter().enumerate() {
+                let ry = 138 + i as i32 * 10;
+                small(a, k, r0, ry, SLATE);
+                text_r(a, val, r1, ry, CREAM);
+            }
+            let hint = match v.mode {
+                Mode::Keys => "1-6 TO CHANGE",
+                _ => "PAUSE TO CHANGE",
+            };
+            small(a, hint, r0, 170, SLATE);
+            strip(a, r0, 190, 12, 6);
+            panel_stamps(a, r0, r1, lay.ch - 42, false);
             if v.mode == Mode::Touch {
                 buttons(a, lay, v);
             }
@@ -400,10 +482,16 @@ pub fn stage(r: &Renderer, lay: &Layout, v: &HudView) {
         Orient::Portrait => {
             a.fill(0, 0, lay.cw, f.y, VOID);
             a.fill(0, f.bottom(), lay.cw, lay.ch - f.bottom(), VOID);
-            small(a, "PILGRIM", 8, 8, CREAM);
-            icons_left(a, a.r.life_icon, v.lives, 64, 8);
-            icons_left(a, a.r.bomb_icon, v.bombs, 64 + 3 * 9 + 8, 8);
-            text_r(a, &version_stamp(), lay.cw - 32, 8, ASH);
+            // the compact strip: the score, lives and bombs, the best
+            if v.stage.is_some() {
+                score_digits(a, v.score, 8, 8, 1);
+                text_r(a, &format!("HI {:08}", v.best().min(99_999_999)), lay.cw - 30, 8, ASH);
+            } else {
+                small(a, "PILGRIM", 8, 8, CREAM);
+                text_r(a, &version_stamp(), lay.cw - 32, 8, ASH);
+            }
+            icons_left(a, a.r.life_icon, v.lives, 72, 8);
+            icons_left(a, a.r.bomb_icon, v.bombs, 72 + 3 * 9 + 8, 8);
             hrule(a, 0, lay.cw, f.y - 1);
             hrule(a, 0, lay.cw, f.bottom());
             let t = tuning_lines(v.settings);
@@ -442,7 +530,14 @@ pub fn stage(r: &Renderer, lay: &Layout, v: &HudView) {
             game_over(a, lay, v, sel);
         }
     } else if let Some(sel) = v.menu {
-        pause_menu(a, lay, v, sel);
+        menu_panel(a, lay, v.settings, v.mode, &ITEMS, sel, "PAUSED // TUNING");
+    }
+    if v.demo {
+        let cx = f.x + f.w / 2;
+        text_c(a, "DEMO", cx, f.y + 36, 2, 4, ASH);
+        if (v.end_t / BLINK_FRAMES as u32) % 3 < 2 {
+            text_c(a, "PRESS START", cx, f.bottom() - 48, 1, TRACK, CREAM);
+        }
     }
 }
 
@@ -544,11 +639,12 @@ fn jaws_bar(a: &Atlas, lay: &Layout, j: &JawsView, t: u32) {
     }
 }
 
-/// The stage-end panel's geometry: (panel, first row's y, row height).
+/// The stage-clear tally's geometry: (panel, first menu row's y, row height).
 pub fn end_box(lay: &Layout) -> (IRect, i32, i32) {
     let f = lay.field;
-    let panel = IRect::new(f.x + 20, f.y + f.h / 2 - 76, f.w - 40, 152);
-    (panel, panel.y + 116, 14)
+    let h = 252;
+    let panel = IRect::new(f.x + 24, f.y + (f.h - h) / 2, f.w - 48, h);
+    (panel, panel.y + h - 30, 14)
 }
 
 /// Which row of the game-over or stage-end menu a tap lands on.
@@ -565,43 +661,99 @@ pub fn ended_tap(lay: &Layout, cleared: bool, x: f32, y: f32) -> Option<usize> {
     (i < OVER_ITEMS.len()).then_some(i)
 }
 
+/// `n` counted up from 0 over `TALLY_COUNT` frames, starting at frame `from`.
+fn counted(n: u64, e: u32, from: u32) -> u64 {
+    let k = (e.saturating_sub(from) as f32 / TALLY_COUNT as f32).min(1.0);
+    (n as f64 * k as f64) as u64
+}
+
+/// The tally, arcade style, `e` frames after the stage ended: the lines reveal one
+/// by one, counting up; the boss's grades pop in; the score counts up; the rank
+/// slams in with its flare; the last line types in; then the menu. Any button
+/// before then skips to the end.
 fn stage_end(a: &Atlas, lay: &Layout, v: &HudView, sel: usize) {
-    let s = v.stage.unwrap_or_default();
+    let Some(t) = v.tally else { return };
+    let e = v.end_t;
     let (p, row0, row_h) = end_box(lay);
     let cx = p.x + p.w / 2;
+    let (x0, x1) = (p.x + 14, p.right() - 14);
     a.fill(p.x, p.y, p.w, p.h, Color { a: 0.92, ..VOID });
     hrule(a, p.x, p.right(), p.y);
     hrule(a, p.x, p.right(), p.bottom() - 1);
     text_c(a, STAGE_NAME, cx, p.y + 10, 2, 3, CREAM);
-    let verdict = match s.jaws_end {
-        Some((true, ..)) => format!("{BOSS_NAME} DESTROYED"),
-        Some((false, ..)) => format!("{BOSS_NAME} LOST TO THE HOLE"),
-        None => "STAGE CLEAR".to_string(),
-    };
-    text_c(a, &verdict, cx, p.y + 32, 1, 1, if s.jaws_end.is_some_and(|e| e.0) { CREAM } else { ASH });
-    let pct = s.killed * 100 / s.spawned.max(1);
-    let (broken, clean) = s.jaws_end.map_or((0, 0), |e| (e.1, e.2));
-    let lines = [
-        ("KILLS", format!("{}/{}  {}%", s.killed, s.spawned, pct)),
-        ("PHASES BROKEN", format!("{broken}/4  CLEAN {clean}")),
-        ("MISSES", v.hits.to_string()),
-        ("BOMBS USED", s.bombs_used.to_string()),
-        ("GRAZE", v.grazes.to_string()),
-    ];
-    for (i, (k, val)) in lines.iter().enumerate() {
-        let y = p.y + 50 + i as i32 * 12;
-        text(a, k, p.x + 14, y, 1, 1, SLATE);
-        let w = text_width(val, 1, 1);
-        text(a, val, p.right() - 14 - w, y, 1, 1, CREAM);
-    }
-    for (i, label) in OVER_ITEMS.iter().enumerate() {
-        let y = row0 + i as i32 * row_h;
-        let on = i == sel;
-        if on {
-            a.fill(p.x + 4, y - 3, p.w - 8, row_h - 3, Color { a: 0.5, ..DUSK });
-            text(a, ">", p.x + 10, y, 1, 1, CREAM);
+    let verdict = if t.destroyed { format!("{BOSS_NAME} DESTROYED") } else { format!("{BOSS_NAME} LOST TO THE HOLE") };
+    text_c(a, &verdict, cx, p.y + 30, 1, 1, if t.destroyed { CREAM } else { ASH });
+    hrule(a, x0, x1, p.y + 44);
+    let row = |i: u32| p.y + 52 + i as i32 * 12;
+    let at = |i: u32| TALLY_STEP * (i + 1);
+    let line = |i: u32, k: &str, val: &str, c: Color| {
+        if e >= at(i) {
+            text(a, k, x0, row(i), 1, 1, SLATE);
+            text(a, val, x1 - text_width(val, 1, 1), row(i), 1, 1, c);
         }
-        text(a, label, p.x + 22, y, 1, 1, if on { CREAM } else { ASH });
+    };
+    let pct = t.killed * 100 / t.spawned.max(1);
+    line(0, "KILLS", &format!("{}/{}  {}%", counted(t.killed as u64, e, at(0)), t.spawned, pct), CREAM);
+    // the boss's phases, each grade popping in
+    if e >= at(1) {
+        text(a, BOSS_NAME, x0, row(1), 1, 1, SLATE);
+        for (i, g) in t.grades.iter().enumerate() {
+            let pop = at(1) + 4 * i as u32;
+            if e < pop {
+                continue;
+            }
+            let gx = x1 - (3 - i as i32) * 12 - 5;
+            let (letter, c) = g.map_or(("-", SLATE), |g| (g.letter(), super::popups::grade_color(g)));
+            let s = if e - pop < 2 { 2 } else { 1 };
+            text(a, letter, gx - (s - 1) * 2, row(1) - (s - 1) * 3, s, 0, c);
+        }
+    }
+    let bonus = |n: u32, i: u32| format!("+{}", super::popups::commas(counted(n as u64, e, at(i))));
+    if t.no_miss > 0 {
+        line(2, "NO MISS", &bonus(t.no_miss, 2), TEAL_HOT);
+    } else {
+        line(2, &format!("MISSES {}", t.misses), "+0", SLATE);
+    }
+    if t.no_bomb > 0 {
+        line(3, "NO BOMB", &bonus(t.no_bomb, 3), TEAL_HOT);
+    } else {
+        line(3, &format!("BOMBS {}", t.bombs), "+0", SLATE);
+    }
+    line(4, "GRAZE", &counted(t.grazes as u64, e, at(4)).to_string(), CREAM);
+    if e >= TALLY_SCORE {
+        hrule(a, x0, x1, p.y + 114);
+        text(a, "SCORE", x0, p.y + 122, 1, 1, ASH);
+        let sc = super::popups::commas(counted(t.total, e, TALLY_SCORE));
+        text(a, &sc, x1 - text_width(&sc, 1, 1), p.y + 122, 1, 1, CREAM);
+        // a new record climbs with the score
+        let hi = if v.record { sc.clone() } else { super::popups::commas(v.best()) };
+        let label = if v.record { "NEW RECORD" } else { "HI-SCORE" };
+        let lit = !v.record || e < TALLY_RANK || e % 20 < 14;
+        if lit {
+            text(a, label, x0, p.y + 134, 1, 1, if v.record { TEAL_HOT } else { SLATE });
+        }
+        text(a, &hi, x1 - text_width(&hi, 1, 1), p.y + 134, 1, 1, if v.record { TEAL_HOT } else { ASH });
+    }
+    if e >= TALLY_RANK {
+        text(a, "RANK", cx - 64, p.y + 168, 1, TRACK, ASH);
+        super::popups::slam_letter(a, cx + 6, p.y + 172, t.rank, e - TALLY_RANK, 1.0);
+    }
+    if e >= TALLY_LINE {
+        let line = "SOMEWHERE BEYOND THE EVENT HORIZON";
+        let n = ((e - TALLY_LINE) as usize / 2).min(line.len());
+        let w = text_width(line, 1, 1);
+        text(a, &line[..n], cx - w / 2, p.y + 202, 1, 1, ASH);
+    }
+    if e >= TALLY_DONE {
+        for (i, label) in OVER_ITEMS.iter().enumerate() {
+            let y = row0 + i as i32 * row_h;
+            let on = i == sel;
+            if on {
+                a.fill(p.x + 4, y - 3, p.w - 8, row_h - 3, Color { a: 0.5, ..DUSK });
+                text(a, ">", p.x + 10, y, 1, 1, CREAM);
+            }
+            text(a, label, p.x + 22, y, 1, 1, if on { CREAM } else { ASH });
+        }
     }
 }
 
@@ -625,8 +777,8 @@ pub const OVER_ITEMS: [&str; 2] = ["RETRY", "QUIT TO TITLE"];
 /// The game-over panel's geometry: (panel, first row's y, row height).
 pub fn over_box(lay: &Layout) -> (IRect, i32, i32) {
     let f = lay.field;
-    let panel = IRect::new(f.x + 30, f.y + f.h / 2 - 50, f.w - 60, 100);
-    (panel, panel.y + 52, 16)
+    let panel = IRect::new(f.x + 40, f.y + f.h / 2 - 60, f.w - 80, 120);
+    (panel, panel.y + 80, 16)
 }
 
 /// Which game-over row a tap at canvas `(x, y)` lands on.
@@ -642,11 +794,24 @@ pub fn over_tap(lay: &Layout, x: f32, y: f32) -> Option<usize> {
 
 fn game_over(a: &Atlas, lay: &Layout, v: &HudView, sel: usize) {
     let (p, row0, row_h) = over_box(lay);
+    let (x0, x1) = (p.x + 14, p.right() - 14);
     a.fill(p.x, p.y, p.w, p.h, Color { a: 0.92, ..VOID });
     hrule(a, p.x, p.right(), p.y);
     hrule(a, p.x, p.right(), p.bottom() - 1);
     text_c(a, "GAME OVER", p.x + p.w / 2, p.y + 12, 2, 3, CREAM);
-    text_c(a, &format!("HITS {}  GRAZE {}", v.hits, v.grazes), p.x + p.w / 2, p.y + 34, 1, 1, SLATE);
+    if v.stage.is_some() {
+        let sc = super::popups::commas(counted(v.score, v.end_t, 0));
+        text(a, "SCORE", x0, p.y + 38, 1, 1, ASH);
+        text(a, &sc, x1 - text_width(&sc, 1, 1), p.y + 38, 1, 1, CREAM);
+        let hi = super::popups::commas(v.best());
+        if !v.record || v.end_t % 20 < 14 {
+            text(a, if v.record { "NEW RECORD" } else { "HI-SCORE" }, x0, p.y + 50, 1, 1, if v.record { TEAL_HOT } else { SLATE });
+        }
+        text(a, &hi, x1 - text_width(&hi, 1, 1), p.y + 50, 1, 1, if v.record { TEAL_HOT } else { ASH });
+    } else {
+        text_c(a, &format!("HITS {}  GRAZE {}", v.hits, v.grazes), p.x + p.w / 2, p.y + 40, 1, 1, SLATE);
+    }
+    hrule(a, x0, x1, p.y + 66);
     for (i, label) in OVER_ITEMS.iter().enumerate() {
         let y = row0 + i as i32 * row_h;
         let on = i == sel;
@@ -658,7 +823,7 @@ fn game_over(a: &Atlas, lay: &Layout, v: &HudView, sel: usize) {
     }
 }
 
-/// The pause menu's geometry, shared by drawing and tapping.
+/// A menu panel's geometry, shared by drawing and tapping.
 pub struct MenuBox {
     pub panel: IRect,
     pub row0: i32,
@@ -668,24 +833,25 @@ pub struct MenuBox {
     pub val1: i32,
 }
 
-pub fn menu_box(lay: &Layout) -> MenuBox {
+/// The panel for a menu of `n` rows (the pause menu, the options).
+pub fn menu_box(lay: &Layout, n: usize) -> MenuBox {
     let f = lay.field;
     let row_h = 14;
-    let h = 32 + ITEMS.len() as i32 * row_h + 22;
+    let h = 32 + n as i32 * row_h + 22;
     let panel = IRect::new(f.x + 14, f.y + (f.h - h) / 2, f.w - 28, h);
     MenuBox { panel, row0: panel.y + 28, row_h, val0: panel.x + panel.w / 2 - 10, val1: panel.right() - 8 }
 }
 
-/// What a tap at canvas `(x, y)` means in the menu: (row, step) where step is
-/// -1 or 1 on a value, 0 elsewhere on the row.
-pub fn menu_tap(lay: &Layout, x: f32, y: f32) -> Option<(usize, i32)> {
-    let m = menu_box(lay);
+/// What a tap at canvas `(x, y)` means in a menu of `items`: (row, step) where step
+/// is -1 or 1 on a value, 0 elsewhere on the row.
+pub fn menu_tap(lay: &Layout, items: &[menu::Item], x: f32, y: f32) -> Option<(usize, i32)> {
+    let m = menu_box(lay, items.len());
     let (x, y) = (x as i32, y as i32);
     if x < m.panel.x || x >= m.panel.right() || y < m.row0 - 4 {
         return None;
     }
     let row = ((y - m.row0 + 4) / m.row_h) as usize;
-    let item = *ITEMS.get(row)?;
+    let item = *items.get(row)?;
     let step = if item.adjustable() && x >= m.val0 - 8 {
         if x < (m.val0 + m.val1) / 2 { -1 } else { 1 }
     } else {
@@ -694,14 +860,15 @@ pub fn menu_tap(lay: &Layout, x: f32, y: f32) -> Option<(usize, i32)> {
     Some((row, step))
 }
 
-fn pause_menu(a: &Atlas, lay: &Layout, v: &HudView, sel: usize) {
-    let m = menu_box(lay);
+/// A menu panel: its title, a row per item with its value between < and >.
+fn menu_panel(a: &Atlas, lay: &Layout, s: &Settings, mode: Mode, items: &[menu::Item], sel: usize, title: &str) {
+    let m = menu_box(lay, items.len());
     let p = m.panel;
     a.fill(p.x, p.y, p.w, p.h, Color { a: 0.94, ..VOID });
     hrule(a, p.x, p.right(), p.y);
     hrule(a, p.x, p.right(), p.bottom() - 1);
-    text(a, "PAUSED // TUNING", p.x + 10, p.y + 10, 1, TRACK, CREAM);
-    for (i, item) in ITEMS.iter().enumerate() {
+    text(a, title, p.x + 10, p.y + 10, 1, TRACK, CREAM);
+    for (i, item) in items.iter().enumerate() {
         let y = m.row0 + i as i32 * m.row_h;
         let on = i == sel;
         let c = if on { CREAM } else { ASH };
@@ -711,7 +878,7 @@ fn pause_menu(a: &Atlas, lay: &Layout, v: &HudView, sel: usize) {
         }
         text(a, item.label(), p.x + 16, y, 1, 1, c);
         if item.adjustable() {
-            let val = menu::value(v.settings, *item);
+            let val = menu::value(s, *item);
             let cxv = (m.val0 + m.val1) / 2;
             let w = text_width(&val, 1, 1);
             text(a, &val, cxv - w / 2, y, 1, 1, c);
@@ -719,7 +886,7 @@ fn pause_menu(a: &Atlas, lay: &Layout, v: &HudView, sel: usize) {
             text(a, ">", m.val1 - 5, y, 1, 1, if on { CREAM } else { SLATE });
         }
     }
-    let hint = match v.mode {
+    let hint = match mode {
         Mode::Keys => "ARROWS CHANGE  Z OK  ESC BACK",
         Mode::Pad => "D-PAD CHANGE  A OK  B BACK",
         Mode::Touch => "TAP < > TO CHANGE",
@@ -799,13 +966,16 @@ mod tests {
         }
         all.extend(SANDBOX.iter().map(|p| p.name.to_string()));
         all.extend(SECTIONS.iter().map(|s| s.1.to_string()));
-        all.extend(TITLE_ITEMS.iter().map(|s| s.to_string()));
-        all.extend(["DERELICT", "WARNING", "BOMBS USED", "MISSES", "PHASES BROKEN", "CLEAN", "STAGE CLEAR", BOSS_NAME, STAGE_NAME].map(String::from));
+        all.extend(title_items(true).iter().map(|i| i.label().to_string()));
+        all.extend(["DERELICT", "WARNING", "MISSES 3", "BOMBS 2", "NO MISS", "NO BOMB", "KILLS", "GRAZE", "SCORE", "HI-SCORE", "NEW RECORD", "RANK", "DEMO", "PRESS START", "OPTIONS", "+12,345", "SOMEWHERE BEYOND THE EVENT HORIZON", BOSS_NAME, STAGE_NAME].map(String::from));
         all.extend(JAWS_PHASE_NAMES.iter().map(|s| s.to_string()));
         all.extend([format!("{BOSS_NAME} DESTROYED"), format!("{BOSS_NAME} LOST TO THE HOLE")]);
-        all.extend(ITEMS.iter().map(|i| i.label().to_string()));
-        let s = crate::storage::Settings::default();
-        all.extend(ITEMS.iter().map(|i| menu::value(&s, *i)));
+        all.extend(ITEMS.iter().chain(menu::OPTIONS.iter()).map(|i| i.label().to_string()));
+        let mut s = crate::storage::Settings::default();
+        all.extend(ITEMS.iter().chain(menu::OPTIONS.iter()).map(|i| menu::value(&s, *i)));
+        (s.hold_beam, s.hitbox_always, s.music_vol) = (true, true, 0);
+        all.extend(menu::OPTIONS.iter().map(|i| menu::value(&s, *i)));
+        all.extend(["S", "A", "B", "C", "D", "CAPTURED", "BROKEN", "TIME OUT", "EXTEND", "1UP"].map(String::from));
         for t in all {
             assert!(ok(&t), "{t:?} has a character the font can't draw");
         }
@@ -834,11 +1004,14 @@ mod tests {
             for i in 0..OVER_ITEMS.len() {
                 assert_eq!(ended_tap(&lay, true, (p.x + 30) as f32, (row0 + i as i32 * row_h + 2) as f32), Some(i));
             }
-            assert!(text_width(STAGE_NAME, 2, 3) <= p.w && text_width("THE BOSS ARRIVES IN V0.7", 1, 1) <= p.w - 8);
+            assert!(text_width(STAGE_NAME, 2, 3) <= p.w && text_width("SOMEWHERE BEYOND THE EVENT HORIZON", 1, 1) <= p.w - 8);
             assert!(text_width("WARNING", 2, 4) <= lay.field.w - 20);
+            // the rank's letter, at its biggest, stays inside the panel
+            assert!(text_width("S", super::super::popups::slam_scale(0), 0) <= p.w);
             let (cx, y0, rh) = title_rows(&lay);
-            for i in 0..TITLE_ITEMS.len() {
-                assert_eq!(title_tap(&lay, cx as f32, (y0 + i as i32 * rh + 2) as f32), Some(i));
+            let items = title_items(true);
+            for i in 0..items.len() {
+                assert_eq!(title_tap(&lay, items.len(), cx as f32, (y0 + i as i32 * rh + 2) as f32), Some(i));
             }
         }
     }
@@ -847,16 +1020,19 @@ mod tests {
     fn the_menu_fits_and_taps_land_on_rows() {
         for (w, h) in [(1280, 720), (390, 844), (844, 390)] {
             let lay = Layout::fit(w, h);
-            let m = menu_box(&lay);
-            assert!(m.panel.y >= lay.field.y && m.panel.bottom() <= lay.field.bottom());
-            for (i, item) in ITEMS.iter().enumerate() {
-                let y = (m.row0 + i as i32 * m.row_h + 3) as f32;
-                assert_eq!(menu_tap(&lay, (m.panel.x + 20) as f32, y), Some((i, 0)));
-                if item.adjustable() {
-                    assert_eq!(menu_tap(&lay, m.val0 as f32, y), Some((i, -1)));
-                    assert_eq!(menu_tap(&lay, (m.val1 - 2) as f32, y), Some((i, 1)));
+            for items in [&ITEMS[..], &menu::OPTIONS[..]] {
+                let m = menu_box(&lay, items.len());
+                assert!(m.panel.y >= lay.field.y && m.panel.bottom() <= lay.field.bottom());
+                for (i, item) in items.iter().enumerate() {
+                    let y = (m.row0 + i as i32 * m.row_h + 3) as f32;
+                    assert_eq!(menu_tap(&lay, items, (m.panel.x + 20) as f32, y), Some((i, 0)));
+                    if item.adjustable() {
+                        assert_eq!(menu_tap(&lay, items, m.val0 as f32, y), Some((i, -1)));
+                        assert_eq!(menu_tap(&lay, items, (m.val1 - 2) as f32, y), Some((i, 1)));
+                    }
                 }
             }
+            let m = menu_box(&lay, ITEMS.len());
             for mode in [Mode::Keys, Mode::Pad, Mode::Touch] {
                 let hint = match mode {
                     Mode::Keys => "ARROWS CHANGE  Z OK  ESC BACK",
