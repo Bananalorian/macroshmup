@@ -52,6 +52,10 @@ Lesson: anything that touches the user's disk must be inert in tests.
 S 15%, phase grades P1 A, P2 S 92%, P3 S 58%, P4 S 37%; stage still 100% clear / no-miss.
 Full bot run seed 7 from the top: stage ends at screen frame 16156, rank A, NEW RECORD.
 
+**CI note:** CI runs `cargo test` in debug (overflow checks on); the first v0.8.0 push failed on
+`lives + 1` overflowing the bot's endless lives (u8::MAX). Fixed, and the unreleased tag moved.
+Always run plain `cargo test` before pushing, not just `--release`.
+
 **Open:** listen to the new sounds; human difficulty and score feel (Sprint 9); red or teal
 wide shot? Next: Sprint 8, Music & mix.
 
