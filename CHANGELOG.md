@@ -3,6 +3,67 @@
 Every version is one build sprint. Newest first. Versions are tagged in git, and
 each tag publishes a GitHub Release with downloads.
 
+## [0.8.5] - 2026-10-12 - The new JAWSTHIC
+
+### Changed
+- **JAWSTHIC is redrawn from your new art**: the sprite atlas and the composed picture
+  in `docs/reference/stage 1 bosss/`
+  ([your picture beside the redraw](docs/screenshots/jawsthic-vs-art.png),
+  [its review sheet](docs/screenshots/jawsthic-review.png)). Every part comes from
+  your atlas: the cracked flagstone head with its red diamond eye and two rows of
+  fangs on red gums, the four lancet windows lit red and teal, the segmented tail and
+  its crescent fin, the dorsal fin with a lancet in it, and both long pectoral fins
+  on piped joints.
+  - **How:** a new tool, `tools/trace_jawsthic.py`, traces each part down to game
+    size. Each part is shrunk smoothly, gets back the contrast and the dark cracks
+    the shrink loses, and is snapped to the boss's bone palette with a 1 px outline.
+    Then a hand pass: a crisp eye, the jaw's painted crosshair taken out (the game
+    draws its own, which heats up before the mouth fires), and a stump for the
+    shot-off fin. The art lives in code (`src/render/jaws_px.rs`), so you can re-run
+    the tool if the atlas changes.
+  - **Animated the way you drew it:** the lower jaw hinges at the rings at its
+    back, from shut with its fangs meeting the upper row to wide open on the dark
+    of its throat. The tail is cut into its five plates plus the fin, and swims in
+    a wave. It sweeps up off the body like in your picture. The fins paddle, and the
+    far pectoral pokes out under the jaw. A pixel-art rotation (RotSprite-style)
+    keeps every turned part crisp, and the whole fish mirrors to face left.
+  - **Glitch smears** tear off its tail as in your picture: stone chips and red and
+    teal scanlines trailing back. There are a few in phase 1, more as it weakens, and
+    a storm through its turns, its death and its fall. The old glitches (bands, the
+    red and teal split, the glitch turn), the cracks burning open, the explosions,
+    the intro and the phases all stay.
+- **The health bar drains to a gem.** Each phase gets the whole bar. It drains from
+  both ends in toward a diamond gem in the middle until it hits zero and the phase
+  breaks. In the calm after, the gem flashes and turns the next phase's color, and
+  the bar refills outward from it. The gems go green (TEETH), yellow (FINS), orange
+  (GLITCH), then red (EVENT HORIZON) ([all four](docs/screenshots/boss-phases.png)).
+- **The Pilgrim's LED lines are back:** the blade channels are lit in flight as steady
+  teal dashes, like your sprites. They hold perfectly still, so nothing moves down the
+  blades as it banks. Firing the laser still sends them flowing up the sword.
+- **Same fight:** the guns, phases and timings are unchanged. Its rig follows the
+  new art (the windows, the jaw, the fin turrets, the tail), its hurtbox covers its
+  bigger body, and it swims a little further from the edges so the whole fish
+  stays on screen. To keep the pacing and scoring where they were, phase 3 takes
+  0.9x damage.
+
+### Checked
+- **Tests prove:**
+  - every frame fits its texture and turns quickly;
+  - its stone stays bone white and never outshines a bullet;
+  - the jaw shuts on its fangs and opens on the dark where the crosshair goes;
+  - the tail is cut where the sim's joints are;
+  - every tail and fin angle the sim makes has a frame (a crash this caught while
+    retaking the screenshots is fixed);
+  - the bar drains to its gem and the gem turns each phase, green to red;
+  - the Pilgrim's channels hold still in flight and flow while the laser fires.
+- **PG_SIM=200:** JAWSTHIC is destroyed in 100% of runs with no deaths. Its phases
+  take a median 24.6 / 26.1 / 27.8 / 24.7 s. The median score is 2.98M (v0.8.0:
+  2.97M). Both extends come in 96% of runs, and the rank is A in 82% and S in 18%
+  (v0.8.0: 84% and 15%).
+- The intro, all four phases, the grade slam, the death and the review sheets are
+  retaken. Native and web builds are warning-free, and all 239 tests pass in both
+  debug (as CI runs them) and release.
+
 ## [0.8.4] - 2026-10-12 - Your sprites
 
 ### Changed

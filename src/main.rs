@@ -871,7 +871,8 @@ fn stage_view(w: &World, s: &sim::stage1::Stage) -> hud::StageView {
     let jaws = w.boss.as_ref().filter(|b| !matches!(b.act, Act::Gone | Act::Dying | Act::Falling)).map(|b| {
         let [_, _, peak, done] = tune::JAWS_INTRO;
         let fill = if b.act == Act::Intro { (b.t.saturating_sub(peak) as f32 / (done - peak) as f32).min(1.0) } else { 1.0 };
-        hud::JawsView { bar: b.bar(), phase: if b.act == Act::Intro { 0 } else { b.phase }, left: b.time_left(), fill }
+        let calm = (b.act == Act::Break).then(|| b.t as f32 / tune::JAWS_BREAK as f32);
+        hud::JawsView { bar: b.bar(), phase: if b.act == Act::Intro { 0 } else { b.phase }, left: b.time_left(), fill, calm }
     });
     hud::StageView {
         t: s.t,

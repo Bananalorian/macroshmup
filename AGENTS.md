@@ -24,13 +24,13 @@ The toolchain is pinned in `rust-toolchain.toml` and CI uses the same version. D
 4. **Color is for the Pilgrim, the boss, enemy bullets and explosion fringes.** Teal is the Pilgrim's; red marks danger (telegraphs, enemy lights). Enemy bullets come in several hues (red, teal, violet, amber, blue: Jason's call, v0.6.4), always with a white-hot core and a black outline. Everything else uses the monochrome palette.
 5. **Pixel-perfect:** a 640×360 canvas, a 360×360 playfield (square, full height: 1080×1080 at 1080p, Jason's call in v0.7.2), integer scaling, nearest filtering, effects locked to the low-res grid.
 6. **No camera shake while enemy bullets are live.** At most 3 full-screen flashes per second. Respect the Reduce flashing and Screen shake options.
-7. **No asset files.** Art, font, sound and music are generated in code. The only exceptions are PNG sprite overrides or music files that Jason adds himself.
+7. **No asset files.** Art, font, sound and music are generated in code. The only exceptions are PNG sprite overrides or music files that Jason adds himself. Art traced from his reference PNGs counts as code: a tool in `tools/` writes it into a `.rs` file (JAWSTHIC: `tools/trace_jawsthic.py` → `src/render/jaws_px.rs`).
 8. **Every tunable number lives in `tune.rs`.**
 9. **Keep it cross-platform; assume Windows locally:** no `/tmp`, no bash-only build steps. Screenshots go to `./shots/` (gitignored).
 
 ## Design references
 - [Boghog's bullet hell shmup 101](https://shmups.wiki/library/Boghog%27s_bullet_hell_shmup_101) is the design bible. `SPRINTS.md` §3 condenses it; follow it unless Jason says otherwise.
-- Jason's reference art lives in `docs/reference/`: the PILGRIM sprite sheet (the first ship, its animations, the palette), the `ship/` folder (the Pilgrim: the split-sword sheet since v0.7.1, and the parts atlas and firing strip it's drawn from since v0.8.4), the black hole image (background, mood, the RGB streaks), and the enemy and boss references (JAWSTHIC's in `stage 1 bosss/`). Match them. The palette tokens are in `SPRINTS.md` §2.
+- Jason's reference art lives in `docs/reference/`: the PILGRIM sprite sheet (the first ship, its animations, the palette), the `ship/` folder (the Pilgrim: the split-sword sheet since v0.7.1, and the parts atlas and firing strip it's drawn from since v0.8.4), the black hole image (background, mood, the RGB streaks), and the enemy and boss references (JAWSTHIC's in `stage 1 bosss/`: its first concept, and the sprite atlas and composed picture it's traced from since v0.8.5). Match them. The palette tokens are in `SPRINTS.md` §2.
 - Code to reuse from Shinjuku: `synth.rs`, `audio.rs`, `input.rs`, `pad.rs`, `storage.rs`, `font.rs`, `build_web.py`, `web/template.html`, `.github/`. The bomb is Shinjuku's grenade blast scaled up: `World::explode`, the post shader's `Shock` ring, and `synth::explosion` (the grenade uses the light variant; the bomb gets the heavy one).
 
 ## Definition of done (every sprint)

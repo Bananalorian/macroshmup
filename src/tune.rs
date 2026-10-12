@@ -493,10 +493,13 @@ pub const JAWS_INTRO: [u32; 4] = [170, 215, 268, 330];
 /// out, damage taken per point of shot damage, the turn period in frames, 0 never).
 /// The shares make the bar; the damage keeps each phase 20-35 s with full power.
 pub const JAWS_HP: f32 = 12000.0;
-pub const JAWS_PHASES: [(f32, u32, f32, u32); 4] = [(0.25, 30, 0.65, 840), (0.30, 40, 1.0, 0), (0.30, 40, 1.0, 600), (0.15, 35, 0.42, 420)];
+pub const JAWS_PHASES: [(f32, u32, f32, u32); 4] = [(0.25, 30, 0.65, 840), (0.30, 40, 1.0, 0), (0.30, 40, 0.9, 600), (0.15, 35, 0.42, 420)];
 pub const JAWS_PHASE_NAMES: [&str; 4] = ["TEETH", "FINS", "GLITCH", "EVENT HORIZON"];
 /// Between phases: frames of calm while it shakes the break off (no fire, no damage).
 pub const JAWS_BREAK: u32 = 120;
+/// Through that calm (shares of it), the health bar refills outward from its gem,
+/// the gem already the next phase's color (it flashes as it turns).
+pub const JAWS_REFILL: (f32, f32) = (0.2, 0.75);
 /// Phase 2's weak points, the pectoral fin and the tail fin turrets: health each, and
 /// the share of the phase's health breaking one tears away.
 pub const JAWS_FIN_HP: f32 = 900.0;
@@ -504,7 +507,7 @@ pub const JAWS_FIN_BLOW: f32 = 0.25;
 /// Where it swims: its height, and its home across the screen facing right and left
 /// (the whole fish stays on the screen); how far it sways and bobs (px, period).
 pub const JAWS_Y: f32 = 82.0;
-pub const JAWS_HOME: (f32, f32) = (195.0, 165.0);
+pub const JAWS_HOME: (f32, f32) = (224.0, 136.0);
 pub const JAWS_SWAY: (f32, u32) = (16.0, 480);
 pub const JAWS_BOB: (f32, u32) = (5.0, 300);
 /// How quickly it closes on where it wants to be (share of the gap per frame).
@@ -512,7 +515,7 @@ pub const JAWS_FOLLOW: f32 = 0.05;
 /// A turn (it glitches round to face the other way): frames, and how far its pivot
 /// shifts so the whole fish stays about where it was.
 pub const JAWS_TURN: u32 = 28;
-pub const JAWS_TURN_SHIFT: f32 = 34.0;
+pub const JAWS_TURN_SHIFT: f32 = 88.0;
 /// The jaw opens this many frames before a mouth gun fires (the telegraph), and how
 /// fast it swings (share of the way per frame).
 pub const JAWS_JAW_LEAD: u32 = 22;
@@ -521,28 +524,31 @@ pub const JAWS_JAW_SPEED: f32 = 0.2;
 /// each joint bends, root to the tail fin (radians).
 pub const JAWS_SWIM: (f32, f32) = (0.075, 0.24);
 pub const JAWS_BEND: [f32; 6] = [0.05, 0.07, 0.09, 0.11, 0.13, 0.17];
+/// The tail sweeps up off the body (radians), the way Jason drew it.
+pub const JAWS_TAIL_TILT: f32 = 0.18;
 /// The rig, facing right.
-pub const JAWS_HINGE: (f32, f32) = (27.0, 8.5);
-pub const JAWS_TAIL_ROOT: (f32, f32) = (-30.0, -3.0);
+pub const JAWS_HINGE: (f32, f32) = (-13.0, 9.0);
+pub const JAWS_TAIL_ROOT: (f32, f32) = (-78.0, -7.0);
 /// The tail's plates, front to back: (length, height).
-pub const JAWS_TAIL: [(f32, f32); 5] = [(11.0, 23.0), (10.5, 20.0), (10.0, 17.0), (9.5, 14.5), (9.0, 12.5)];
-pub const JAWS_DORSAL_AT: (f32, f32) = (0.0, -28.0);
-pub const JAWS_PECTORAL_AT: (f32, f32) = (17.0, 18.0);
-pub const JAWS_WINDOWS: [f32; 4] = [-22.0, -12.0, -2.0, 8.0];
-pub const JAWS_EYE: (f32, f32) = (50.0, -11.0);
+pub const JAWS_TAIL: [(f32, f32); 5] = [(10.0, 22.0), (11.0, 20.0), (10.0, 17.0), (10.0, 15.0), (9.0, 13.0)];
+pub const JAWS_DORSAL_AT: (f32, f32) = (-14.0, -14.0);
+pub const JAWS_PECTORAL_AT: (f32, f32) = (-17.0, 18.0);
+pub const JAWS_WINDOWS: [f32; 4] = [-24.0, -13.0, -2.0, 8.0];
+pub const JAWS_EYE: (f32, f32) = (26.0, -22.0);
 /// Its guns' muzzles: the jaws, the windows (at this height), the pectoral fin's joint
 /// (a turret's red core), the belly; and the dorsal fin's window (just a light).
-pub const JAWS_MOUTH: (f32, f32) = (50.0, 5.0);
-/// How far the mouth's center drops as the jaw opens wide (px).
-pub const JAWS_MOUTH_DROP: f32 = 6.0;
-pub const JAWS_WINDOW_Y: f32 = -4.0;
-pub const JAWS_DORSAL_CORE: (f32, f32) = (-5.5, -41.0);
-pub const JAWS_BELLY: (f32, f32) = (8.0, 24.0);
+pub const JAWS_MOUTH: (f32, f32) = (54.0, -3.0);
+/// How far the mouth's center moves as the jaw opens wide (px): back and down, to the
+/// crosshair in its throat.
+pub const JAWS_MOUTH_OPEN: (f32, f32) = (-16.0, 17.0);
+pub const JAWS_WINDOW_Y: f32 = 0.0;
+pub const JAWS_DORSAL_CORE: (f32, f32) = (-17.0, -26.0);
+pub const JAWS_BELLY: (f32, f32) = (1.0, 29.0);
 /// Hurtboxes (center x, center y, w, h): the body and the pectoral turret; the tail
 /// fin's (how far back along its plate its middle is, w, h) swings with the tail.
-pub const JAWS_BODY: (f32, f32, f32, f32) = (16.0, -2.0, 100.0, 46.0);
-pub const JAWS_PECTORAL: (f32, f32, f32, f32) = (4.0, 30.0, 30.0, 26.0);
-pub const JAWS_TAIL_FIN: (f32, f32, f32) = (12.0, 26.0, 46.0);
+pub const JAWS_BODY: (f32, f32, f32, f32) = (4.0, -2.0, 128.0, 52.0);
+pub const JAWS_PECTORAL: (f32, f32, f32, f32) = (-30.0, 28.0, 30.0, 26.0);
+pub const JAWS_TAIL_FIN: (f32, f32, f32) = (14.0, 24.0, 58.0);
 /// Phase 3's laser: frames of warning, frames of beam, how far it sweeps (degrees),
 /// how wide it's drawn (px; it hits on a little over half of that), how often it
 /// comes and when the first one does (frames into the phase).
@@ -554,6 +560,10 @@ pub const JAWS_LASER_EVERY: (u32, u32) = (330, 150);
 pub const JAWS_DEATH: u32 = 235;
 pub const JAWS_SLOWMO: u32 = 48;
 pub const JAWS_BLASTS: [u32; 11] = [0, 8, 15, 22, 30, 40, 52, 66, 82, 100, 140];
+/// Glitch smears tearing off its tail (Jason's picture): how many at once in each
+/// phase, and through a turn or its end; how long each lives (frames).
+pub const JAWS_SMEARS: ([u32; 4], u32) = ([4, 6, 9, 14], 24);
+pub const JAWS_SMEAR_LIFE: u32 = 24;
 /// Timed out in phase 4: frames for the hole to swallow it.
 pub const JAWS_FALL: u32 = 150;
 

@@ -36,7 +36,9 @@ the font and every sound are built when the game starts. Written in Rust on
 
 ![Its death: every bullet cancels, blasts walk up from its tail, the screen whites out, then the tally](docs/screenshots/boss-death.png)
 
-![JAWSTHIC's sheet: in play, at rest, charging, in each phase, glitching, facing either way, all built in code](docs/screenshots/jawsthic-sheet.png)
+![Jason's JAWSTHIC beside the redraw at game size, traced from his sprite atlas](docs/screenshots/jawsthic-vs-art.png)
+
+![JAWSTHIC's sheet: in play, at rest, charging, in each phase, glitching, facing either way](docs/screenshots/jawsthic-sheet.png)
 
 ![The derelict's death: the wreck burns, blasts ripple across it, then it goes up](docs/screenshots/derelict-death.png)
 
@@ -81,9 +83,12 @@ sprites ([before, his art, now](docs/screenshots/pilgrim-vs-art.png)), and it
 animates by moving whole parts, so both blades keep their white edges when it banks.
 
 **v0.7, the boss:** JAWSTHIC, a great white carved from moon rock with a gothic
-cathedral for a body, from Jason's concept. Its fin cuts through the black hole's
-disk before it breaches. It fights in four phases on a segmented health bar, each
-with a timer: TEETH, FINS, GLITCH and EVENT HORIZON. The phases bring aimed fans,
+cathedral for a body, from Jason's concept, redrawn in v0.8.5 from his sprite atlas:
+cracked flagstones, a red diamond eye, two rows of fangs, lancet windows, a segmented
+tail trailing glitch smears. Its fin cuts through the black hole's disk before it
+breaches. It fights in four phases, each with a timer: TEETH, FINS, GLITCH and EVENT
+HORIZON. Each phase's bar drains from both ends in to a gem that turns green, yellow,
+orange, then red. The phases bring aimed fans,
 breakable fin turrets, a glitching curtain, laser sweeps, and bullets bending into
 the black hole. It dies in a chain of blasts in slow motion and a white-out, to its
 own synthesized theme.

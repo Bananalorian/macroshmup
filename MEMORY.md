@@ -3,6 +3,48 @@
 Session notes for Claude Code: what shipped, tuning that changed, known issues, what's next.
 Newest first.
 
+## v0.8.5 The new JAWSTHIC - 2026-10-12
+
+**Jason** (via /loop): "redo the boss. the design. a major redesign. function can remain the
+same... redraw like the image... the absolute best you can... keep the glitches and the
+explosions and the phases. the health bar should go down from left and right equally down to
+zero and then the next phase starts. put a diamond in the middle... start with green and each
+phase the gem changes color. last phase being red." Also "yeah we can try them again. the led
+lights" -> ship channels lit steady in flight (TEAL 0.85, no flow; flow only while beaming).
+
+**Boss art:** `tools/trace_jawsthic.py` (Pillow) cuts 6 parts from
+"docs/reference/stage 1 bosss/Right-facing shark boss sprite atlas.png" (largest 8-connected
+piece, holes kept), LANCZOS-shrinks (premultiplied) at per-part scales (body/jaw 0.165, tail
+0.15, dorsal 0.14, near pec 0.17, far pec 0.15), restores contrast (GAIN 1.3 about 150),
+keeps cracks (ink coverage > 0.3 of the full-size block), snaps to the bone RAMP with Bayer
+dither (EDGES 40,75,115,172,205), outlines; hand pass: eye diamond at (110,23), jaw crosshair
+unpainted, pectoral stump; writes `src/render/jaws_px.rs` (Grid rows of letters + GLASS
+window pixels). carve.rs is deleted. jawsthic.rs: decode -> RotSprite-lite (`epx` twice,
+sample at 4x) `turns()`, `mirrored()`, `layered()`; body frames = jaw (turned JAW_SHUT -0.55
+* (1-open) about HINGE) under the body; tail cut at CUTS [78,68,57,47,37,28] (+3 px
+overlap); tail turn sets centered on JAWS_TAIL_TILT 0.18 (`turn_of(a, rest, reach)`,
+clamped; a crash and a debug overflow here were caught by the screenshot batch and the debug
+tests). Texture 2048x1024. Glitch smears off the tail (`smears`, JAWS_SMEARS ([4,6,9,14],
+24), life 24). Rig (body pivot = traced body (84,45)): HINGE (-13,9), TAIL_ROOT (-78,-7),
+TAIL [(10,22),(11,20),(10,17),(10,15),(9,13)], DORSAL_AT (-14,-14), PECTORAL_AT (-17,18),
+FAR_FIN_AT (32,30) (render only), WINDOWS [-24,-13,-2,8] y 0, EYE (26,-22), MOUTH (54,-3) +
+JAWS_MOUTH_OPEN (-16,17)*jaw (was MOUTH_DROP), DORSAL_CORE (-17,-26), BELLY (1,29), BODY
+(4,-2,128,52), PECTORAL (-30,28,30,26), TAIL_FIN (14,24,58). JAWS_HOME (224,136),
+TURN_SHIFT 88 (the fish is longer on the tail side). JAWS_PHASES damage P3 0.9 (others
+unchanged) to keep the v0.8.0 calibration: PG_SIM=200 median 2.98M, extends 100/96, rank A
+82 S 18, phases 24.6/26.1/27.8/24.7 s, 100% clear, 0 deaths.
+
+**Bar:** `hud::jaws_gauge` (gem index, full, flash); each phase's bar drains both ends in to
+a GEM_R 5 diamond at its center; in the calm (`JawsView.calm`, JAWS_REFILL (0.2,0.75)) the
+gem turns the next color with a flash and the bar refills outward; the phase name follows the
+gem. `palette::GEM` = green 3FD45A, yellow F2C230, orange F5822A, SIGNAL.
+
+His composed picture (from chat) is saved as "docs/reference/stage 1 bosss/JAWSTHIC
+composed.jpg". 239 tests.
+
+**Next:** he said "before sprint 8 there is a ton of stuff i want to tune, fix, add"; wait for
+his list.
+
 ## v0.8.4 Your sprites - 2026-10-12
 
 **Jason** sent new ship art (docs/reference/ship/: "Modular sword spacecraft sprite atlas.png":

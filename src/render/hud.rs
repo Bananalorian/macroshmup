@@ -5,13 +5,13 @@ use super::Renderer;
 use super::art::Atlas;
 use super::font::{self, text_width};
 use super::layout::{IRect, Layout, Orient};
-use super::palette::{ASH, CREAM, DUSK, SIGNAL, SLATE, STRIP, TEAL_HOT, VOID, WHITE_A, tone};
+use super::palette::{ASH, CORE, CREAM, DUSK, GEM, INK, SIGNAL, SLATE, STRIP, TEAL_HOT, VOID, WHITE_A, tone};
 use macroquad::math::Rect;
 use crate::input::{Button, Mode, touch_buttons};
 use crate::menu::{self, ITEMS};
 use crate::storage::Settings;
 use crate::storage::View;
-use crate::tune::{BLINK_FRAMES, BOSS_NAME, JAWS_PHASES, JAWS_PHASE_NAMES, SANDBOX, SECTIONS, STAGE_NAME, TALLY_COUNT, TALLY_DONE, TALLY_LINE, TALLY_RANK, TALLY_SCORE, TALLY_STEP, TICK_HZ, TITLE_CARD, TITLE_SCALE, TITLE_TRACK, TRACK};
+use crate::tune::{BLINK_FRAMES, BOSS_NAME, JAWS_PHASE_NAMES, JAWS_REFILL, SANDBOX, SECTIONS, STAGE_NAME, TALLY_COUNT, TALLY_DONE, TALLY_LINE, TALLY_RANK, TALLY_SCORE, TALLY_STEP, TICK_HZ, TITLE_CARD, TITLE_SCALE, TITLE_TRACK, TRACK};
 
 /// The sandbox switches that change how the game plays, as one line.
 fn sandbox_flags(v: &View) -> String {
@@ -95,6 +95,8 @@ fn stamps(a: &Atlas, x0: i32, x1: i32, y: i32, right: bool) {
 /// The stamps' long lines, broken to fit a side panel.
 const LEFT_STAMP: [&str; 2] = ["HUMANITY", "STILL LOOKS UP"];
 const RIGHT_STAMP: [&str; 3] = ["A SMALL SHIP", "A LONG WAY", "FROM HOME"];
+/// The health bar gem's radius (px).
+const GEM_R: i32 = 5;
 
 /// A score as 8 digits, the leading zeros dimmed (the arcade way).
 fn score_digits(a: &Atlas, n: u64, x: i32, y: i32, scale: i32) {
@@ -326,6 +328,55 @@ pub struct JawsView {
     pub phase: u8,
     pub left: f32,
     pub fill: f32,
+    /// How far through the calm between phases (0..1), if it's in one.
+    pub calm: Option<f32>,
+}
+
+/// What the boss's bar shows: the phase whose gem sits in the middle (0-3), how full
+/// the bar is either side of it (0..1), and how white the gem flashes. Each phase
+/// gets the whole bar, which drains from both ends in to the gem; in the calm after
+/// it the gem turns the next phase's color with a flash and the bar refills outward.
+pub fn jaws_gauge(j: &JawsView) -> (usize, f32, f32) {
+    match (j.phase, j.calm) {
+        (0, _) => (0, j.fill, 0.0),
+        (p, Some(c)) => {
+            let refill = ((c - JAWS_REFILL.0) / (JAWS_REFILL.1 - JAWS_REFILL.0)).clamp(0.0, 1.0);
+            (p as usize % 4, refill * refill * (3.0 - 2.0 * refill), (1.0 - c / JAWS_REFILL.0).max(0.0))
+        }
+        (p, None) => (p as usize - 1, j.bar[p as usize - 1], 0.0),
+    }
+}
+
+/// The gem: a faceted diamond lit from the top left, a glint on it, a faint glow
+/// round it; `flash` blanches it.
+fn gem(a: &Atlas, cx: i32, cy: i32, c: Color, flash: f32) {
+    let mix = |c: Color, to: Color, k: f32| Color::new(c.r + (to.r - c.r) * k, c.g + (to.g - c.g) * k, c.b + (to.b - c.b) * k, 1.0);
+    let white = Color::new(1.0, 1.0, 1.0, 1.0);
+    let r = GEM_R;
+    for dy in -r - 1..=r + 1 {
+        for dx in -r - 1..=r + 1 {
+            let d = dx.abs() + dy.abs();
+            let col = if d == r + 1 {
+                Color { a: 0.3, ..c }
+            } else if d > r {
+                continue;
+            } else if d == r {
+                INK
+            } else if d <= 1 {
+                mix(c, white, 0.3)
+            } else {
+                match (dx > 0, dy > 0) {
+                    (false, false) => mix(c, white, 0.45),
+                    (true, false) => c,
+                    (false, true) => mix(c, INK, 0.25),
+                    (true, true) => mix(c, INK, 0.5),
+                }
+            };
+            let col = if col.a < 1.0 { col } else { mix(col, white, flash) };
+            a.fill(cx + dx, cy + dy, 1, 1, col);
+        }
+    }
+    a.fill(cx - 1, cy - 2, 1, 1, mix(CORE, white, flash));
 }
 
 /// m:ss
@@ -603,34 +654,34 @@ fn stage_overlays(a: &Atlas, lay: &Layout, s: &StageView) {
     }
 }
 
-/// JAWSTHIC's bar along the top of the playfield: its name, the bar cut into its
-/// phases' shares (the current one cream, those to come ash, those gone empty), the
-/// phase's name under it, and the seconds left, red in the last ten.
+/// JAWSTHIC's bar along the top of the playfield: its name, then the phase's bar
+/// draining from both ends in to the gem in its middle (the gem's color says which
+/// phase), the phase's name under it, and the seconds left, red in the last ten.
 fn jaws_bar(a: &Atlas, lay: &Layout, j: &JawsView, t: u32) {
     let f = lay.field;
     let (x0, x1, y) = (f.x + 10, f.right() - 10, f.y + 6);
     small(a, BOSS_NAME, x0, y, ASH);
     let bx = x0 + text_width(BOSS_NAME, 1, TRACK) + 6;
     let bar_end = x1 - text_width("00", 1, TRACK) - 6;
-    let total = (bar_end - bx) as f32;
-    let shown = j.fill * total;
-    let mut sx = bx as f32;
-    for (i, &(share, ..)) in JAWS_PHASES.iter().enumerate() {
-        let w = share * total;
-        let (left, width) = (sx.round() as i32, (w.round() as i32 - 2).max(1));
-        a.fill(left, y + 2, width, 3, DUSK);
-        let reach = ((shown - (sx - bx as f32)) / w).clamp(0.0, 1.0);
-        let lit = ((width as f32) * (j.bar[i] * reach)).round() as i32;
-        let current = j.phase as usize == i + 1;
-        let c = if current { CREAM } else { ASH };
-        a.fill(left, y + 2, lit, 3, c);
-        if current {
-            a.fill(left, y + 6, width, 1, Color { a: 0.6, ..CREAM });
+    let cx = (bx + bar_end) / 2;
+    let (shown, full, flash) = jaws_gauge(j);
+    // each side: its track from the gem out, lit from the gem out as far as it's full
+    let side = (bar_end - bx) / 2 - GEM_R - 3;
+    let lit = (side as f32 * full).round() as i32;
+    let (l0, r0) = (cx - GEM_R - 3, cx + GEM_R + 4);
+    a.fill(l0 - side, y + 2, side, 3, DUSK);
+    a.fill(r0, y + 2, side, 3, DUSK);
+    a.fill(l0 - lit, y + 2, lit, 3, CREAM);
+    a.fill(r0, y + 2, lit, 3, CREAM);
+    if lit > 0 {
+        // bright caps on the ends as they close in
+        for x in [l0 - lit, r0 + lit - 1] {
+            a.fill(x, y + 1, 1, 5, Color { a: 0.8, ..CREAM });
         }
-        sx += w;
     }
+    gem(a, cx, y + 3, GEM[shown], flash);
     if j.phase > 0 {
-        small(a, JAWS_PHASE_NAMES[j.phase as usize - 1], bx, y + 10, SLATE);
+        small(a, JAWS_PHASE_NAMES[shown], bx, y + 10, SLATE);
         let secs = j.left.ceil() as i32;
         let urgent = j.left <= 10.0;
         if !urgent || t % 30 < 22 {
@@ -898,6 +949,29 @@ fn menu_panel(a: &Atlas, lay: &Layout, s: &Settings, mode: Mode, items: &[menu::
 mod tests {
     use super::*;
     use crate::tune::{CANVAS_H, CANVAS_W, FIELD_W, PORTRAIT_W};
+
+    /// The boss's bar: each phase gets the whole bar, draining from both ends in to
+    /// the gem; at zero the calm turns the gem the next phase's color with a flash and
+    /// refills the bar outward; the gems run green to red.
+    #[test]
+    fn the_boss_bar_drains_to_its_gem_and_the_gem_turns_each_phase() {
+        let view = |phase: u8, bar: [f32; 4], calm: Option<f32>| JawsView { bar, phase, left: 20.0, fill: 1.0, calm };
+        assert_eq!(jaws_gauge(&view(1, [1.0, 1.0, 1.0, 1.0], None)), (0, 1.0, 0.0), "a fresh phase: full, the first gem");
+        assert_eq!(jaws_gauge(&view(1, [0.4, 1.0, 1.0, 1.0], None)), (0, 0.4, 0.0), "both ends drain together");
+        assert_eq!(jaws_gauge(&view(2, [0.0, 0.25, 1.0, 1.0], None)).1, 0.25, "phase 2's own bar, not the whole fight's");
+        let (gem, full, flash) = jaws_gauge(&view(1, [0.0, 1.0, 1.0, 1.0], Some(0.0)));
+        assert_eq!((gem, full), (1, 0.0), "at zero the next phase's gem, the bar empty");
+        assert!(flash > 0.9, "the gem flashes as it turns");
+        let mid = jaws_gauge(&view(1, [0.0, 1.0, 1.0, 1.0], Some(0.5))).1;
+        assert!(mid > 0.0 && mid < 1.0, "it refills through the calm: {mid}");
+        assert_eq!(jaws_gauge(&view(1, [0.0, 1.0, 1.0, 1.0], Some(0.99))).1, 1.0, "full by the next phase");
+        assert_eq!(jaws_gauge(&view(4, [0.0, 0.0, 0.0, 0.7], None)).0, 3, "the last phase's gem");
+        assert_eq!(jaws_gauge(&view(0, [1.0; 4], None)), (0, 1.0, 0.0), "arriving, the bar fills as it breaches");
+        let g = GEM[0];
+        assert!(g.g > g.r && g.g > g.b, "it starts green");
+        assert_eq!(GEM[3], SIGNAL, "and ends red");
+        assert!(GEM.windows(2).all(|w| w[0] != w[1]), "every phase its own color");
+    }
 
     #[test]
     fn the_stamp_reads_like_the_sheet() {

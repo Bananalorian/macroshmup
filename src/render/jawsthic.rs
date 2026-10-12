@@ -1,342 +1,280 @@
-//! JAWSTHIC, Stage 1's boss (Jason's concept): a great white carved from moon rock,
-//! a gothic cathedral for a body. Lancet windows down its flank, a fin with an arched
-//! window, a segmented stone tail trailing glitches, a red diamond eye, and jaws that
-//! drop open on a red crosshair. Drawn in code with the carving painter (carve.rs),
-//! part by part, so the tail can swing, the jaw can drop and the fins can paddle.
+//! JAWSTHIC, Stage 1's boss (Jason's design): a great white carved from cracked moon
+//! rock, a gothic cathedral for a body. A red diamond eye under a heavy brow, two
+//! rows of fangs on red gums, a mouth that drops open on a red crosshair, four
+//! lancet windows down its flank lit red and teal, a segmented stone tail ending in
+//! a crescent fin, a dorsal fin with a lancet in it, and two long pectoral fins on
+//! piped joints.
 //!
-//! Every part faces right here; the painter mirrors them to face left. Coordinates
-//! are pixels from each part's pivot, y down.
+//! The parts are traced from his sprite atlas at game size (tools/trace_jawsthic.py
+//! writes them into jaws_px.rs). Here they're turned with a RotSprite-style rotation
+//! (EPX-doubled twice, then sampled), so a swinging tail or a dropping jaw stays
+//! crisp, mirrored to face left, and packed in a texture of their own: the jaw at
+//! each step of its drop (put together with the body), every turn of every tail
+//! plate and fin.
+//!
+//! Every part faces right here. Coordinates are pixels from the body's pivot, y down.
 
 use super::art::Packer;
-use super::carve::{Form, Frame, M, Part, Pose, Pt, Shape, carve, carve_with, disc, line, poly, ring, seams};
+use super::jaws_px::{self as px, Grid};
 use super::palette::{CORE as CORE_C, EMBER, INK as INK_C, SIGNAL};
 use crate::sim::boss::{Act, Boss, Laser};
-use crate::tune::{JAWS_BLASTS, JAWS_DEATH, JAWS_DORSAL_CORE, JAWS_FALL, JAWS_INTRO, JAWS_LASER};
+use crate::tune::{JAWS_BLASTS, JAWS_DEATH, JAWS_DORSAL_CORE, JAWS_FALL, JAWS_INTRO, JAWS_LASER, JAWS_SMEAR_LIFE, JAWS_SMEARS};
 use macroquad::prelude::{Color, DrawTextureParams, FilterMode, Image, Rect, Texture2D, draw_texture_ex, vec2};
 
 // Where the parts hang on the body (from its pivot, facing right): shared with the
 // sim, which aims the guns and places the hurtboxes to match.
-use crate::tune::{JAWS_DORSAL_AT as DORSAL_AT, JAWS_EYE as EYE, JAWS_HINGE as HINGE, JAWS_PECTORAL_AT as PECTORAL_AT, JAWS_TAIL as TAIL, JAWS_WINDOWS as WINDOWS};
-/// The far pectoral fin, peeking out behind the body.
-pub const FAR_FIN_AT: Pt = (25.0, 19.0);
+use crate::tune::{JAWS_DORSAL_AT as DORSAL_AT, JAWS_EYE as EYE, JAWS_HINGE as HINGE, JAWS_PECTORAL_AT as PECTORAL_AT, JAWS_TAIL_TILT as TILT};
+/// The far pectoral fin, peeking out from behind the throat.
+pub const FAR_FIN_AT: (f32, f32) = (32.0, 30.0);
 
-/// The body's outline: the snout, over the back to the tail root, along the belly
-/// to the throat, then the mouth line back out to the snout.
-fn outline() -> Vec<Pt> {
-    vec![
-        (72.0, -8.0),
-        (69.5, -12.5),
-        (63.0, -17.5),
-        (54.0, -21.5),
-        (43.0, -25.0),
-        (31.0, -27.5),
-        (18.0, -29.0),
-        (6.0, -29.0),
-        (-6.0, -27.5),
-        (-17.0, -24.0),
-        (-26.0, -19.0),
-        (-32.0, -13.5),
-        (-34.5, -7.0),
-        (-35.0, 0.0),
-        (-32.5, 6.0),
-        (-27.0, 11.5),
-        (-18.0, 16.5),
-        (-6.0, 20.5),
-        (6.0, 23.0),
-        (18.0, 24.5),
-        (24.0, 24.0),
-        (26.5, 21.0),
-        (26.5, 14.0),
-        HINGE,
-        (34.0, 7.5),
-        (44.0, 6.0),
-        (54.0, 4.0),
-        (63.0, 1.5),
-        (68.0, -1.5),
-        (71.0, -4.5),
-    ]
+pub type Pt = (f32, f32);
+
+// ---------------------------------------------------------------- the palette
+
+const fn rgb(c: u32) -> Color {
+    Color::new(((c >> 16) & 0xFF) as f32 / 255.0, ((c >> 8) & 0xFF) as f32 / 255.0, (c & 0xFF) as f32 / 255.0, 1.0)
 }
 
-/// The whole fish's silhouette with the jaw shut: its curve rounds the light.
-fn barrel_outline() -> Vec<Pt> {
-    vec![(72.0, -8.0), (63.0, -17.5), (43.0, -25.0), (18.0, -29.0), (6.0, -29.0), (-17.0, -24.0), (-32.0, -13.5), (-35.0, 0.0), (-27.0, 11.5), (-6.0, 20.5), (18.0, 24.5), (28.0, 23.5), (45.0, 17.5), (59.0, 10.0), (61.0, 6.0), (63.0, 1.5), (71.0, -4.5)]
+/// The stone's tones, dark to light (the lightest stays under a bullet's core).
+pub const RAMP: [Color; 6] = [rgb(0x26241F), rgb(0x3E3B33), rgb(0x6E6858), rgb(0x9D9682), rgb(0xC4BDA8), rgb(0xDDD6C2)];
+pub const OUTLINE: Color = rgb(0x121210);
+pub const RECESS: Color = rgb(0x1E1D19);
+const GUM: Color = rgb(0x8E231B);
+const GUM_LIT: Color = rgb(0xC9342A);
+const VEIN: Color = rgb(0x45120E);
+const TEAL: Color = rgb(0x32DFB3);
+const TEAL_DIM: Color = rgb(0x135746);
+
+/// A traced letter's color (see jaws_px.rs).
+fn color(c: char) -> Option<Color> {
+    Some(match c {
+        'o' => OUTLINE,
+        'x' => RECESS,
+        d @ '0'..='5' => RAMP[d as usize - '0' as usize],
+        'S' => SIGNAL,
+        'G' => GUM_LIT,
+        'g' => GUM,
+        'v' => VEIN,
+        'T' => TEAL,
+        't' => TEAL_DIM,
+        _ => return None,
+    })
 }
 
-/// The mouth line: the upper jaw's edge, hinge to snout.
-const MOUTH: [Pt; 5] = [HINGE, (34.0, 7.5), (44.0, 6.0), (54.0, 4.0), (63.0, 1.5)];
-
-/// The lower jaw, shut: shorter than the upper, so the snout overhangs it.
-fn jaw_outline() -> Vec<Pt> {
-    vec![HINGE, (34.0, 7.5), (44.0, 6.0), (54.0, 4.0), (60.0, 2.8), (61.0, 6.0), (59.0, 10.0), (53.0, 14.0), (45.0, 17.5), (36.0, 21.0), (28.0, 23.5), (24.0, 18.0)]
+/// Stone that cracks open and burns as it weakens (not its outline, its lights, its gums).
+fn stone(c: Color) -> bool {
+    RAMP[1..].contains(&c)
 }
 
-/// `p` swung `a` radians about `hinge`.
-pub fn swing(p: Pt, hinge: Pt, a: f32) -> Pt {
-    let (s, c) = a.sin_cos();
-    let (dx, dy) = (p.0 - hinge.0, p.1 - hinge.1);
-    (hinge.0 + c * dx - s * dy, hinge.1 + s * dx + c * dy)
+// ---------------------------------------------------------------- turning parts
+
+/// An image and the pixel its pivot sits on.
+#[derive(Clone)]
+pub struct Frame {
+    pub img: Image,
+    pub pivot: (i32, i32),
 }
 
-/// Height of a polyline at `x` (linear between its points).
-fn along(pts: &[Pt], x: f32) -> f32 {
-    for w in pts.windows(2) {
-        let ((x0, y0), (x1, y1)) = (w[0], w[1]);
-        if (x0..=x1).contains(&x) {
-            return y0 + (y1 - y0) * (x - x0) / (x1 - x0).max(1e-4);
+fn decode(g: &Grid) -> Frame {
+    let (w, h) = (g.rows[0].len(), g.rows.len());
+    let mut img = Image::gen_image_color(w as u16, h as u16, Color::new(0.0, 0.0, 0.0, 0.0));
+    for (y, row) in g.rows.iter().enumerate() {
+        for (x, c) in row.chars().enumerate() {
+            if let Some(col) = color(c) {
+                img.set_pixel(x as u32, y as u32, col);
+            }
         }
     }
-    pts.last().map_or(0.0, |p| p.1)
+    Frame { img, pivot: g.pivot }
 }
 
-/// A tooth: a sharp cone from a base on the gum line to a tip, raked toward the throat.
-fn tooth(x: f32, base: f32, len: f32, down: bool) -> Shape {
-    let s = if down { 1.0 } else { -1.0 };
-    poly(&[(x - 1.7, base - s * 0.6), (x + 1.5, base - s * 0.6), (x - 0.4, base + s * len)], M::Tooth)
+/// Columns `x0..x1` of a frame, its pivot moved to `pivot` (in the source's columns).
+fn columns(f: &Frame, x0: i32, x1: i32, pivot: (i32, i32)) -> Frame {
+    let h = f.img.height as u32;
+    let mut img = Image::gen_image_color((x1 - x0) as u16, h as u16, Color::new(0.0, 0.0, 0.0, 0.0));
+    for y in 0..h {
+        for x in x0..x1 {
+            img.set_pixel((x - x0) as u32, y, f.img.get_pixel(x as u32, y));
+        }
+    }
+    Frame { img, pivot: (pivot.0 - x0, pivot.1) }
 }
 
-/// A lancet window: a pointed arch in a thick molded frame, a round eye of tracery
-/// at its head, a slit of light below.
-fn lancet(cx: f32, top: f32, bot: f32, half: f32, light: M) -> Vec<Shape> {
-    let spring = top + half * 1.6;
-    let f = 2.0;
-    let outer = vec![(cx, top - f - 0.5), (cx + half * 0.8 + 0.6, top - 0.6), (cx + half + f, spring - 0.5), (cx + half + f, bot + f), (cx - half - f, bot + f), (cx - half - f, spring - 0.5), (cx - half * 0.8 - 0.6, top - 0.6)];
-    let inner = vec![(cx, top + 0.3), (cx + half * 0.6, top + 1.5), (cx + half, spring + 0.6), (cx + half, bot), (cx - half, bot), (cx - half, spring + 0.6), (cx - half * 0.6, top + 1.5)];
-    vec![
-        poly(&outer, M::Frame),
-        poly(&inner, M::Slot),
-        disc((cx, spring + 0.6), 1.2, M::Frame),
-        line((cx, spring + 3.5), (cx, bot - 3.0), 1.0, light),
-        line((cx - half, bot - 1.5), (cx + half, bot - 1.5), 1.0, M::Recess),
-    ]
+/// EPX: each pixel becomes four, rounding off stair-steps where neighbors agree.
+fn epx(src: &Image) -> Image {
+    let (w, h) = (src.width as i32, src.height as i32);
+    let s = src.get_image_data();
+    let at = |x: i32, y: i32| s[(y.clamp(0, h - 1) * w + x.clamp(0, w - 1)) as usize];
+    let mut out = Image::gen_image_color((w * 2) as u16, (h * 2) as u16, Color::new(0.0, 0.0, 0.0, 0.0));
+    let o = out.get_image_data_mut();
+    for y in 0..h {
+        for x in 0..w {
+            let (p, a, b, c, d) = (at(x, y), at(x, y - 1), at(x + 1, y), at(x - 1, y), at(x, y + 1));
+            let q = [
+                if c == a && c != d && a != b { a } else { p },
+                if a == b && a != c && b != d { b } else { p },
+                if d == c && d != b && c != a { c } else { p },
+                if b == d && b != a && d != c { d } else { p },
+            ];
+            let i = (2 * y * 2 * w + 2 * x) as usize;
+            o[i] = q[0];
+            o[i + 1] = q[1];
+            o[i + (2 * w) as usize] = q[2];
+            o[i + (2 * w) as usize + 1] = q[3];
+        }
+    }
+    out
 }
 
-/// The head and body with the jaw dropped `open` radians: one image, so the jaw, the
-/// teeth and the throat sit together cleanly.
-pub fn body(open: f32) -> Part {
-    let form = Form::barrel(&poly(&barrel_outline(), M::Hull));
-    let jaw = |s: Shape| s.turned(HINGE, open);
-    let mut v = vec![];
-
-    // the mouth: dark, veined, between the upper jaw and the dropped one
-    let mut cavity: Vec<Pt> = MOUTH.to_vec();
-    cavity.extend(MOUTH.iter().rev().map(|&p| swing(p, HINGE, open)));
-    v.push(poly(&cavity, M::Mouth));
-    v.push(line((32.0, 10.5), (44.0, 13.5), 1.0, M::Vein));
-    v.push(line((40.0, 9.5), (49.0, 15.5), 1.0, M::Vein));
-    v.push(line((49.0, 7.5), (55.0, 11.5), 1.0, M::Vein));
-
-    // the lower jaw: plated chin, gum line, teeth pointing up
-    v.push(jaw(poly(&jaw_outline(), M::Hull)));
-    for s in [seams(&[(33.0, 21.5), (37.0, 14.0), (41.0, 10.0)]), seams(&[(47.0, 16.5), (50.0, 10.5), (52.0, 7.0)]), seams(&[(56.0, 12.0), (58.0, 7.0)])] {
-        v.extend(s.into_iter().map(jaw));
-    }
-    for (k, x) in [32.0, 35.5, 39.0, 42.5, 46.0, 49.5, 53.0, 56.5].iter().enumerate() {
-        let len = [2.5, 3.0, 3.5, 4.0, 4.0, 4.0, 4.0, 3.5][k];
-        v.push(jaw(tooth(*x, along(&MOUTH, *x) + 1.4, len, false)));
-    }
-    v.push(jaw(line((29.5, 9.8), (59.0, 4.2), 1.0, M::Gum)));
-    // the throat behind the hinge
-    v.push(disc(HINGE, 2.6, M::Shade));
-
-    // the body
-    v.push(poly(&outline(), M::Hull));
-    for s in [
-        // the head: big cracked flagstones
-        seams(&[(40.0, -25.5), (41.0, -19.0), (37.0, -12.0), (33.0, -5.0), (30.0, 2.0), (28.5, 7.0)]),
-        seams(&[(62.0, -18.0), (63.0, -12.0), (65.0, -6.0), (66.0, -1.0)]),
-        seams(&[(33.0, -5.0), (42.0, -2.5), (52.0, -3.0), (60.0, -6.0), (65.0, -6.0)]),
-        seams(&[(52.0, -21.5), (53.0, -16.0), (58.0, -14.5), (62.5, -13.0)]),
-        seams(&[(44.0, -2.6), (46.0, 3.0)]),
-        seams(&[(68.0, -11.0), (70.0, -8.0)]),
-        // masonry over the windows
-        seams(&[(-17.0, -23.5), (-17.0, -20.5)]),
-        seams(&[(-7.0, -27.0), (-7.0, -21.5)]),
-        seams(&[(3.0, -29.0), (3.0, -22.0)]),
-        seams(&[(14.0, -29.0), (14.0, -22.0)]),
-        seams(&[(27.0, -28.0), (27.5, -21.0)]),
-        // and under them
-        seams(&[(-17.0, 11.0), (-17.5, 16.5)]),
-        seams(&[(-7.0, 12.0), (-7.5, 20.5)]),
-        seams(&[(4.0, 12.5), (4.0, 22.8)]),
-        // the tail root's collar
-        seams(&[(-29.0, -12.5), (-32.0, -6.0), (-32.0, 1.0), (-29.0, 8.0)]),
-    ] {
-        v.extend(s);
-    }
-    // gill arches: four curved slits, the ribs between them lit down their front
-    for x in [14.5, 18.0, 21.5, 25.0] {
-        let arch = [(x - 0.5, -17.0), (x + 1.5, -10.0), (x + 2.2, -2.0), (x + 1.8, 5.0), (x, 11.0)];
-        v.extend(arch.windows(2).map(|w| line(w[0], w[1], 1.6, M::Recess)));
-    }
-    // the arcade: a shadowed bay along the flank, a string course over it and a sill
-    // under it, the lancet windows set in it with red and teal light inside
-    v.push(poly(&[(-29.0, -15.0), (13.0, -19.5), (13.5, 11.5), (-28.0, 9.5)], M::Shade));
-    v.push(poly(&[(-29.5, -17.5), (14.0, -22.0), (14.0, -20.0), (-29.0, -15.5)], M::Frame));
-    v.push(poly(&[(-28.5, 9.0), (14.0, 11.0), (14.0, 13.0), (-28.0, 11.0)], M::Frame));
-    for (i, &cx) in WINDOWS.iter().enumerate() {
-        v.extend(lancet(cx, -13.5, 6.5, 2.0, if i % 2 == 0 { M::Red } else { M::Teal }));
-    }
-    // pits in the rock
-    for (c, r) in [((58.0, -9.0), 1.3), ((36.0, -21.0), 1.1), ((-13.0, -22.5), 1.0), ((1.0, 19.0), 1.2), ((-24.0, 13.0), 1.0), ((48.0, -20.0), 0.9), ((67.0, -6.0), 0.8), ((-31.0, -2.0), 0.9), ((21.0, -25.0), 1.0), ((38.0, 1.0), 0.8)] {
-        v.push(disc(c, r, M::Pit));
-    }
-    // the eye: a red diamond in a dark socket, under a hard brow
-    let (ex, ey) = EYE;
-    v.push(poly(&[(ex, ey - 3.4), (ex + 3.6, ey), (ex, ey + 3.2), (ex - 3.6, ey)], M::Slot));
-    v.push(poly(&[(ex, ey - 1.6), (ex + 1.7, ey), (ex, ey + 1.6), (ex - 1.7, ey)], M::Red));
-    v.push(line((ex - 8.0, ey - 6.0), (ex + 6.0, ey - 3.5), 2.2, M::Frame));
-    // the sockets the fins plug into
-    v.push(poly(&[(-13.0, -24.5), (12.0, -29.5), (13.0, -27.0), (-12.0, -22.0)], M::Frame));
-    v.push(disc(PECTORAL_AT, 7.0, M::Shade));
-
-    // the upper jaw: gum line, teeth pointing down
-    v.push(line((29.0, 9.0), (62.0, 2.6), 1.0, M::Gum));
-    for (k, x) in [30.0, 33.5, 37.0, 40.5, 44.0, 47.5, 51.0, 54.5, 58.0, 61.5].iter().enumerate() {
-        let len = [2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 5.5, 5.0, 4.0][k];
-        v.push(tooth(*x, along(&MOUTH, *x) + 0.6, len, true));
-    }
-    Part { shapes: v, form, seed: 31 }
+/// A part turned to each of `angles` (radians; positive swings its left end up, the
+/// way the tail bends), RotSprite-style: sampled from its EPX-doubled-twice image,
+/// so edges stay one clean pixel at any angle.
+fn turns(f: &Frame, angles: &[f32]) -> Vec<Frame> {
+    let big = epx(&epx(&f.img));
+    let b = big.get_image_data();
+    let (bw, bh) = (big.width as i32, big.height as i32);
+    let (w, h) = (f.img.width as f32, f.img.height as f32);
+    let (pcx, pcy) = (f.pivot.0 as f32 + 0.5, f.pivot.1 as f32 + 0.5);
+    angles
+        .iter()
+        .map(|&a| {
+            if a.abs() < 1e-4 {
+                return f.clone();
+            }
+            let (s, c) = a.sin_cos();
+            let corners = [(0.0, 0.0), (w, 0.0), (0.0, h), (w, h)].map(|(x, y): (f32, f32)| (pcx + c * (x - pcx) - s * (y - pcy), pcy + s * (x - pcx) + c * (y - pcy)));
+            let x0 = corners.iter().map(|p| p.0).fold(f32::MAX, f32::min).floor() as i32;
+            let y0 = corners.iter().map(|p| p.1).fold(f32::MAX, f32::min).floor() as i32;
+            let x1 = corners.iter().map(|p| p.0).fold(f32::MIN, f32::max).ceil() as i32;
+            let y1 = corners.iter().map(|p| p.1).fold(f32::MIN, f32::max).ceil() as i32;
+            let (ow, oh) = (x1 - x0, y1 - y0);
+            let mut img = Image::gen_image_color(ow as u16, oh as u16, Color::new(0.0, 0.0, 0.0, 0.0));
+            let o = img.get_image_data_mut();
+            for y in y0..y1 {
+                for x in x0..x1 {
+                    let (dx, dy) = (x as f32 + 0.5 - pcx, y as f32 + 0.5 - pcy);
+                    let (sx, sy) = (pcx + c * dx + s * dy, pcy - s * dx + c * dy);
+                    let (bx, by) = ((sx * 4.0).floor() as i32, (sy * 4.0).floor() as i32);
+                    if bx >= 0 && by >= 0 && bx < bw && by < bh {
+                        let v = b[(by * bw + bx) as usize];
+                        if v[3] > 0 {
+                            o[((y - y0) * ow + x - x0) as usize] = v;
+                        }
+                    }
+                }
+            }
+            Frame { img, pivot: (f.pivot.0 - x0, f.pivot.1 - y0) }
+        })
+        .collect()
 }
 
-/// Tail plate `i` (0 is the front): a stone block on a joint, a dark gap behind it
-/// with a light in it.
-pub fn tail(i: usize) -> Part {
-    let (len, h) = TAIL[i];
-    let next = TAIL.get(i + 1).map_or(h - 2.0, |t| t.1);
-    let (a, b) = (h * 0.5, next * 0.5 + 1.5);
-    let block = poly(&[(0.5, -a + 1.0), (-1.0, -a), (-len + 1.0, -b), (-len - 1.0, -b + 1.5), (-len - 1.0, b - 1.5), (-len + 1.0, b), (-1.0, a), (0.5, a - 1.0)], M::Hull);
-    let form = Form::barrel(&block);
-    let mut v = vec![disc((0.0, 0.0), a - 1.0, M::Hull), block];
-    // the shadow the plate ahead casts over this one's front
-    v.push(poly(&[(1.0, -a + 1.0), (-2.5, -a + 0.5), (-2.5, a - 0.5), (1.0, a - 1.0)], M::Shade));
-    // a lit cap along the top, the flank split on the bigger plates
-    v.extend(seams(&[(-2.5, -a * 0.5), (-len, -b * 0.5)]));
-    if i < 2 {
-        v.extend(seams(&[(-len * 0.55, -a * 0.47), (-len * 0.55, a * 0.9)]));
+/// A frame mirrored to face left.
+fn mirrored(f: &Frame) -> Frame {
+    let (w, h) = (f.img.width as u32, f.img.height as u32);
+    let mut img = Image::gen_image_color(w as u16, h as u16, Color::new(0.0, 0.0, 0.0, 0.0));
+    for y in 0..h {
+        for x in 0..w {
+            img.set_pixel(w - 1 - x, y, f.img.get_pixel(x, y));
+        }
     }
-    // a keel along the narrow end
-    if i >= 3 {
-        v.push(line((-2.5, 0.5), (-len, 0.5), 1.0, M::Frame));
-    }
-    // the raised rim at its back, over the next plate
-    v.push(poly(&[(-len + 1.0, -b), (-len - 1.0, -b + 1.5), (-len - 1.0, b - 1.5), (-len + 1.0, b), (-len + 2.5, b - 0.5), (-len + 2.5, -b + 0.5)], M::Frame));
-    // a light glinting in the joint
-    v.push(disc((-2.0, a * 0.35), 0.6, if i % 2 == 0 { M::Teal } else { M::Red }));
-    if i == 2 {
-        // the little second dorsal and anal fins, swept back
-        v.push(poly(&[(-1.5, -a + 0.5), (-6.5, -a - 5.0), (-9.0, -a - 4.5), (-7.5, -a + 0.5)], M::Hull));
-        v.push(poly(&[(-1.5, a - 0.5), (-7.0, a + 4.5), (-9.5, a + 4.0), (-7.5, a - 0.5)], M::Hull));
-    }
-    if i % 2 == 0 {
-        v.push(disc((-len * 0.45, a * 0.45), 0.8, M::Pit));
-    }
-    Part { shapes: v, form, seed: 40 + i as u32 }
+    Frame { img, pivot: (w as i32 - 1 - f.pivot.0, f.pivot.1) }
 }
 
-/// The tail fin: a stone crescent, its lobes ribbed.
-pub fn caudal() -> Part {
-    let fin = vec![
-        (2.0, -7.0),
-        (-1.0, -13.0),
-        (-6.0, -20.0),
-        (-13.0, -26.5),
-        (-22.0, -32.0),
-        (-25.5, -33.0),
-        (-22.5, -27.0),
-        (-18.5, -19.0),
-        (-15.5, -11.0),
-        (-14.0, -4.0),
-        (-13.5, 0.0),
-        (-14.5, 5.0),
-        (-17.0, 12.0),
-        (-21.0, 19.0),
-        (-23.5, 22.0),
-        (-19.0, 20.0),
-        (-12.0, 15.5),
-        (-6.0, 10.5),
-        (-1.0, 6.0),
-        (2.0, 5.0),
-    ];
-    let mut v = vec![disc((0.0, 0.0), 6.0, M::Hull), poly(&fin, M::Hull)];
-    for s in [seams(&[(-1.0, -5.0), (-8.0, -14.0), (-17.0, -25.0)]), seams(&[(-3.0, -0.5), (-10.0, -2.0)]), seams(&[(-2.0, 4.0), (-9.0, 9.0), (-16.0, 15.0)])] {
-        v.extend(s);
+/// Frames laid together, each with its pivot at its offset from the first's: the
+/// first is the base whose pivot the result keeps; later ones go over earlier ones.
+fn layered(layers: &[(&Frame, (i32, i32))]) -> Frame {
+    let bounds = |(f, (dx, dy)): &(&Frame, (i32, i32))| (dx - f.pivot.0, dy - f.pivot.1, dx - f.pivot.0 + f.img.width as i32, dy - f.pivot.1 + f.img.height as i32);
+    let (mut x0, mut y0, mut x1, mut y1) = (i32::MAX, i32::MAX, i32::MIN, i32::MIN);
+    for l in layers {
+        let b = bounds(l);
+        (x0, y0, x1, y1) = (x0.min(b.0), y0.min(b.1), x1.max(b.2), y1.max(b.3));
     }
-    v.push(line((2.0, -0.5), (-7.0, -0.5), 1.0, M::Frame));
-    v.push(disc((-10.0, -12.0), 1.0, M::Pit));
-    v.push(disc((-8.0, 6.0), 0.8, M::Pit));
-    Part { shapes: v, form: Form::Flat { tip: (-0.25, -0.3), lean: (0.0, -0.006) }, seed: 50 }
+    let (w, h) = (x1 - x0, y1 - y0);
+    let mut img = Image::gen_image_color(w as u16, h as u16, Color::new(0.0, 0.0, 0.0, 0.0));
+    for l in layers {
+        let (bx, by, ..) = bounds(l);
+        let f = l.0;
+        for y in 0..f.img.height {
+            for x in 0..f.img.width {
+                let c = f.img.get_pixel(x as u32, y as u32);
+                if c.a > 0.0 {
+                    img.set_pixel((bx - x0 + x as i32) as u32, (by - y0 + y as i32) as u32, c);
+                }
+            }
+        }
+    }
+    Frame { img, pivot: (-x0, -y0) }
 }
 
-/// The dorsal fin: tall and falcate, swept back, an arched window in it.
-pub fn dorsal() -> Part {
-    let fin = vec![(13.0, 1.0), (10.0, -5.0), (6.0, -12.0), (1.0, -19.0), (-5.0, -26.0), (-11.0, -31.0), (-17.0, -34.5), (-15.0, -30.0), (-13.5, -24.0), (-12.5, -17.0), (-12.5, -10.0), (-13.5, -4.0), (-15.5, 1.0)];
-    let mut v = vec![poly(&fin, M::Hull)];
-    v.extend(lancet(-5.5, -20.0, -6.0, 2.2, M::Red));
-    for s in [seams(&[(9.5, -4.5), (-1.0, -3.5)]), seams(&[(-10.0, -3.5), (-13.0, -4.0)]), seams(&[(1.5, -17.5), (-1.5, -18.5)]), seams(&[(-9.5, -23.5), (-13.5, -24.0)])] {
-        v.extend(s);
-    }
-    Part { shapes: v, form: Form::Flat { tip: (-0.15, -0.15), lean: (0.0, -0.006) }, seed: 60 }
+fn round(p: Pt) -> (i32, i32) {
+    (p.0.round() as i32, p.1.round() as i32)
 }
 
-/// A pectoral fin on its piped joint: a broad falcate blade swept back, slots of teal
-/// light in it.
-pub fn pectoral() -> Part {
-    let blade = vec![(5.0, -3.0), (0.0, 2.0), (-7.0, 8.0), (-15.0, 14.0), (-24.0, 21.0), (-33.0, 29.0), (-40.0, 36.0), (-36.0, 35.5), (-30.0, 33.5), (-22.0, 29.0), (-14.0, 23.5), (-7.0, 17.0), (-2.0, 10.0), (3.0, 5.0)];
-    let mut v = vec![poly(&blade, M::Hull)];
-    for s in [seams(&[(-6.0, 8.5), (-7.5, 17.5)]), seams(&[(-15.0, 15.0), (-16.5, 25.0)]), seams(&[(-24.0, 22.0), (-25.5, 31.0)])] {
-        v.extend(s);
-    }
-    for (x, y) in [(-10.5, 14.5), (-19.5, 21.0), (-28.5, 28.0)] {
-        v.push(poly(&[(x + 2.0, y - 1.5), (x - 0.5, y - 1.5), (x - 2.0, y + 1.5), (x + 0.5, y + 1.5)], M::Slot));
-        v.push(disc((x, y), 0.5, M::Teal));
-    }
-    v.push(disc((0.0, 0.0), 5.6, M::Pipe));
-    v.push(ring((0.0, 0.0), 2.6, 3.4, M::Recess));
-    v.push(disc((0.0, 0.0), 1.4, M::Red));
-    Part { shapes: v, form: Form::Flat { tip: (-0.1, -0.35), lean: (0.0, 0.0) }, seed: 70 }
+// ---------------------------------------------------------------- the rig
+
+/// The jaw's frames, shut to wide open. Wide open is the atlas's pose; shut, it's
+/// turned up by `JAW_SHUT` radians so its fangs meet the upper row.
+pub const JAW_FRAMES: usize = 7;
+pub const JAW_SHUT: f32 = -0.55;
+/// The tail's plates, cut out of the traced tail at these columns, front (the root)
+/// to back; the tail fin is everything behind the last cut. Each plate keeps a few
+/// columns of the one behind it, so the joints never gap as they bend.
+const CUTS: [i32; 6] = [78, 68, 57, 47, 37, 28];
+const OVERLAP: i32 = 3;
+/// Turned parts are turned every `STEP` radians out to their reach either way: the
+/// tail's plates, then its fin; the pectoral fins' paddle.
+const STEP: f32 = 0.05;
+const REACH: [f32; 6] = [0.1, 0.2, 0.32, 0.46, 0.62, 0.84];
+const PADDLE: f32 = 0.2;
+
+/// Steps either side of a turned part's rest angle.
+fn half(reach: f32) -> i32 {
+    (reach / STEP).round() as i32
 }
 
-/// What's left of a pectoral fin: its joint, a ragged root of the blade.
-pub fn pectoral_stump() -> Part {
-    let root = vec![(5.0, -3.0), (0.0, 2.0), (-6.0, 7.0), (-9.0, 12.0), (-6.5, 11.0), (-5.0, 15.0), (-2.0, 10.0), (3.0, 5.0)];
-    let v = vec![
-        poly(&root, M::Hull),
-        poly(&[(-5.5, 8.0), (-8.0, 11.0), (-6.5, 10.5), (-5.0, 13.0), (-3.5, 9.5)], M::Recess),
-        disc((0.0, 0.0), 5.6, M::Pipe),
-        ring((0.0, 0.0), 2.6, 3.4, M::Recess),
-        disc((0.0, 0.0), 1.4, M::Slot),
-    ];
-    Part { shapes: v, form: Form::Flat { tip: (-0.1, -0.35), lean: (0.0, 0.0) }, seed: 71 }
+#[cfg(test)]
+fn turns_of(reach: f32) -> usize {
+    half(reach) as usize * 2 + 1
+}
+
+/// The angles a part is turned to: `STEP` apart, out to its reach either side of
+/// `rest`.
+fn angles(rest: f32, reach: f32) -> Vec<f32> {
+    (-half(reach)..=half(reach)).map(|t| rest + t as f32 * STEP).collect()
+}
+
+/// Which of those turns suits angle `a` (the nearest, held at the ends).
+fn turn_of(a: f32, rest: f32, reach: f32) -> usize {
+    let h = half(reach);
+    ((((a - rest) / STEP).round() as i32).clamp(-h, h) + h) as usize
+}
+
+/// The body with the jaw dropped to frame `k` of `JAW_FRAMES`, put together.
+fn body_frame(body: &Frame, jaw: &Frame, k: usize) -> Frame {
+    let open = k as f32 / (JAW_FRAMES - 1) as f32;
+    let jaw = &turns(jaw, &[JAW_SHUT * (1.0 - open)])[0];
+    layered(&[(jaw, round(HINGE)), (body, (0, 0))])
+}
+
+/// The tail's plates (front to back) and its fin, as frames pivoting on their front.
+fn tail_parts() -> Vec<Frame> {
+    let tail = decode(&px::TAIL);
+    let y = tail.pivot.1;
+    let mut v: Vec<Frame> = CUTS.windows(2).map(|c| columns(&tail, (c[1] - OVERLAP).max(0), c[0] + 1, (c[0], y))).collect();
+    v.push(columns(&tail, 0, CUTS[5] + 1, (CUTS[5], y)));
+    v
 }
 
 // ---------------------------------------------------------------- in the game
 
-/// A carved frame in the boss's texture, and the pixel its pivot sits on.
+/// A frame in the boss's texture, and the pixel its pivot sits on.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Sprite {
     pub r: Rect,
     pub pivot: (i32, i32),
 }
 
-/// The jaw's frames, shut to wide open (radians).
-pub const JAW_FRAMES: usize = 7;
-pub const JAW_OPEN: f32 = 0.52;
-/// Turned parts are carved every `STEP` radians out to their reach either way: the
-/// tail's plates, then its fin; the pectoral fins' paddle.
-const STEP: f32 = 0.05;
-const REACH: [f32; 6] = [0.1, 0.2, 0.32, 0.46, 0.62, 0.84];
-const PADDLE: f32 = 0.2;
-
-fn turns(reach: f32) -> usize {
-    (reach / STEP).round() as usize * 2 + 1
-}
-
-/// Which carved turn suits angle `a`.
-fn turn_of(a: f32, reach: f32) -> usize {
-    ((a.clamp(-reach, reach) + reach) / STEP).round() as usize
-}
-
-/// JAWSTHIC, carved: every frame it can show, in a texture of its own.
+/// JAWSTHIC: every frame it can show, in a texture of its own.
 pub struct JawsArt {
     pub tex: Texture2D,
     frames: JawsFrames,
@@ -357,8 +295,10 @@ pub struct JawsFrames {
     tail: [[Vec<Sprite>; 2]; 6],
     /// [facing left]
     dorsal: [Sprite; 2],
-    /// [facing left][turn], and the stump [facing left]
+    /// [facing left][turn]: the near pectoral fin and the far one; the near one's
+    /// stump [facing left].
     pectoral: [Vec<Sprite>; 2],
+    far: [Vec<Sprite>; 2],
     stump: [Sprite; 2],
     /// Each lancet window's glass, pixels from the body's pivot (facing right).
     pub windows: [Vec<(i32, i32)>; 4],
@@ -377,6 +317,24 @@ fn pack(p: &mut Packer, f: &Frame) -> Sprite {
     Sprite { r: p.add(&f.img), pivot: f.pivot }
 }
 
+/// A sample of a frame's pixels (every `every`th), from its pivot.
+fn sample(f: &Frame, every: usize) -> Vec<(i8, i8, Color)> {
+    let mut v = vec![];
+    let mut k = 0;
+    for y in 0..f.img.height as i32 {
+        for x in 0..f.img.width as i32 {
+            let c = f.img.get_pixel(x as u32, y as u32);
+            if c.a > 0.0 {
+                if k % every == 0 {
+                    v.push(((x - f.pivot.0) as i8, (y - f.pivot.1) as i8, c));
+                }
+                k += 1;
+            }
+        }
+    }
+    v
+}
+
 impl JawsArt {
     pub fn new() -> JawsArt {
         let (img, frames) = Self::sheet();
@@ -385,85 +343,81 @@ impl JawsArt {
         JawsArt { tex, frames }
     }
 
-    /// Carve everything (CPU only, so tests can check it): the texture's image, and
-    /// where each frame is in it.
+    /// Turn, mirror and pack everything (CPU only, so tests can check it): the
+    /// texture's image, and where each frame is in it.
     fn sheet() -> (Image, JawsFrames) {
-        let mut p = Packer::sized(1024, 1024);
-        let pose = |flip: bool, angle: f32| Pose { angle, flip };
-        let mut body = [[Sprite::default(); JAW_FRAMES]; 2];
-        let mut tail: [[Vec<Sprite>; 2]; 6] = Default::default();
-        let mut dorsal = [Sprite::default(); 2];
-        let mut pectoral: [Vec<Sprite>; 2] = Default::default();
-        let mut stump = [Sprite::default(); 2];
-        for (f, flip) in [false, true].into_iter().enumerate() {
-            for k in 0..JAW_FRAMES {
-                body[f][k] = pack(&mut p, &carve(&self::body(k as f32 / (JAW_FRAMES - 1) as f32 * JAW_OPEN), pose(flip, 0.0)));
+        let mut p = Packer::sized(2048, 1024);
+        let (body, jaw) = (decode(&px::BODY), decode(&px::JAW));
+        let shut = body_frame(&body, &jaw, 0);
+        let bodies: Vec<Frame> = (0..JAW_FRAMES).map(|k| body_frame(&body, &jaw, k)).collect();
+        let tails: Vec<Vec<Frame>> = tail_parts().iter().zip(REACH).map(|(part, reach)| turns(part, &angles(TILT, reach))).collect();
+        let dorsal = decode(&px::DORSAL);
+        let paddle = angles(0.0, PADDLE);
+        let (near, far) = (turns(&decode(&px::PECTORAL), &paddle), turns(&decode(&px::FAR_FIN), &paddle));
+        let stump = decode(&px::STUMP);
+
+        // both facings: right as traced, left mirrored
+        let face = |f: &Frame, left: bool| if left { mirrored(f) } else { f.clone() };
+        let mut out_body = [[Sprite::default(); JAW_FRAMES]; 2];
+        let mut out_tail: [[Vec<Sprite>; 2]; 6] = Default::default();
+        let mut out_dorsal = [Sprite::default(); 2];
+        let mut out_near: [Vec<Sprite>; 2] = Default::default();
+        let mut out_far: [Vec<Sprite>; 2] = Default::default();
+        let mut out_stump = [Sprite::default(); 2];
+        for (s, left) in [false, true].into_iter().enumerate() {
+            for (k, b) in bodies.iter().enumerate() {
+                out_body[s][k] = pack(&mut p, &face(b, left));
             }
-            for (i, reach) in REACH.iter().enumerate() {
-                let part = if i < TAIL.len() { self::tail(i) } else { caudal() };
-                tail[i][f] = (0..turns(*reach)).map(|t| pack(&mut p, &carve(&part, pose(flip, -reach + t as f32 * STEP)))).collect();
+            for (i, set) in tails.iter().enumerate() {
+                out_tail[i][s] = set.iter().map(|f| pack(&mut p, &face(f, left))).collect();
             }
-            dorsal[f] = pack(&mut p, &carve(&self::dorsal(), pose(flip, 0.0)));
-            let fin = self::pectoral();
-            pectoral[f] = (0..turns(PADDLE)).map(|t| pack(&mut p, &carve(&fin, pose(flip, -PADDLE + t as f32 * STEP)))).collect();
-            stump[f] = pack(&mut p, &carve(&pectoral_stump(), pose(flip, 0.0)));
+            out_dorsal[s] = pack(&mut p, &face(&dorsal, left));
+            out_near[s] = near.iter().map(|f| pack(&mut p, &face(f, left))).collect();
+            out_far[s] = far.iter().map(|f| pack(&mut p, &face(f, left))).collect();
+            out_stump[s] = pack(&mut p, &face(&stump, left));
         }
-        // the windows' glass and the stone that cracks, read off the body facing right
-        let (frame, mats) = carve_with(&self::body(0.0), pose(false, 0.0));
-        let w = frame.img.width as i32;
-        let at = |i: usize| ((i as i32 % w) - frame.pivot.0, (i as i32 / w) - frame.pivot.1);
-        let mut windows: [Vec<(i32, i32)>; 4] = Default::default();
-        for (i, m) in mats.iter().enumerate() {
-            let (x, y) = at(i);
-            if *m == M::Slot && (-17..=8).contains(&y) {
-                if let Some(k) = WINDOWS.iter().position(|cx| (x as f32 - cx).abs() <= 2.6) {
-                    windows[k].push((x, y));
-                }
-            }
-        }
-        let stone = |x: i32, y: i32| {
-            let (px, py) = (x + frame.pivot.0, y + frame.pivot.1);
-            px >= 0 && py >= 0 && px < w && py < frame.img.height as i32 && mats[(py * w + px) as usize] == M::Hull
+
+        let windows = std::array::from_fn(|w| px::GLASS[w].iter().map(|&(x, y)| (x as i32, y as i32)).collect());
+        // seams that crack open as it weakens: walks across its stone from these
+        // starts (on the head, the flank, the tail root, the belly)
+        let at = |x: i32, y: i32| {
+            let (fx, fy) = (x + shut.pivot.0, y + shut.pivot.1);
+            (fx >= 0 && fy >= 0 && fx < shut.img.width as i32 && fy < shut.img.height as i32).then(|| shut.img.get_pixel(fx as u32, fy as u32))
         };
         let mut rng = crate::sim::rng::Rng::new(0x5EA4);
-        let starts = [(52.0, -18.0, -1.0, 0.4), (40.0, -8.0, -1.0, -0.3), (20.0, -24.0, -0.6, 1.0), (-8.0, -23.0, -1.0, 0.3), (-26.0, 12.0, 1.0, 0.2), (6.0, 18.0, 1.0, -0.3), (62.0, -4.0, -1.0, 0.5), (-20.0, -20.0, 1.0, 0.5)];
+        let starts = [(48.0, -26.0, -1.0, 0.5), (36.0, -12.0, -1.0, -0.3), (12.0, -28.0, -0.6, 1.0), (-14.0, -22.0, -1.0, 0.3), (-48.0, 6.0, 1.0, 0.2), (-6.0, 20.0, 1.0, -0.3), (62.0, -18.0, -1.0, 0.5), (-36.0, -18.0, 1.0, 0.5)];
         let cracks = starts
             .iter()
             .map(|&(sx, sy, dx, dy)| {
                 let (mut x, mut y) = (sx, sy);
                 let mut seam = vec![];
-                for _ in 0..rng.range(12.0, 22.0) as i32 {
+                for _ in 0..rng.range(14.0, 24.0) as i32 {
                     x += dx + rng.range(-0.5, 0.5);
                     y += dy + rng.range(-0.6, 0.6);
-                    let (px, py) = (x.round() as i32, y.round() as i32);
-                    if stone(px, py) && !seam.contains(&(px, py)) {
-                        seam.push((px, py));
+                    let q = (x.round() as i32, y.round() as i32);
+                    if at(q.0, q.1).is_some_and(stone) && !seam.contains(&q) {
+                        seam.push(q);
                     }
                 }
                 seam
             })
             .collect();
-        let sample = |f: &Frame, every: usize| {
-            let mut v = vec![];
-            let mut k = 0;
-            for y in 0..f.img.height as i32 {
-                for x in 0..f.img.width as i32 {
-                    let c = f.img.get_pixel(x as u32, y as u32);
-                    if c.a > 0.0 {
-                        if k % every == 0 {
-                            v.push(((x - f.pivot.0) as i8, (y - f.pivot.1) as i8, c));
-                        }
-                        k += 1;
-                    }
-                }
-            }
-            v
+        let tail_shards = std::array::from_fn(|i| sample(&tails[i][tails[i].len() / 2], 2));
+        let frames = JawsFrames {
+            body: out_body,
+            tail: out_tail,
+            dorsal: out_dorsal,
+            pectoral: out_near,
+            far: out_far,
+            stump: out_stump,
+            windows,
+            cracks,
+            shards: sample(&shut, 5),
+            dorsal_shards: sample(&dorsal, 2),
+            fin_shards: sample(&decode(&px::PECTORAL), 2),
+            tail_shards,
         };
-        let shards = sample(&frame, 5);
-        let dorsal_shards = sample(&carve(&self::dorsal(), pose(false, 0.0)), 2);
-        let fin_shards = sample(&carve(&self::pectoral(), pose(false, 0.0)), 2);
-        let tail_shards = std::array::from_fn(|i| sample(&carve(&if i < TAIL.len() { self::tail(i) } else { caudal() }, pose(false, 0.0)), 2));
-        (p.img, JawsFrames { body, tail, dorsal, pectoral, stump, windows, cracks, shards, dorsal_shards, fin_shards, tail_shards })
+        (p.img, frames)
     }
 }
 
@@ -568,10 +522,9 @@ pub fn draw(r: &super::Renderer, b: &Boss, ox: i32, oy: i32, frame: u64) {
     let gone = |piece: usize| blown > piece;
 
     // back to front: the far fin, the tail fin, the tail, the dorsal fin, the body, the near fin
-    let far = art.pectoral[f][turn_of(-paddle + 0.15, PADDLE)];
-    if !fins_out[0] && !gone(7) {
+    if !gone(7) {
         let (x, y) = swing(FAR_FIN_AT);
-        put(tex, far, x, y, Color::new(k * 0.42, k * 0.42, k * 0.45, 1.0), clip, &bands);
+        put(tex, art.far[f][turn_of(-paddle, 0.0, PADDLE)], x, y, Color::new(k * 0.72, k * 0.72, k * 0.74, 1.0), clip, &bands);
     }
     let joints = b.tail();
     for i in (0..6).rev() {
@@ -581,7 +534,7 @@ pub fn draw(r: &super::Renderer, b: &Boss, ox: i32, oy: i32, frame: u64) {
             continue;
         }
         let (jx, jy, ang) = joints[i];
-        let s = art.tail[i][f][turn_of(ang, REACH[i])];
+        let s = art.tail[i][f][turn_of(ang, TILT, REACH[i])];
         let (x, y) = px((jx, jy));
         put(tex, s, x, y, tint, clip, &bands);
     }
@@ -592,10 +545,11 @@ pub fn draw(r: &super::Renderer, b: &Boss, ox: i32, oy: i32, frame: u64) {
     let body = art.body[f][jaw];
     put(tex, body, bx, by, tint, clip, &bands);
     let (fx, fy) = swing(PECTORAL_AT);
-    let near = if fins_out[0] { art.stump[f] } else { art.pectoral[f][turn_of(paddle, PADDLE)] };
+    let near = if fins_out[0] { art.stump[f] } else { art.pectoral[f][turn_of(paddle, 0.0, PADDLE)] };
     if !gone(7) {
         put(tex, near, fx, fy, tint, clip, &bands);
     }
+    smears(a, b, &joints, (ox, oy), clip, k, frame, |i| !gone(if i == 5 { 0 } else { 5 - i }) && !(i == 5 && fins_out[1]));
     if clip.is_some_and(|c| c < by - 60) {
         return;
     }
@@ -625,7 +579,7 @@ pub fn draw(r: &super::Renderer, b: &Boss, ox: i32, oy: i32, frame: u64) {
     // where the tail fin was shot off: a scorched socket, embers in it
     if fins_out[1] && !gone(0) {
         let (sx, sy) = px((joints[5].0, joints[5].1));
-        a.fill(sx - 1, sy - 3, 3, 7, Color { a: 0.85 * k, ..super::carve::RECESS });
+        a.fill(sx - 1, sy - 3, 3, 7, Color { a: 0.85 * k, ..RECESS });
         for e in 0..3 {
             if (frame / 5 + e) % 3 != 0 {
                 a.fill(sx - 1 + (e as i32 % 2), sy - 2 + 2 * e as i32, 1, 1, Color { a: 0.8 * k, ..SIGNAL });
@@ -668,7 +622,7 @@ pub fn draw(r: &super::Renderer, b: &Boss, ox: i32, oy: i32, frame: u64) {
         }
         for (i, q) in b.fins.iter().enumerate() {
             if q.flash > 0 && q.alive() {
-                let (s, (x, y)) = if i == 0 { (near, (fx, fy)) } else { (art.tail[5][f][turn_of(joints[5].2, REACH[5])], px((joints[5].0, joints[5].1))) };
+                let (s, (x, y)) = if i == 0 { (near, (fx, fy)) } else { (art.tail[5][f][turn_of(joints[5].2, TILT, REACH[5])], px((joints[5].0, joints[5].1))) };
                 put(tex, s, x, y, Color::new(0.7, 0.08, 0.05, 0.45), clip, &[]);
             }
         }
@@ -677,6 +631,52 @@ pub fn draw(r: &super::Renderer, b: &Boss, ox: i32, oy: i32, frame: u64) {
             put(tex, body, bx + 2, by, Color::new(0.04, 0.45, 0.34, 0.28), clip, &bands);
         }
         r.additive(false);
+    }
+}
+
+/// Torn pixels streaming off its tail, the way Jason drew it glitching: stone chips
+/// and red and teal scanlines trailing back from the plates and the fin. A few
+/// always, more as it weakens, a storm through a turn and as it dies or falls.
+/// `shown(i)`: tail piece `i` is still there.
+#[allow(clippy::too_many_arguments)]
+fn smears(a: &super::art::Atlas, b: &Boss, joints: &[(f32, f32, f32); 6], (ox, oy): (i32, i32), clip: Option<i32>, k: f32, frame: u64, shown: impl Fn(usize) -> bool) {
+    let n = match b.act {
+        Act::Fight | Act::Break if b.turn > 0 => JAWS_SMEARS.1,
+        Act::Fight | Act::Break | Act::Intro => JAWS_SMEARS.0[b.phase.clamp(1, 4) as usize - 1],
+        Act::Dying | Act::Falling => JAWS_SMEARS.1,
+        Act::Gone => 0,
+    };
+    // how far either side of each joint they tear off: the plates, then the tall fin
+    const SPREAD: [f32; 6] = [11.0, 10.0, 9.0, 8.0, 7.0, 28.0];
+    let back = -b.facing;
+    let life = JAWS_SMEAR_LIFE as u64;
+    for s in 0..n as u64 {
+        // each smear lives `life` frames, drifting back as it fades
+        let t = frame + s * 13;
+        let (age, id) = (t % life, t / life * 64 + s);
+        let piece = 1 + (noise(id, 1) * 5.0) as usize;
+        if !shown(piece) {
+            continue;
+        }
+        let (jx, jy, _) = joints[piece];
+        let x = jx + back * (noise(id, 2) * 10.0 + age as f32 * 0.7);
+        let y = jy + (noise(id, 3) - 0.5) * 2.0 * SPREAD[piece];
+        let (sx, sy) = (ox + x.round() as i32, oy + y.round() as i32);
+        if clip.is_some_and(|c| sy >= c) {
+            continue;
+        }
+        let len = 2 + (noise(id, 4) * 8.0) as i32;
+        let fade = (1.0 - age as f32 / life as f32) * k;
+        let kind = noise(id, 5);
+        let left = if back < 0.0 { sx - len } else { sx };
+        if kind < 0.55 {
+            // a chip of stone, its dark edge under it
+            a.fill(left, sy, len, 2, Color { a: 0.85 * fade, ..RAMP[4 + (kind < 0.2) as usize] });
+            a.fill(left, sy + 2, len, 1, Color { a: 0.7 * fade, ..OUTLINE });
+        } else {
+            let c = if kind < 0.8 { SIGNAL } else { TEAL };
+            a.fill(left, sy, len, 1, Color { a: 0.6 * fade, ..c });
+        }
     }
 }
 
@@ -755,77 +755,44 @@ fn dashes(a: &super::art::Atlas, x: f32, y: f32, deg: f32, len: f32, on: i32, of
 
 #[cfg(test)]
 mod tests {
-    use super::super::carve::stamp;
-    use super::super::carve::to_screen;
     use super::*;
-    use crate::tune::JAWS_TAIL_ROOT as TAIL_ROOT;
+    use crate::render::palette::{CORE, luma};
+    use crate::tune::{JAWS_MOUTH, JAWS_MOUTH_OPEN, JAWS_TAIL as TAIL, JAWS_TAIL_ROOT};
 
-    /// The whole fish posed: jaw open `open` rad, the tail's wave at `phase`, facing left if `flip`.
-    fn shark(img: &mut Image, x: i32, y: i32, open: f32, phase: f32, amp: f32, flip: bool) {
-        let pose = Pose { angle: 0.0, flip };
-        let at = |p: Pt| {
-            let (dx, dy) = to_screen(p.0, p.1, pose);
-            (x + dx.round() as i32, y + dy.round() as i32)
-        };
-        let put = |img: &mut Image, f: &Frame, (px, py): (i32, i32)| stamp(img, f, px, py);
-        // far fin, dimmed
-        let mut far = carve(&pectoral(), Pose { angle: 0.25, flip });
-        for py in 0..far.img.height as u32 {
-            for px in 0..far.img.width as u32 {
-                let c = far.img.get_pixel(px, py);
-                if c.a > 0.0 {
-                    far.img.set_pixel(px, py, Color::new(c.r * 0.45, c.g * 0.45, c.b * 0.45, 1.0));
-                }
-            }
-        }
-        put(img, &far, at(FAR_FIN_AT));
-        // the tail, back to front
-        let mut joints = vec![(TAIL_ROOT, 0.0f32)];
-        let mut ang = 0.0f32;
-        for (i, &(len, _)) in TAIL.iter().enumerate() {
-            let k = (i + 1) as f32 / 7.0;
-            ang += amp * (0.3 + k) * (phase - i as f32 * 0.55).sin() * 0.16;
-            let (p, _) = *joints.last().unwrap();
-            joints.last_mut().unwrap().1 = ang;
-            joints.push(((p.0 - len * ang.cos(), p.1 - len * ang.sin()), ang));
-        }
-        let tip_ang = ang + amp * 1.3 * (phase - 6.0 * 0.55).sin() * 0.16;
-        let (tip, _) = *joints.last().unwrap();
-        put(img, &carve(&caudal(), Pose { angle: tip_ang, flip }), at(tip));
-        for i in (0..TAIL.len()).rev() {
-            let (p, a) = joints[i];
-            put(img, &carve(&tail(i), Pose { angle: a, flip }), at(p));
-        }
-        put(img, &carve(&dorsal(), pose), at(DORSAL_AT));
-        put(img, &carve(&body(open), pose), at((0.0, 0.0)));
-        put(img, &carve(&pectoral(), Pose { angle: 0.0, flip }), at(PECTORAL_AT));
+    /// `f`'s pixel at `p` from its pivot, if it has one there.
+    fn at(f: &Frame, p: (i32, i32)) -> Option<Color> {
+        let (x, y) = (p.0 + f.pivot.0, p.1 + f.pivot.1);
+        (x >= 0 && y >= 0 && x < f.img.width as i32 && y < f.img.height as i32).then(|| f.img.get_pixel(x as u32, y as u32)).filter(|c| c.a > 0.0)
     }
 
-    /// Every frame the game needs is carved at startup: it fits its texture, and it's quick.
+    /// Every frame the game needs is turned and packed at startup: it fits its
+    /// texture, and it's quick.
     #[test]
-    fn every_frame_fits_its_texture_and_carves_quickly() {
+    fn every_frame_fits_its_texture_and_turns_quickly() {
         let t = std::time::Instant::now();
         let (img, art) = JawsArt::sheet();
         let took = t.elapsed().as_secs_f32();
-        println!("carved in {took:.3} s");
-        assert!(took < 1.5, "{took} s");
-        assert_eq!((img.width, img.height), (1024, 1024));
+        println!("turned in {took:.3} s");
+        assert!(took < 3.0, "{took} s");
+        assert_eq!((img.width, img.height), (2048, 1024));
         // the windows' glass and the cracks were found in the stone
         assert!(art.windows.iter().all(|w| w.len() > 20), "{:?}", art.windows.iter().map(|w| w.len()).collect::<Vec<_>>());
         assert!(art.cracks.iter().map(|c| c.len()).sum::<usize>() > 60);
         // every turn of every part is there, in both facings
         for f in 0..2 {
             for (i, reach) in REACH.iter().enumerate() {
-                assert_eq!(art.tail[i][f].len(), turns(*reach));
+                assert_eq!(art.tail[i][f].len(), turns_of(*reach));
             }
+            assert_eq!(art.pectoral[f].len(), turns_of(PADDLE));
+            assert_eq!(art.far[f].len(), turns_of(PADDLE));
         }
     }
 
-    /// The boss is bone white like Stage 1's enemies: its stone never outshines a bullet's core.
+    /// The boss is bone white like Stage 1's enemies: its stone never outshines a
+    /// bullet's core, and much of it is light.
     #[test]
     fn its_stone_is_bone_white_and_never_outshines_a_bullet() {
-        use crate::render::palette::{CORE, luma};
-        let f = carve(&body(0.0), Pose::default());
+        let f = decode(&px::BODY);
         let lumas: Vec<f32> = f.img.get_image_data().iter().filter(|p| p[3] > 0).map(|p| luma(Color::from_rgba(p[0], p[1], p[2], 255))).collect();
         let top = lumas.iter().cloned().fold(0.0, f32::max);
         assert!(top < luma(CORE) - 0.08 && top > 0.8, "{top}");
@@ -833,30 +800,121 @@ mod tests {
         assert!(bright > 0.3, "only {:.0}% of it is bright", bright * 100.0);
     }
 
-    /// The review sheet: the fish big, then posed at 1x.
-    /// `cargo test --release jawsthic_sheet -- --ignored` writes shots/jawsthic_sheet.png.
+    /// Shut, the jaw's stone closes the mouth under the fangs; wide open, the dark of
+    /// the mouth sits where the crosshair goes.
+    #[test]
+    fn the_jaw_shuts_on_its_fangs_and_opens_on_the_dark() {
+        let (body, jaw) = (decode(&px::BODY), decode(&px::JAW));
+        let (shut, open) = (body_frame(&body, &jaw, 0), body_frame(&body, &jaw, JAW_FRAMES - 1));
+        let mouth = round(JAWS_MOUTH);
+        assert!(at(&shut, mouth).is_some(), "shut, the mouth is closed");
+        let cross = round((JAWS_MOUTH.0 + JAWS_MOUTH_OPEN.0, JAWS_MOUTH.1 + JAWS_MOUTH_OPEN.1));
+        let dark = at(&open, cross).map(luma);
+        assert!(dark.is_some_and(|l| l < 0.15), "open, the crosshair sits in the dark of the mouth: {dark:?}");
+        assert!(at(&open, (mouth.0, mouth.1 + 14)).is_some(), "open, the jaw hangs below");
+    }
+
+    /// Every angle the sim can bend the tail to, or paddle a fin to, has a turned
+    /// frame, and the nearest one: swimming either way, rising or sinking.
+    #[test]
+    fn every_pose_the_sim_makes_has_a_frame() {
+        use crate::sim::boss::Boss;
+        let mut b = Boss::at_phase(0.0, 1);
+        for step in 0..400 {
+            b.swim = step as f32 * 0.07;
+            b.vy = [-3.0, 0.0, 3.0][step % 3];
+            for (i, &(_, _, a)) in b.tail().iter().enumerate() {
+                let t = turn_of(a, TILT, REACH[i]);
+                assert!(t < turns_of(REACH[i]), "plate {i} at {a}");
+                assert!((angles(TILT, REACH[i])[t] - a).abs() <= STEP * 0.5 + 1e-4, "plate {i}: {a} is past its reach");
+            }
+        }
+        for a in [-1.0, -0.2, 0.0, 0.2, 1.0] {
+            assert!(turn_of(a, 0.0, PADDLE) < turns_of(PADDLE));
+        }
+    }
+
+    /// The tail's plates are cut where the sim's joints are: each as long as its
+    /// joint, the tail fin hanging off the last.
+    #[test]
+    fn the_tail_is_cut_where_its_joints_are() {
+        let parts = tail_parts();
+        assert_eq!(parts.len(), TAIL.len() + 1);
+        for (i, &(len, _)) in TAIL.iter().enumerate() {
+            assert_eq!((CUTS[i] - CUTS[i + 1]) as f32, len, "plate {i}");
+            // the plate's stone reaches its back joint (and a little past it)
+            assert!(at(&parts[i], (-(len as i32), 0)).is_some(), "plate {i} reaches back");
+        }
+        assert!(JAWS_TAIL_ROOT.0 < -60.0, "the tail hangs off the back of the body");
+    }
+
+    /// The review sheet: the fish posed big and at 1x, jaw shut and open, tail
+    /// waving, facing either way. `cargo test --release jawsthic_sheet -- --ignored`
+    /// writes shots/jawsthic_review.png.
     #[test]
     #[ignore]
     fn jawsthic_sheet() {
         let bg = Color::new(0.03, 0.035, 0.027, 1.0);
-        let (w, h) = (700u16, 640u16);
-        let mut sheet = Image::gen_image_color(w, h, bg);
-        // big: 3x
-        let mut big = Image::gen_image_color(230, 125, bg);
-        shark(&mut big, 125, 62, 0.0, 0.0, 0.0, false);
-        for y in 0..big.height as u32 * 3 {
-            for x in 0..big.width as u32 * 3 {
-                if x < w as u32 && y < h as u32 {
-                    sheet.set_pixel(x, y, big.get_pixel(x / 3, y / 3));
+        let (body, jaw) = (decode(&px::BODY), decode(&px::JAW));
+        let parts = tail_parts();
+        let shark = |img: &mut Image, x: i32, y: i32, open: usize, phase: f32, left: bool| {
+            let face = |f: &Frame| if left { mirrored(f) } else { f.clone() };
+            let put = |img: &mut Image, f: &Frame, p: Pt| {
+                let (px, py) = (x + if left { -p.0 } else { p.0 }.round() as i32, y + p.1.round() as i32);
+                for sy in 0..f.img.height as i32 {
+                    for sx in 0..f.img.width as i32 {
+                        let c = f.img.get_pixel(sx as u32, sy as u32);
+                        let (tx, ty) = (px - f.pivot.0 + sx, py - f.pivot.1 + sy);
+                        if c.a > 0.0 && tx >= 0 && ty >= 0 && tx < img.width as i32 && ty < img.height as i32 {
+                            img.set_pixel(tx as u32, ty as u32, c);
+                        }
+                    }
+                }
+            };
+            let dim = |f: &Frame| {
+                let mut g = f.clone();
+                for p in g.img.get_image_data_mut() {
+                    for k in 0..3 {
+                        p[k] = (p[k] as f32 * 0.72) as u8;
+                    }
+                }
+                g
+            };
+            put(img, &face(&dim(&decode(&px::FAR_FIN))), FAR_FIN_AT);
+            let mut joints = vec![(JAWS_TAIL_ROOT, 0.0f32)];
+            let mut ang = TILT;
+            for i in 0..6 {
+                ang += crate::tune::JAWS_BEND[i] * (phase - i as f32 * 0.6).sin();
+                joints.last_mut().unwrap().1 = ang;
+                if let Some(&(len, _)) = TAIL.get(i) {
+                    let (p, _) = *joints.last().unwrap();
+                    joints.push(((p.0 - len * ang.cos(), p.1 - len * ang.sin()), 0.0));
                 }
             }
+            for i in (0..6).rev() {
+                let (p, a) = joints[i];
+                put(img, &face(&turns(&parts[i], &[a])[0]), p);
+            }
+            put(img, &face(&decode(&px::DORSAL)), DORSAL_AT);
+            put(img, &face(&body_frame(&body, &jaw, open)), (0.0, 0.0));
+            put(img, &face(&decode(&px::PECTORAL)), PECTORAL_AT);
+        };
+        let (w, h) = (900u16, 560u16);
+        let mut sheet = Image::gen_image_color(w, h, bg);
+        // big: 2x, jaw open
+        let mut big = Image::gen_image_color(260, 140, bg);
+        shark(&mut big, 175, 62, JAW_FRAMES - 1, 0.0, false);
+        for y in 0..big.height as u32 * 2 {
+            for x in 0..big.width as u32 * 2 {
+                sheet.set_pixel(x, y, big.get_pixel(x / 2, y / 2));
+            }
         }
-        // posed at 1x, as in the game
-        let poses = [(0.0, 0.0, 1.0, false), (0.22, 1.5, 1.0, false), (0.5, 3.4, 1.0, false), (0.1, 0.8, 1.0, true), (0.35, 2.2, 1.0, true), (0.5, 4.6, 1.4, true)];
-        for (k, &(open, ph, amp, flip)) in poses.iter().enumerate() {
+        // at 1x, as in the game
+        let poses = [(0, 0.0, false), (3, 1.5, false), (JAW_FRAMES - 1, 3.4, false), (1, 0.8, true), (4, 2.2, true), (6, 4.6, true)];
+        for (k, &(open, ph, left)) in poses.iter().enumerate() {
             let (col, row) = (k % 3, k / 3);
-            let x = 10 + col as i32 * 233 + if flip { 80 } else { 120 };
-            shark(&mut sheet, x, 445 + row as i32 * 120, open, ph, amp, flip);
+            let x = 10 + col as i32 * 296 + if left { 100 } else { 190 };
+            shark(&mut sheet, x, 340 + row as i32 * 130, open, ph, left);
         }
         let _ = std::fs::create_dir_all("shots");
         let mut out = Image::gen_image_color(w * 2, h * 2, bg);
@@ -866,6 +924,6 @@ mod tests {
                 out.set_pixel(x, y, sheet.get_pixel(x / 2, h as u32 - 1 - y / 2));
             }
         }
-        out.export_png("shots/jawsthic_sheet.png");
+        out.export_png("shots/jawsthic_review.png");
     }
 }

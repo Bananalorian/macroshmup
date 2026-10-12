@@ -291,7 +291,7 @@ impl Boss {
 
     pub fn muzzle(&self, m: Muzzle) -> (f32, f32) {
         match m {
-            Muzzle::Mouth => self.at((JAWS_MOUTH.0, JAWS_MOUTH.1 + JAWS_MOUTH_DROP * self.jaw)),
+            Muzzle::Mouth => self.at((JAWS_MOUTH.0 + JAWS_MOUTH_OPEN.0 * self.jaw, JAWS_MOUTH.1 + JAWS_MOUTH_OPEN.1 * self.jaw)),
             Muzzle::Window(i) => self.at((JAWS_WINDOWS[i as usize % JAWS_WINDOWS.len()], JAWS_WINDOW_Y)),
             Muzzle::Pectoral => self.at(JAWS_PECTORAL_AT),
             Muzzle::Belly => self.at(JAWS_BELLY),
@@ -309,7 +309,7 @@ impl Boss {
         let mut out = [(0.0, 0.0, 0.0); 6];
         let (mut lx, mut ly) = JAWS_TAIL_ROOT;
         let lean = (self.vy * 0.05).clamp(-0.1, 0.1);
-        let mut ang = 0.0;
+        let mut ang = JAWS_TAIL_TILT;
         for (i, joint) in out.iter_mut().enumerate() {
             ang += JAWS_BEND[i] * (self.swim - i as f32 * 0.6).sin() + lean * 0.3;
             let (x, y) = self.at((lx, ly));
@@ -662,7 +662,7 @@ impl Boss {
             return;
         }
         if self.t >= self.next_laser && self.turn == 0 {
-            let (mx, my) = self.at((JAWS_MOUTH.0, JAWS_MOUTH.1 + JAWS_MOUTH_DROP));
+            let (mx, my) = self.at((JAWS_MOUTH.0 + JAWS_MOUTH_OPEN.0, JAWS_MOUTH.1 + JAWS_MOUTH_OPEN.1));
             let aim = (player.1 - my).atan2(player.0 - mx).to_degrees();
             // right of the jaws (under 90 degrees), it sweeps right, toward that wall
             let dir = if aim < 90.0 { -1.0 } else { 1.0 };

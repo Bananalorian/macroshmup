@@ -541,11 +541,11 @@ fn light_on(l: &Light, pose: &Pose) -> Option<(Color, f32)> {
                     return Some((TEAL_HOT, 1.0));
                 }
             }
-            // dark in flight (lit dashes down both blades fought the banking frames
-            // as it moved side to side); on the sword they flow up to the tip while
-            // the laser fires
+            // steady dashes in flight, lit like Jason's sprites (they never move, so
+            // they can't fight the banking); on the sword they flow up to the tip
+            // while the laser fires
             if !pose.beaming {
-                return None;
+                return (l.dy.rem_euclid(4) < 2).then_some((TEAL, 0.85));
             }
             ((l.dy + f as i32).rem_euclid(4) < 2).then_some((TEAL_HOT, 1.0))
         }
@@ -807,15 +807,17 @@ mod tests {
         }
     }
 
-    /// In flight, firing or not and mid-transformation, the channels stay dark and
-    /// the windows steady (lit lines down both blades fought the banking frames);
-    /// the channels light and flow up the sword only while the laser fires.
+    /// In flight, firing or not and mid-transformation, the channels' dashes and the
+    /// windows hold perfectly still, so nothing moves down the blades as the ship
+    /// banks; the channels flow up the sword only while the laser fires.
     #[test]
-    fn the_channels_light_only_while_the_laser_fires() {
+    fn the_channels_hold_still_in_flight_and_flow_while_the_laser_fires() {
         let ship = frame_image(0, 0).1;
-        let channel = |pose: &Pose| ship.iter().filter(|l| l.glow == Glow::Channel).filter_map(|l| light_on(l, pose)).count();
+        let channel = |pose: &Pose| ship.iter().filter(|l| l.glow == Glow::Channel).map(|l| light_on(l, pose).map(|(c, k)| (l.dx, l.dy, c.g, k))).collect::<Vec<_>>();
+        let lit = channel(&Pose::default());
+        assert!(lit.iter().filter(|l| l.is_some()).count() >= 8, "the blades' channels are lit");
         for (fire_t, form, frame) in [(0, 0.0, 3), (9, 0.0, 40), (9, 0.6, 7), (0, 1.0, 11)] {
-            assert_eq!(channel(&Pose { fire_t, form, frame, ..Default::default() }), 0, "fire_t {fire_t}, form {form}");
+            assert_eq!(channel(&Pose { fire_t, form, frame, ..Default::default() }), lit, "fire_t {fire_t}, form {form}, frame {frame}: steady");
         }
         let windows = |frame: u64| ship.iter().filter(|l| l.glow == Glow::Window).map(|l| light_on(l, &Pose { frame, ..Default::default() }).map(|(_, k)| k)).collect::<Vec<_>>();
         assert!((0..20).all(|f| windows(f) == windows(0)), "the windows hold steady");

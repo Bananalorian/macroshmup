@@ -52,6 +52,10 @@ pub fn hue_rims(h: Hue) -> (Color, Color) {
     }
 }
 
+/// The gem in the middle of the boss's health bar, phase by phase: green, then
+/// yellow, orange, and red for the last (Jason's call, v0.8.5).
+pub const GEM: [Color; 4] = [hex(0x3FD45A), hex(0xF2C230), hex(0xF5822A), SIGNAL];
+
 /// Plain white at full strength (a sprite's own colors, untinted).
 pub const WHITE_A: Color = Color::new(1.0, 1.0, 1.0, 1.0);
 

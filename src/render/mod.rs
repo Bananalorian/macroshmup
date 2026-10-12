@@ -8,7 +8,7 @@
 pub mod art;
 pub mod bg;
 pub mod bullets;
-pub mod carve;
+pub mod jaws_px;
 pub mod explode;
 pub mod font;
 pub mod foes;
