@@ -488,7 +488,10 @@ impl World {
             self.events.push(Event::Points { x, y, n, how });
         }
         for _ in 0..extends {
-            self.lives = (self.lives + 1).min(MAX_LIVES);
+            // up to the most a player can carry (the bot's trials run on endless lives)
+            if self.lives < MAX_LIVES {
+                self.lives += 1;
+            }
             self.events.push(Event::Extend);
         }
     }
@@ -956,6 +959,11 @@ mod tests {
         w.lives = MAX_LIVES;
         w.award(0.0, 0.0, EXTENDS[1] as u32, Award::Kill);
         assert_eq!((w.lives, w.score.extends), (MAX_LIVES, 2), "never past the most");
+        // the bot's trials fly on endless lives, which an extend leaves alone
+        let mut w = quiet_stage();
+        w.lives = u8::MAX;
+        w.award(0.0, 0.0, EXTENDS[1] as u32 * 2, Award::Kill);
+        assert_eq!(w.lives, u8::MAX);
     }
 
     #[test]
