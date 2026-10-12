@@ -3,6 +3,30 @@
 Session notes for Claude Code: what shipped, tuning that changed, known issues, what's next.
 Newest first.
 
+## v0.8.7 One tail - 2026-10-12
+
+**Jason** (/loop): "the thick part of the tail is not one piece. keep the tail movement... the
+back fins are not congruent either. you might need to redo just the tail and tail fins. 2.
+also clean up the edges... i want the whole shark to feel like it is in the game and not just
+bolted on." Earlier: "my laser goes right through that part of the tail."
+
+- **Tail drawn, not traced** (tools/trace_jawsthic.py `draw_tail`): body cut at BODY_CUT 53
+  (behind the arcade), TAIL_JOINTS body-local [(52,47),(40,44),(28,40),(17,35),(7,30),(-3,24)],
+  TAIL_HALF (20, 6), RINGS, FINLETS; writes PLATES (pivot = root), FIN (pivot = its joint)
+  and `TAIL_JOINTS` (in PLATES) to jaws_px.rs. The fin is a crescent polygon with plate seams,
+  a dark web and lights. Tones: thin rim 5, then 4/3/2/1 down, hairline cracks, speckle.
+- **Bent by column** (jawsthic.rs): `along_tail(c)` (clamped) puts each plates column at
+  the sim's joint polyline y; the fin turns on its joint (turn sets centered on TILT 0,
+  FIN_REACH 0.84). No more per-plate rotation (that stepped at joints).
+- **Sim:** JAWS_TAIL lengths ~12 with ART [0.245,0.322,0.427,0.464,0.54,0], TILT 0, BEND
+  [0.02,0.035,0.06,0.08,0.11,0.17], TAIL_ROOT (-32,2), BODY (22,-2,108,52), HOME (200,160),
+  TURN_SHIFT 41. `Boss::tail_boxes()` (plates + the fin outside phase 2) pushed as
+  Target::Boss(0) in build_boxes, so shots and the beam hit the tail. Damage: P2 0.74, P3
+  0.825, P4 0.395 (0.39 timed out 1/200; P4's S cutoff 24.5 s is a knife edge).
+- **Cleanup** (`cleanup` in the tool) on every traced part: lone pixels, lone dark specks,
+  spikes/notches, outline, `lit_edges` top-left rim; dither 18 -> 10. FAR_FIN_AT (24,19).
+- PG_SIM: 3.06M, extends 100/96, A 78 S 22, phases 24.3/25.4/28.0/24.4, 100% destroyed.
+
 ## v0.8.6 Stars and particles - 2026-10-12
 
 **Jason:** "the tale on the jawsthic-vs-art.png isn't lined up to look like a tale"; the tail

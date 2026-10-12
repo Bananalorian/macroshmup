@@ -5,12 +5,13 @@
 //! a crescent fin, a dorsal fin with a lancet in it, and two long pectoral fins on
 //! piped joints.
 //!
-//! The parts are traced from his sprite atlas at game size (tools/trace_jawsthic.py
-//! writes them into jaws_px.rs). Here they're turned with a RotSprite-style rotation
-//! (EPX-doubled twice, then sampled), so a swinging tail or a dropping jaw stays
+//! The parts are traced from his sprite atlas at game size, all but the tail, which
+//! is drawn after it (tools/trace_jawsthic.py writes them into jaws_px.rs). Here they're turned with a RotSprite-style rotation
+//! (EPX-doubled twice, then sampled), so a dropping jaw or a swinging fin stays
 //! crisp, mirrored to face left, and packed in a texture of their own: the jaw at
-//! each step of its drop (put together with the body), every turn of every tail
-//! plate and fin.
+//! each step of its drop (put together with the body), every turn of the fins. The
+//! tail's plates are one image, drawn as traced and bent column by column as it
+//! swims, so it stays one tail.
 //!
 //! Every part faces right here. Coordinates are pixels from the body's pivot, y down.
 
@@ -25,7 +26,7 @@ use macroquad::prelude::{Color, DrawTextureParams, FilterMode, Image, Rect, Text
 // sim, which aims the guns and places the hurtboxes to match.
 use crate::tune::{JAWS_DORSAL_AT as DORSAL_AT, JAWS_EYE as EYE, JAWS_HINGE as HINGE, JAWS_PECTORAL_AT as PECTORAL_AT, JAWS_TAIL_ART as ART, JAWS_TAIL_TILT as TILT};
 /// The far pectoral fin, peeking out from behind the throat.
-pub const FAR_FIN_AT: (f32, f32) = (32.0, 30.0);
+pub const FAR_FIN_AT: (f32, f32) = (24.0, 19.0);
 
 pub type Pt = (f32, f32);
 
@@ -216,16 +217,15 @@ fn round(p: Pt) -> (i32, i32) {
 /// turned up by `JAW_SHUT` radians so its fangs meet the upper row.
 pub const JAW_FRAMES: usize = 7;
 pub const JAW_SHUT: f32 = -0.55;
-/// The tail's joints in the traced tail, root to the fin, on its centerline (Jason
-/// drew it rising toward the fin). Each plate runs from its joint back to the next
-/// one; the tail fin is everything behind the last. Each plate keeps a few columns
-/// of the one behind it, so the joints never gap as they bend.
-const JOINTS: [(i32, i32); 6] = [(80, 46), (72, 47), (64, 46), (55, 43), (46, 40), (39, 34)];
+/// The tail's joints in its plates, root to the fin, on its centerline (it rises
+/// toward the fin, as Jason drew it). Each plate runs from its joint back to the
+/// next one, and keeps a few columns of the one behind it when cut out for its shards.
+const JOINTS: [(i32, i32); 6] = px::TAIL_JOINTS;
 const OVERLAP: i32 = 3;
 /// Turned parts are turned every `STEP` radians out to their reach either way: the
-/// tail's plates, then its fin; the pectoral fins' paddle.
+/// tail fin; the pectoral fins' paddle.
 const STEP: f32 = 0.05;
-const REACH: [f32; 6] = [0.1, 0.2, 0.32, 0.46, 0.62, 0.84];
+const FIN_REACH: f32 = 0.84;
 const PADDLE: f32 = 0.2;
 
 /// Steps either side of a turned part's rest angle.
@@ -257,11 +257,21 @@ fn body_frame(body: &Frame, jaw: &Frame, k: usize) -> Frame {
     layered(&[(jaw, round(HINGE)), (body, (0, 0))])
 }
 
+/// Where column `c` of the tail's plates falls between its joints: the plate it's on
+/// (0 at the root), how far along that plate (0..1), and the drawn centerline's row.
+/// Columns past the root (under the body) or past the last joint go with the end.
+fn along_tail(c: i32) -> (usize, f32, f32) {
+    let i = (0..5).find(|&i| c >= JOINTS[i + 1].0).unwrap_or(4);
+    let (a, z) = (JOINTS[i], JOINTS[i + 1]);
+    let t = ((a.0 - c) as f32 / (a.0 - z.0) as f32).clamp(0.0, 1.0);
+    (i, t, a.1 as f32 + (z.1 - a.1) as f32 * t)
+}
+
 /// The tail's plates (front to back) and its fin, as frames pivoting on their front.
 fn tail_parts() -> Vec<Frame> {
-    let tail = decode(&px::TAIL);
-    let mut v: Vec<Frame> = JOINTS.windows(2).map(|j| columns(&tail, (j[1].0 - OVERLAP).max(0), j[0].0 + 1, j[0])).collect();
-    v.push(columns(&tail, 0, JOINTS[5].0 + 1, JOINTS[5]));
+    let plates = decode(&px::PLATES);
+    let mut v: Vec<Frame> = JOINTS.windows(2).map(|j| columns(&plates, (j[1].0 - OVERLAP).max(0), j[0].0 + 1, j[0])).collect();
+    v.push(decode(&px::FIN));
     v
 }
 
@@ -291,8 +301,10 @@ impl std::ops::Deref for JawsArt {
 pub struct JawsFrames {
     /// [facing left][jaw frame]
     body: [[Sprite; JAW_FRAMES]; 2],
-    /// [plate, 5 the tail fin][facing left][turn]
-    tail: [[Vec<Sprite>; 2]; 6],
+    /// [facing left]: the tail's plates, one image pivoting on the root joint; and
+    /// [facing left][turn] the tail fin.
+    plates: [Sprite; 2],
+    fin: [Vec<Sprite>; 2],
     /// [facing left]
     dorsal: [Sprite; 2],
     /// [facing left][turn]: the near pectoral fin and the far one; the near one's
@@ -370,7 +382,9 @@ impl JawsArt {
         let (body, jaw) = (decode(&px::BODY), decode(&px::JAW));
         let shut = body_frame(&body, &jaw, 0);
         let bodies: Vec<Frame> = (0..JAW_FRAMES).map(|k| body_frame(&body, &jaw, k)).collect();
-        let tails: Vec<Vec<Frame>> = tail_parts().iter().zip(REACH).map(|(part, reach)| turns(part, &angles(TILT, reach))).collect();
+        let parts = tail_parts();
+        let plates = decode(&px::PLATES);
+        let fin = turns(&parts[5], &angles(TILT, FIN_REACH));
         let dorsal = decode(&px::DORSAL);
         let paddle = angles(0.0, PADDLE);
         let (near, far) = (turns(&decode(&px::PECTORAL), &paddle), turns(&decode(&px::FAR_FIN), &paddle));
@@ -379,7 +393,8 @@ impl JawsArt {
         // both facings: right as traced, left mirrored
         let face = |f: &Frame, left: bool| if left { mirrored(f) } else { f.clone() };
         let mut out_body = [[Sprite::default(); JAW_FRAMES]; 2];
-        let mut out_tail: [[Vec<Sprite>; 2]; 6] = Default::default();
+        let mut out_plates = [Sprite::default(); 2];
+        let mut out_fin: [Vec<Sprite>; 2] = Default::default();
         let mut out_dorsal = [Sprite::default(); 2];
         let mut out_near: [Vec<Sprite>; 2] = Default::default();
         let mut out_far: [Vec<Sprite>; 2] = Default::default();
@@ -388,9 +403,8 @@ impl JawsArt {
             for (k, b) in bodies.iter().enumerate() {
                 out_body[s][k] = pack(&mut p, &face(b, left));
             }
-            for (i, set) in tails.iter().enumerate() {
-                out_tail[i][s] = set.iter().map(|f| pack(&mut p, &face(f, left))).collect();
-            }
+            out_plates[s] = pack(&mut p, &face(&plates, left));
+            out_fin[s] = fin.iter().map(|f| pack(&mut p, &face(f, left))).collect();
             out_dorsal[s] = pack(&mut p, &face(&dorsal, left));
             out_near[s] = near.iter().map(|f| pack(&mut p, &face(f, left))).collect();
             out_far[s] = far.iter().map(|f| pack(&mut p, &face(f, left))).collect();
@@ -422,10 +436,11 @@ impl JawsArt {
                 seam
             })
             .collect();
-        let tail_shards = std::array::from_fn(|i| sample(&tails[i][tails[i].len() / 2], 2));
+        let tail_shards = std::array::from_fn(|i| sample(&parts[i], 2));
         let frames = JawsFrames {
             body: out_body,
-            tail: out_tail,
+            plates: out_plates,
+            fin: out_fin,
             dorsal: out_dorsal,
             pectoral: out_near,
             far: out_far,
@@ -548,17 +563,28 @@ pub fn draw(r: &super::Renderer, b: &Boss, ox: i32, oy: i32, frame: u64) {
         put(tex, art.far[f][turn_of(-paddle, 0.0, PADDLE)], x, y, Color::new(k * 0.72, k * 0.72, k * 0.74, 1.0), clip, &bands);
     }
     let joints = b.tail();
-    for i in (0..6).rev() {
-        // the tail fin goes with the first blast (or when its turret breaks), then
-        // the plates from the back
-        if gone(if i == 5 { 0 } else { 5 - i }) || (i == 5 && fins_out[1]) {
+    // the tail fin, turned on its joint (it goes with the first blast, or when its
+    // turret breaks)
+    if !gone(0) && !fins_out[1] {
+        let (jx, jy, ang) = joints[5];
+        let (x, y) = px((jx, jy));
+        put(tex, art.fin[f][turn_of(ang - ART[5], TILT, FIN_REACH)], x, y, tint, clip, &bands);
+    }
+    // the plates: one image, each column slid up or down to where the sim's tail runs
+    // now, so it bends as one tail and its pixels are never resampled; the blasts
+    // take the plates from the back
+    let root = px((joints[0].0, joints[0].1)).0;
+    let s = art.plates[f];
+    let w = s.r.w as i32;
+    for c in 0..w {
+        let (i, t, rest) = along_tail(c);
+        if gone(5 - i) {
             continue;
         }
-        let (jx, jy, ang) = joints[i];
-        // turned by how far the sim bends it from the plate's slope as drawn
-        let s = art.tail[i][f][turn_of(ang - ART[i], TILT, REACH[i])];
-        let (x, y) = px((jx, jy));
-        put(tex, s, x, y, tint, clip, &bands);
+        let y = joints[i].1 + (joints[i + 1].1 - joints[i].1) * t;
+        let sx = if flip { w - 1 - c } else { c };
+        let col = Sprite { r: Rect::new(s.r.x + sx as f32, s.r.y, 1.0, s.r.h), pivot: (0, rest.round() as i32) };
+        put(tex, col, root + if flip { JOINTS[0].0 - c } else { c - JOINTS[0].0 }, oy + y.round() as i32, tint, clip, &bands);
     }
     let (dx, dy) = swing(DORSAL_AT);
     if !gone(6) {
@@ -647,7 +673,7 @@ pub fn draw(r: &super::Renderer, b: &Boss, ox: i32, oy: i32, frame: u64) {
         }
         for (i, q) in b.fins.iter().enumerate() {
             if q.flash > 0 && q.alive() {
-                let (s, (x, y)) = if i == 0 { (near, (fx, fy)) } else { (art.tail[5][f][turn_of(joints[5].2 - ART[5], TILT, REACH[5])], px((joints[5].0, joints[5].1))) };
+                let (s, (x, y)) = if i == 0 { (near, (fx, fy)) } else { (art.fin[f][turn_of(joints[5].2 - ART[5], TILT, FIN_REACH)], px((joints[5].0, joints[5].1))) };
                 put(tex, s, x, y, Color::new(0.7, 0.08, 0.05, 0.45), clip, &[]);
             }
         }
@@ -869,9 +895,8 @@ mod tests {
         assert!(art.cracks.iter().map(|c| c.len()).sum::<usize>() > 60);
         // every turn of every part is there, in both facings
         for f in 0..2 {
-            for (i, reach) in REACH.iter().enumerate() {
-                assert_eq!(art.tail[i][f].len(), turns_of(*reach));
-            }
+            assert_eq!(art.fin[f].len(), turns_of(FIN_REACH));
+            assert_eq!(art.plates[f].r.w as usize, px::PLATES.rows[0].len(), "the tail's plates, in one piece");
             assert_eq!(art.pectoral[f].len(), turns_of(PADDLE));
             assert_eq!(art.far[f].len(), turns_of(PADDLE));
         }
@@ -903,8 +928,8 @@ mod tests {
         assert!(at(&open, (mouth.0, mouth.1 + 14)).is_some(), "open, the jaw hangs below");
     }
 
-    /// Every angle the sim can bend the tail to, or paddle a fin to, has a turned
-    /// frame, and the nearest one: swimming either way, rising or sinking.
+    /// Every angle the sim can swing the tail fin to, or paddle a fin to, has a
+    /// turned frame, and the nearest one: swimming either way, rising or sinking.
     #[test]
     fn every_pose_the_sim_makes_has_a_frame() {
         use crate::sim::boss::Boss;
@@ -912,15 +937,30 @@ mod tests {
         for step in 0..400 {
             b.swim = step as f32 * 0.07;
             b.vy = [-3.0, 0.0, 3.0][step % 3];
-            for (i, &(_, _, a)) in b.tail().iter().enumerate() {
-                let t = turn_of(a - ART[i], TILT, REACH[i]);
-                assert!(t < turns_of(REACH[i]), "plate {i} at {a}");
-                assert!((angles(TILT, REACH[i])[t] - (a - ART[i])).abs() <= STEP * 0.5 + 1e-4, "plate {i}: {a} is past its reach");
-            }
+            let a = b.tail()[5].2 - ART[5];
+            let t = turn_of(a, TILT, FIN_REACH);
+            assert!(t < turns_of(FIN_REACH), "the fin at {a}");
+            assert!((angles(TILT, FIN_REACH)[t] - a).abs() <= STEP * 0.5 + 1e-4, "the fin: {a} is past its reach");
         }
         for a in [-1.0, -0.2, 0.0, 0.2, 1.0] {
             assert!(turn_of(a, 0.0, PADDLE) < turns_of(PADDLE));
         }
+    }
+
+    /// The tail stays one piece: at rest the sim's joints land exactly on the traced
+    /// tail's centerline, so the bent plates draw as traced; every column between two
+    /// joints moves with them, the drawn centerline running straight from joint to
+    /// joint.
+    #[test]
+    fn the_tail_bends_as_one_piece() {
+        for c in JOINTS[5].0..=JOINTS[0].0 {
+            let (i, t, rest) = along_tail(c);
+            assert!((0.0..=1.0).contains(&t), "column {c}");
+            let (a, z) = (JOINTS[i], JOINTS[i + 1]);
+            assert!(rest >= a.1.min(z.1) as f32 && rest <= a.1.max(z.1) as f32, "column {c}");
+        }
+        assert_eq!(along_tail(JOINTS[0].0), (0, 0.0, JOINTS[0].1 as f32));
+        assert_eq!(along_tail(JOINTS[5].0).2, JOINTS[5].1 as f32);
     }
 
     /// The tail's plates are cut where the sim's joints are: each as long as the
@@ -938,7 +978,7 @@ mod tests {
             // the plate's stone reaches its back joint
             assert!(at(&parts[i], (x1 - x0, y1 - y0)).is_some(), "plate {i} reaches back");
         }
-        assert!(JAWS_TAIL_ROOT.0 < -60.0, "the tail hangs off the back of the body");
+        assert!(JAWS_TAIL_ROOT.0 < -20.0, "the tail runs off the back of the body");
     }
 
     /// The review sheet: the fish posed big and at 1x, jaw shut and open, tail
@@ -985,9 +1025,14 @@ mod tests {
                     joints.push(((p.0 - len * ang.cos(), p.1 - len * ang.sin()), 0.0));
                 }
             }
-            for i in (0..6).rev() {
-                let (p, a) = joints[i];
-                put(img, &face(&turns(&parts[i], &[a])[0]), p);
+            let (p, a) = joints[5];
+            put(img, &face(&turns(&parts[5], &[a])[0]), p);
+            let plates = decode(&px::PLATES);
+            for c in 0..plates.img.width as i32 {
+                let (i, t, rest) = along_tail(c);
+                let y = joints[i].0.1 + (joints[i + 1].0.1 - joints[i].0.1) * t;
+                let col = columns(&plates, c, c + 1, (c, rest.round() as i32));
+                put(img, &face(&col), ((c - JOINTS[0].0) as f32 + JAWS_TAIL_ROOT.0, y));
             }
             put(img, &face(&decode(&px::DORSAL)), DORSAL_AT);
             put(img, &face(&body_frame(&body, &jaw, open)), (0.0, 0.0));

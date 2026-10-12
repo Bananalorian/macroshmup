@@ -3,6 +3,49 @@
 Every version is one build sprint. Newest first. Versions are tagged in git, and
 each tag publishes a GitHub Release with downloads.
 
+## [0.8.7] - 2026-10-12 - One tail
+
+### Changed
+- **The tail is redrawn as one piece**
+  ([beside your picture](docs/screenshots/jawsthic-vs-art.png),
+  [its sheet](docs/screenshots/jawsthic-review.png)). At game size the traced tail,
+  and the thick body behind the windows, came out as dark broken noise, so they
+  are drawn in code now, after your design. From behind the window arcade, ring
+  plates taper down to the tail fin's collar, sweeping up the way yours does. The
+  seams between the rings are dark, each with a teal or red light. A finlet stands
+  above the tail and one below near the fin. The crescent tail fin is stone plates
+  along both lobes, with a dark web and two lights at its root. All of it is lit
+  from the top left like Stage 1's enemies. It's shorter than before, so the whole
+  shark is as compact as in your picture.
+- **It still swims, as one piece.** The plates are one image. Each column slides up
+  or down to where the tail runs this frame, so it bends without ever coming apart
+  at a joint or blurring its pixels. Only the tail fin turns on its collar.
+- **The whole shark is tidied to sit in the game.** Lone pixels take their
+  neighbors' color, lone dark specks in the stone go, the dither is softer, the
+  silhouette loses its one-pixel spikes and notches under a clean outline, and the
+  stone just inside the outline is lit from the top left, as the enemies are.
+- **The far pectoral hangs from under its throat** (shut, it floated below the jaw).
+
+### Fixed
+- **Your laser and shots hit the tail.** Only the body had a hurtbox, so the beam
+  went straight through the tail. Now every tail plate, and the tail fin outside
+  phase 2 (where it's a turret of its own), takes hits as the body. To keep the
+  fight as long as it was, phases 2-4 take a little less damage (0.74, 0.825 and
+  0.395 of a shot).
+
+### Checked
+- **Tests prove:**
+  - the beam stops on a tail plate and hurts the boss (this fails without the fix);
+  - the tail bends as one piece, every column between two joints moving with them;
+  - its plates sit where the sim's joints are, each as long and as sloped.
+- **PG_SIM=200:** the stage is cleared 100% with no misses or deaths, and JAWSTHIC is
+  destroyed in 100% of runs, its phases a median 24.3 / 25.4 / 28.0 / 24.4 s. The
+  median score is 3.06M, both extends come in 96% of runs, and the rank is A 78% and
+  S 22% (v0.8.0: 2.97M, 98%, 84% and 15%).
+- Play frames at 1080p show the tail swimming in one piece. Every screenshot is
+  retaken. Native and web builds are warning-free, and all 242 tests pass in both
+  debug (as CI runs them) and release.
+
 ## [0.8.6] - 2026-10-12 - Stars and particles
 
 ### Fixed

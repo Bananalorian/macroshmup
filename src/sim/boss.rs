@@ -354,6 +354,13 @@ impl Boss {
         [1usize, 2].into_iter().filter(move |&p| fins && self.fins[p - 1].alive()).chain(std::iter::once(0)).filter(move |_| self.hittable())
     }
 
+    /// Its tail, which shots and the beam hit as its body: each plate and (outside
+    /// phase 2, where it's a turret of its own) the tail fin.
+    pub fn tail_boxes(&self) -> impl Iterator<Item = Rect> + '_ {
+        let fin = (self.phase != 2).then(|| self.rect(2));
+        self.crash_boxes().into_iter().skip(1).chain(fin)
+    }
+
     /// What you crash into: its body (a little inside its hurtbox) and each tail plate.
     pub fn crash_boxes(&self) -> [Rect; 6] {
         let (cx, cy, w, h) = JAWS_BODY;

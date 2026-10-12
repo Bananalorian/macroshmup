@@ -691,6 +691,12 @@ impl World {
             for p in b.targets() {
                 self.boxes.push((Target::Boss(p), b.rect(p)));
             }
+            // its tail is it too: shots and the beam stop on it and hurt the body
+            if b.hittable() {
+                for r in b.tail_boxes() {
+                    self.boxes.push((Target::Boss(0), r));
+                }
+            }
         }
         for (i, e) in self.foes.list.iter().enumerate() {
             if !e.hittable() {
@@ -1053,6 +1059,30 @@ mod tests {
         };
         let ratio = run(beam()) / run(fire());
         assert!((ratio - 1.6).abs() < 0.05, "beam/wide = {ratio}");
+    }
+
+    /// The boss's tail is it too: the beam stops on a tail plate and hurts the boss,
+    /// where it used to pass straight through.
+    #[test]
+    fn the_beam_stops_on_the_bosss_tail_and_hurts_it() {
+        let mut w = World::boss_at(7, Tuning::default(), 1);
+        w.invincible = true;
+        w.hazards.bullets.clear();
+        let b = w.boss.as_mut().unwrap();
+        b.y = 120.0;
+        let plate = b.tail_boxes().nth(2).unwrap();
+        let body = b.rect(0);
+        assert!(plate.x1 < body.x0 || plate.x0 > body.x1, "this plate is clear of the body");
+        let hp = b.hp;
+        w.player.x = (plate.x0 + plate.x1) * 0.5;
+        w.player.y = 300.0;
+        for _ in 0..30 {
+            w.tick(beam());
+            w.hazards.bullets.clear();
+        }
+        let beam = w.beam.unwrap();
+        assert_eq!(beam.hit, Some(Target::Boss(0)), "the beam stops on the tail");
+        assert!(w.boss.as_ref().unwrap().hp < hp, "and hurts the boss");
     }
 
     #[test]
