@@ -2,7 +2,7 @@
 //! fixed 60 Hz simulation, distances in low-res canvas pixels, speeds in px per
 //! frame, angles in degrees (0 is right, 90 is straight down the screen).
 
-use crate::sim::boss::{BossGun, Muzzle, bgun, enraged};
+use crate::sim::boss::{Attack, BossGun, Muzzle, attack, bgun, enraged};
 use crate::sim::bullets::{Behavior, Hue, Kind};
 use crate::sim::enemy::{Arm, arm};
 use crate::sim::pattern::{Gun, Mount, Preset, Shape};
@@ -228,6 +228,30 @@ pub const BLASTS: [Blast; 4] = [
     Blast { sparks: 60, embers: 26, shards: 40, streaks: 14, dust: 30, rings: 2, speed: 4.4, shock: (110.0, 3.5, 28), ca: 2.6, flash: true },
     Blast { sparks: 120, embers: 50, shards: 80, streaks: 30, dust: 60, rings: 3, speed: 5.6, shock: (190.0, 5.0, 38), ca: 3.6, flash: true },
 ];
+
+/// The Slam (pad X, key C): frames the dash takes, how far it reaches (px), its damage
+/// (and to the boss), how close a bullet must be to where it strikes to shatter (px),
+/// frames of slowed time to aim the next link (the screen runs at 1/`SLAM_SLOW` speed
+/// meanwhile), links in a chain, how far it bounces back off what it hit (px), and
+/// frames it can't be hurt after a chain.
+pub const SLAM_DASH: u32 = 7;
+pub const SLAM_REACH: f32 = 170.0;
+pub const SLAM_DMG: f32 = 260.0;
+pub const SLAM_BOSS_DMG: f32 = 400.0;
+pub const SLAM_CANCEL_R: f32 = 36.0;
+pub const SLAM_AIM: u32 = 36;
+pub const SLAM_SLOW: u32 = 4;
+pub const SLAM_LINKS: u32 = 3;
+pub const SLAM_BOUNCE: f32 = 34.0;
+pub const SLAM_INVULN: u32 = 60;
+/// The rush gauge (a segment a link): what each kill fills (drone, courier, usher,
+/// gunship, buoy, heavy, derelict), what each point of damage to the boss fills, and
+/// what you start with.
+pub const RUSH_FILL: [f32; 7] = [0.08, 0.1, 0.12, 0.35, 0.4, 0.8, 1.5];
+pub const RUSH_BOSS: f32 = 0.00025;
+pub const RUSH_START: f32 = 1.0;
+/// Hit-stop on a slam's strike (frames).
+pub const HITSTOP_SLAM: u32 = 4;
 
 /// Hit-stop: frames the game holds still after a kill of each blast size (fodder
 /// never stops the flow), and after a boss phase breaks.
@@ -577,11 +601,9 @@ pub const JAWS_BELLY: (f32, f32) = (1.0, 29.0);
 pub const JAWS_BODY: (f32, f32, f32, f32) = (4.0, -2.0, 128.0, 52.0);
 pub const JAWS_PECTORAL: (f32, f32, f32, f32) = (-30.0, 28.0, 30.0, 26.0);
 pub const JAWS_TAIL_FIN: (f32, f32, f32) = (16.0, 26.0, 64.0);
-/// Phase 3's laser: frames of warning, frames of beam, how far it sweeps (degrees),
-/// how wide it's drawn (px; it hits on a little over half of that), how often it
-/// comes and when the first one does (frames into the phase).
+/// Phase 3's laser (one of its attacks): frames of warning, frames of beam, how far
+/// it sweeps (degrees), how wide it's drawn (px; it hits on a little over half of that).
 pub const JAWS_LASER: (u32, u32, f32, f32) = (45, 60, 55.0, 9.0);
-pub const JAWS_LASER_EVERY: (u32, u32) = (330, 150);
 /// The death: frames from the kill to the tally (the first `JAWS_SLOWMO` run at quarter
 /// speed), and the frames the blasts go off on, walking up from the tail fin, the
 /// last the big one and its white-out.
@@ -610,18 +632,18 @@ const HOLE_PULL: Behavior = Behavior::Pull { x: HOLE_X, y: HOLE_Y, pull: 0.006, 
 /// Phase 1, TEETH: aimed 5-way fans of crystal shards from the jaws over slow static
 /// rings from the windows, one window after another: orbs, then slower stars.
 pub const JAWS_P1: &[BossGun] = &[
-    bgun(Muzzle::Mouth, gun(O, Shape::Fan { n: 5, spread: 48.0, aimed: true }, Kind::Diamond, 2.8, 40, 50, STRAIGHT).hue(Hue::Red)),
-    bgun(Muzzle::Window(0), gun(O, Shape::Ring { n: 12, turn: 7.0 }, Kind::Orb, 1.3, 168, 30, STRAIGHT).hue(Hue::Teal)),
-    bgun(Muzzle::Window(1), gun(O, Shape::Ring { n: 12, turn: -7.0 }, Kind::Star, 1.0, 168, 72, STRAIGHT).hue(Hue::Amber)),
-    bgun(Muzzle::Window(2), gun(O, Shape::Ring { n: 12, turn: 7.0 }, Kind::Orb, 1.3, 168, 114, STRAIGHT).hue(Hue::Teal)),
-    bgun(Muzzle::Window(3), gun(O, Shape::Ring { n: 12, turn: -7.0 }, Kind::Star, 1.0, 168, 156, STRAIGHT).hue(Hue::Blue)),
+    bgun(Muzzle::Mouth, gun(O, Shape::Fan { n: 5, spread: 48.0, aimed: true }, Kind::Diamond, 2.8, 40, 0, STRAIGHT).hue(Hue::Red)),
+    bgun(Muzzle::Window(0), gun(O, Shape::Ring { n: 12, turn: 7.0 }, Kind::Orb, 1.3, 168, 0, STRAIGHT).hue(Hue::Teal)),
+    bgun(Muzzle::Window(1), gun(O, Shape::Ring { n: 12, turn: -7.0 }, Kind::Star, 1.0, 168, 42, STRAIGHT).hue(Hue::Amber)),
+    bgun(Muzzle::Window(2), gun(O, Shape::Ring { n: 12, turn: 7.0 }, Kind::Orb, 1.3, 168, 84, STRAIGHT).hue(Hue::Teal)),
+    bgun(Muzzle::Window(3), gun(O, Shape::Ring { n: 12, turn: -7.0 }, Kind::Star, 1.0, 168, 126, STRAIGHT).hue(Hue::Blue)),
 ];
 /// Phase 2, FINS: the pectoral fin and the tail fin spin opposing spirals while the
 /// jaws fire aimed needle bursts. Breaking a fin silences its spiral.
 pub const JAWS_P2: &[BossGun] = &[
-    bgun(Muzzle::Pectoral, gun(O, Shape::Spiral { arms: 3, spin: 7.0, flip: 0 }, Kind::Rice, 1.85, 8, 40, STRAIGHT).hue(Hue::Violet)),
-    bgun(Muzzle::Tail, gun(O, Shape::Spiral { arms: 3, spin: -7.0, flip: 0 }, Kind::Rice, 1.85, 8, 43, STRAIGHT).hue(Hue::Blue)),
-    bgun(Muzzle::Mouth, gun(O, Shape::Stream { burst: 5, gap: 4 }, Kind::Needle, 3.3, 84, 70, STRAIGHT).hue(Hue::Red)),
+    bgun(Muzzle::Pectoral, gun(O, Shape::Spiral { arms: 3, spin: 7.0, flip: 0 }, Kind::Rice, 1.85, 8, 0, STRAIGHT).hue(Hue::Violet)),
+    bgun(Muzzle::Tail, gun(O, Shape::Spiral { arms: 3, spin: -7.0, flip: 0 }, Kind::Rice, 1.85, 8, 4, STRAIGHT).hue(Hue::Blue)),
+    bgun(Muzzle::Mouth, gun(O, Shape::Stream { burst: 5, gap: 4 }, Kind::Needle, 3.3, 84, 40, STRAIGHT).hue(Hue::Red)),
     // its fins gone, its windows open up: slow rings of stars
     enraged(Muzzle::Window(0), gun(O, Shape::Ring { n: 14, turn: 9.0 }, Kind::Star, 1.15, 120, 0, STRAIGHT).hue(Hue::Amber)),
     enraged(Muzzle::Window(3), gun(O, Shape::Ring { n: 14, turn: -9.0 }, Kind::Star, 1.15, 120, 60, STRAIGHT).hue(Hue::Amber)),
@@ -630,18 +652,40 @@ pub const JAWS_P2: &[BossGun] = &[
 /// sideways, a lane drifting through it; slow stars sprinkled off the tail; and the
 /// laser sweeps (they pause the curtain).
 pub const JAWS_P3: &[BossGun] = &[
-    bgun(Muzzle::Belly, gun(O, Shape::Curtain { n: 23, spacing: 15.0, gap: 3, period: 22, jitter: 6.0 }, Kind::Rice, 1.65, 24, 30, STRAIGHT).hue(Hue::Teal)),
-    bgun(Muzzle::Tail, gun(O, Shape::Cone { n: 2, spread: 140.0, jitter: 0.3 }, Kind::Star, 1.05, 26, 40, STRAIGHT).hue(Hue::Violet)),
+    bgun(Muzzle::Belly, gun(O, Shape::Curtain { n: 23, spacing: 15.0, gap: 3, period: 22, jitter: 6.0 }, Kind::Rice, 1.65, 24, 0, STRAIGHT).hue(Hue::Teal)),
+    bgun(Muzzle::Tail, gun(O, Shape::Cone { n: 2, spread: 140.0, jitter: 0.3 }, Kind::Star, 1.05, 26, 20, STRAIGHT).hue(Hue::Violet)),
 ];
 /// Phase 4, EVENT HORIZON: everything it throws bends toward the black hole: a turning
 /// flower of stars from its jaws, spiral arms off its tail; and aimed needle bursts,
 /// straight.
 pub const JAWS_P4: &[BossGun] = &[
-    bgun(Muzzle::Mouth, gun(O, Shape::Flower { n: 18, petals: 5, turn: 9.0 }, Kind::Star, 2.1, 56, 40, HOLE_PULL).hue(Hue::Amber)),
-    bgun(Muzzle::Tail, gun(O, Shape::Spiral { arms: 2, spin: 11.0, flip: 0 }, Kind::Rice, 1.85, 11, 60, HOLE_PULL).hue(Hue::Violet)),
-    bgun(Muzzle::Mouth, gun(O, Shape::Stream { burst: 4, gap: 5 }, Kind::Needle, 3.5, 72, 60, STRAIGHT).hue(Hue::Red)),
+    bgun(Muzzle::Mouth, gun(O, Shape::Flower { n: 18, petals: 5, turn: 9.0 }, Kind::Star, 2.1, 56, 0, HOLE_PULL).hue(Hue::Amber)),
+    bgun(Muzzle::Tail, gun(O, Shape::Spiral { arms: 2, spin: 11.0, flip: 0 }, Kind::Rice, 1.85, 11, 0, HOLE_PULL).hue(Hue::Violet)),
+    bgun(Muzzle::Mouth, gun(O, Shape::Stream { burst: 4, gap: 5 }, Kind::Needle, 3.5, 72, 30, STRAIGHT).hue(Hue::Red)),
 ];
 pub const JAWS_GUNS: [&[BossGun]; 4] = [JAWS_P1, JAWS_P2, JAWS_P3, JAWS_P4];
+
+/// Its attacks. A boss doesn't fire everything at once: each phase cycles through its
+/// own attacks in order, one at a time. Each winds up first (`JAWS_WIND` frames: the
+/// muzzles it'll fire from glow, the jaws open, no bullets), fires its guns (by place
+/// in the phase's list above) for its frames, then rests (`JAWS_REST`: no new bullets)
+/// while it swims to where the next one fires from (px ahead of its home, px down).
+/// A gun's delay counts from its attack's first shot. Past half a phase's health,
+/// its rests keep only `JAWS_HURRY` of their length.
+pub const JAWS_WIND: u32 = 45;
+pub const JAWS_REST: u32 = 60;
+pub const JAWS_HURRY: f32 = 0.5;
+pub const JAWS_ATTACKS: [&[Attack]; 4] = [
+    // TEETH: aimed fans from the jaws; the windows' rings cascading; fans over rings
+    &[attack(&[0], 240, (0.0, 0.0)), attack(&[1, 2, 3, 4], 220, (-24.0, -6.0)), attack(&[0, 1, 3], 300, (16.0, 4.0))],
+    // FINS: the pectoral's spiral, the tail's, both (the needles with each of the
+    // first two; the windows' rings once both fins are gone)
+    &[attack(&[0, 2, 3, 4], 270, (16.0, 0.0)), attack(&[1, 2, 3, 4], 270, (-24.0, 0.0)), attack(&[0, 1, 3, 4], 300, (0.0, -6.0))],
+    // GLITCH: the curtain; the laser; the curtain with stars off the tail
+    &[attack(&[0], 360, (0.0, -4.0)), Attack { laser: true, ..attack(&[], JAWS_LASER.0 + JAWS_LASER.1, (0.0, 0.0)) }, attack(&[0, 1], 300, (-16.0, -4.0))],
+    // EVENT HORIZON: the flower; the spiral and needles; everything
+    &[attack(&[0], 280, (0.0, 0.0)), attack(&[1, 2], 280, (-20.0, 0.0)), attack(&[0, 1, 2], 300, (12.0, -4.0))],
+];
 
 // ------------------------------------------------------------------ scoring
 // Clear before deep: kill things (closer is worth double), break the boss's phases
@@ -760,6 +804,8 @@ pub const VOL_GLITCH: f32 = 0.22;
 pub const VOL_CHOMP: f32 = 0.5;
 /// The crunch under every kill (scaled by the blast's size: small to boss).
 pub const VOL_CRUNCH: f32 = 0.45;
+/// The slam's dash: a rising whoosh.
+pub const VOL_DASH: f32 = 0.5;
 pub const CRUNCH_BY_SIZE: [f32; 4] = [0.7, 0.85, 1.0, 1.0];
 pub const VOL_SWALLOWED: f32 = 0.7;
 /// The score: the tally's ticks, a grade's or the rank's slam, an extend.

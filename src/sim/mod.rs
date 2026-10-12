@@ -19,6 +19,8 @@ pub mod player;
 pub mod rng;
 pub mod score;
 pub mod shots;
+mod slam;
+pub use slam::Slam;
 pub mod stage1;
 #[cfg(test)]
 mod stage_tests;
@@ -84,6 +86,9 @@ pub enum Event {
     BossRoar { x: f32, y: f32 },
     /// JAWSTHIC's jaws snapped shut at `(x, y)`, lunging.
     BossBite { x: f32, y: f32 },
+    /// The Slam: link `link` of a chain dashed off from `(x, y)`, and struck at `(x, y)`.
+    SlamDash { x: f32, y: f32, link: u32 },
+    Slam { x: f32, y: f32, link: u32 },
     /// Phase `n` (1-4) began.
     BossPhase(u8),
     /// One of phase 2's fin turrets broke off (`fin` 0 the dorsal, 1 the pectoral).
@@ -210,6 +215,11 @@ pub struct World {
     /// whether a bomb did it (they turn into teal shards that fly to you).
     pub cancelled: Vec<(f32, f32)>,
     pub cancel_shards: bool,
+    /// The rush gauge (a segment a slam link), the chain under way, and in its aim,
+    /// the target its next link would strike.
+    pub rush: f32,
+    pub slam: Option<slam::Slam>,
+    pub reticle: Option<(Target, Rect)>,
     pub foes: Foes,
     /// Stage 1's script and clock (none in the sandbox).
     pub stage: Option<Stage>,
@@ -252,6 +262,9 @@ impl World {
             grazes: 0,
             cancelled: Vec::with_capacity(crate::tune::BULLET_CAP),
             cancel_shards: false,
+            rush: RUSH_START,
+            slam: None,
+            reticle: None,
             foes: Foes::new(seed),
             stage: None,
             boss: None,
@@ -377,7 +390,9 @@ impl World {
         self.advance_life(saved);
 
         let flying = self.alive();
-        if flying {
+        // the slam drives the ship while it dashes
+        let dashing = flying && self.step_slam(&c);
+        if flying && !dashing {
             self.player.step(&c, &self.tuning);
         } else if let Life::Respawning { t } = self.life {
             // up from below the screen, easing to a stop
@@ -721,12 +736,17 @@ impl World {
                 if d.damage(dmg, f) {
                     let big = d.kind == dummy::DummyKind::Big;
                     self.events.push(Event::Break { x: d.x, y: d.y, big });
+                    self.rush = (self.rush + if big { RUSH_FILL[5] } else { RUSH_FILL[3] }).min(SLAM_LINKS as f32);
                     self.boxes.retain(|b| b.0 != t);
                 }
             }
             Target::Boss(p) => {
                 let Some(b) = &mut self.boss else { return };
-                match b.hurt(p, dmg, &mut self.events) {
+                let hurt = b.hurt(p, dmg, &mut self.events);
+                if hurt != Hurt::Nothing {
+                    self.rush = (self.rush + dmg * RUSH_BOSS).min(SLAM_LINKS as f32);
+                }
+                match hurt {
                     // a turret broke off: just it; the phase broke: the whole boss, till the next
                     Hurt::Broke if p > 0 => self.boxes.retain(|x| x.0 != t),
                     Hurt::Broke | Hurt::Died => self.boxes.retain(|x| !matches!(x.0, Target::Boss(_))),
@@ -753,6 +773,7 @@ impl World {
         let e = &self.foes.list[i];
         let (id, kind, x, y) = (e.id, e.kind, e.x, e.y);
         self.events.push(Event::Kill { x, y, kind });
+        self.fill_rush(RUSH_FILL[kind as usize]);
         let (n, blank) = score::kill_points(kind, (x - self.player.x).hypot(y - self.player.y));
         self.award(x, y, n, if blank { Award::Blank } else { Award::Kill });
         self.boxes.retain(|b| !matches!(b.0, Target::Foe(j, _) if j == i));

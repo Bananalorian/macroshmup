@@ -3,6 +3,81 @@
 Every version is one build sprint. Newest first. Versions are tagged in git, and
 each tag publishes a GitHub Release with downloads.
 
+## [0.10.0] - 2026-10-13 - Boss attacks & the Slam
+
+### JAWSTHIC attacks like a shmup boss
+You were right: it never stopped firing. Every gun in a phase ran on its own timer
+from the phase's start to its end. Now each phase cycles through its own attacks,
+one at a time, in a fixed order you can learn
+([one winding up, firing, resting, the next winding up](docs/screenshots/boss-attacks.png)):
+- **It winds up first** (about ¾ s): the muzzles it'll fire from glow red (the
+  windows, the fins, the belly, the tail) and its jaws open. No bullets yet.
+- **It fires** for 4 to 6 seconds: one or two of its guns, not all of them.
+- **It rests** (1 s): no new bullets while it swims to where the next attack fires
+  from, so one safe spot doesn't do for every attack.
+- **The attacks:**
+  - **TEETH:** aimed fans; the windows' rings cascading; both together.
+  - **FINS:** the pectoral's spiral with needles; the tail's with needles; both
+    spirals (the windows' rings join in once both fins are gone).
+  - **GLITCH:** the curtain; the laser, now an attack of its own; the curtain with
+    stars.
+  - **EVENT HORIZON:** the flower; the spiral with needles; everything at once.
+- Past half a phase's health its rests are halved. Turns, chomps and lunges happen
+  in the rests.
+
+Why: shmup bosses cycle a few distinct attacks of 5 to 10 seconds each, one at a
+time, telegraphed, moving between them, with breathers, and growing more intense
+as the fight goes on. Sources and notes are in SPRINTS.md, Sprint 9.
+
+### The Slam (C, pad X, or the SLAM button)
+- **Press it and you become the sword:** the ship closes into the sword and dashes
+  into the nearest target in reach. Nothing can hurt it from the dash until a moment
+  after the chain.
+- **It hits hard:** popcorn, gunships and buoys die outright, a heavy loses about a
+  quarter of its health, the boss a chunk. The bullets round where it strikes
+  shatter into shards. It bounces back off what it hit.
+- **Then time slows** to a quarter speed. A reticle locks onto the next target the
+  way you're steering, and pressing again chains on to it: 3 links in all
+  ([a 3-link chain](docs/screenshots/slam-chain.png)).
+- **The rush gauge** (RUSH, under BOMBS) holds 3 links and starts with one. Each link
+  spends one. Kills fill it, big ones more, and so does hurting the boss.
+- **Feel:** a hit-stop and a crunch on each strike, a shock ring, sparks and
+  aberration that grow down the chain, afterimages behind the dash, and a new dash
+  whoosh.
+- The bot slams too, so PG_SIM plays with it. It no longer bombs in a panic while
+  it can't be hurt.
+- A new debug hook, `PG_RUSH=3`, keeps the gauge full for captures.
+
+### Checked
+- **Tests prove:**
+  - every phase's attacks come in order and round again;
+  - every attack is telegraphed;
+  - there are no bullets while it winds up or rests, and the laser is its own attack;
+  - it moves between attacks and rests less when hurt;
+  - the slam dashes into the nearest target in reach, invulnerable, breaks a small
+    one and bounces back;
+  - it needs a full segment and a target in reach;
+  - the reticle follows your steering, and chains stop at 3 links;
+  - a strike shatters nearby bullets and only dents a big target;
+  - kills fill the gauge;
+  - the bot slams and chains in Stage 1;
+  - the touch buttons, the SLAM one too, sit off the playfield.
+- **Captures:** an attack winding up, firing, resting and the next winding up; a
+  3-link chain; the RUSH gauge. Every screenshot is retaken.
+- **PG_SIM=200, with the bot slamming:**
+  - cleared 100%, with no deaths and no bombs;
+  - JAWSTHIC is destroyed in every run, its phases a median 20.5 / 22.6 / 24.4 /
+    21.3 s;
+  - the derelict dies in 100% of runs (median 18.5 s, was 20.3);
+  - the median score is 3.66M, and both extends come in every run;
+  - the stage rank is S in every run (it was S 88%).
+- **Bullets on screen:**
+  - the pacifist: average 66 → 50, but the peak rose 166 → 180, because the last
+    attack of each phase layers its guns;
+  - the bot: average 52 → 36.
+- Native and web builds are warning-free, and all 262 tests pass in both debug (as
+  CI runs them) and release.
+
 ## [0.9.0] - 2026-10-12 - Feel
 
 ### JAWSTHIC, one living shark

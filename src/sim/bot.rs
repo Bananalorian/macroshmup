@@ -88,6 +88,22 @@ impl Bot {
         if l.firing() { 3000.0 } else { 3000.0 + 80.0 * (ahead + 8.0) }
     }
 
+    /// The Slam: with a link in the gauge, into anything worth it (not popcorn) in
+    /// reach; aiming, on to whatever the reticle's on.
+    fn slam(w: &World) -> bool {
+        if w.rush < 1.0 {
+            return false;
+        }
+        match w.slam {
+            Some(super::Slam::Aim { .. }) => w.reticle.is_some(),
+            Some(_) => false,
+            None => w.slam_target((w.player.x, w.player.y), (0.0, 0.0), None).is_some_and(|(t, _)| match t {
+                super::Target::Foe(i, _) => !w.foes.list[i].kind.fodder(),
+                _ => true,
+            }),
+        }
+    }
+
     pub fn decide(&mut self, w: &World) -> Controls {
         // struck: bomb inside the window, every time it can
         if self.use_bombs && w.can_bomb() && matches!(w.life, super::Life::Struck { .. }) {
@@ -184,9 +200,10 @@ impl Bot {
         }
         self.last = best.1;
         let (si, di) = (best.1 / DIRS.len(), best.1 % DIRS.len());
-        // no way out within a couple of frames: bomb
-        let bomb = self.use_bombs && w.can_bomb() && best_hit <= 1;
-        Controls { mv: DIRS[di], fire: true, focus: si == 1, bomb, ..Default::default() }
+        // no way out within a couple of frames: bomb (not while nothing can hurt it,
+        // mid-slam or just respawned)
+        let bomb = self.use_bombs && w.can_bomb() && best_hit <= 1 && w.vulnerable();
+        Controls { mv: DIRS[di], fire: true, focus: si == 1, bomb, slam: Self::slam(w), ..Default::default() }
     }
 }
 

@@ -517,10 +517,37 @@ Done when
 
 ---
 
-### Sprint 9 — The Slam · v0.10.0 · *proposal*
-**Goal:** press X and become the sword.
+### Sprint 9 — Boss attacks & the Slam · v0.10.0
+**Goal:** the boss fights like a shmup boss, one attack at a time; and press X to
+become the sword.
+
+Jason, after v0.9.0: "bosses don't constantly just fire. they have phases and
+patterns... the boss just fires constantly... the game doesn't play like a shmup just
+yet." He's right: every gun in a JAWSTHIC phase runs on its own timer from the
+phase's start to its end, so it never stops firing.
+
+How the genre does it (research, 2026-10-12):
+- A boss cycles a handful of distinct attacks in each section of its health bar, one
+  at a time, each about 5-10 seconds (CAVE's first bosses), switching often, which
+  makes the fight feel fast.
+- The order is fixed and learnable, and never the same attack twice in a row
+  (Touhou's nonspells).
+- Each attack is telegraphed: a wind-up you can read before the first bullet.
+- It moves between attacks, so one safe spot doesn't solve them all.
+- It mixes kinds: a fast aimed attack, a wide spread, a slow dense one, a special
+  (Rival Megagun's bosses).
+- Intensity climbs toward the end of each phase, with short breathers between
+  ("constant intensity... will blend together and wear out the player", Boghog).
 
 Build
+- **Boss attacks:** each phase becomes a short cycle of attacks built from its
+  existing guns. Each attack:
+  - winds up first: the muzzles it'll fire from glow, the jaws open, and no bullets yet;
+  - fires its guns for a few seconds;
+  - rests: no new bullets while it swims to where the next attack fires from.
+
+  The laser becomes one of phase 3's attacks. Turns, chomps and lunges happen in
+  the rests. Past half a phase's health the rests get shorter.
 - **The Slam:** X (keyboard C) dashes the ship into the nearest target. It's invincible
   during the dash, hits hard (mid-size ships die outright, big ones lose a chunk), and
   turns nearby bullets into shards.
@@ -531,8 +558,11 @@ Build
 - The bot learns to slam, so `PG_SIM` covers it.
 
 Done when
-- Tests cover the dash, the invincibility, the chain targeting and the gauge.
-- Captures show a 3-link chain.
+- Tests cover the attack cycle (one attack at a time, its tell before its first bullet,
+  no new bullets in a rest), the dash, the invincibility, the chain targeting and the
+  gauge.
+- Captures show an attack winding up, firing and resting, and a 3-link chain.
+- `PG_SIM` shows the fight still fair.
 
 ---
 

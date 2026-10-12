@@ -3,6 +3,41 @@
 Session notes for Claude Code: what shipped, tuning that changed, known issues, what's next.
 Newest first.
 
+## v0.10.0 Boss attacks & the Slam (Sprint 9) - 2026-10-13
+
+**Jason, after v0.9.0:** "bosses don't constantly just fire. they have phases and patterns...
+the boss just fires constantly... add this to sprint 9 and continue. the game doesn't play
+like a shmup just yet." Research (in SPRINTS.md Sprint 9): CAVE bosses cycle attacks of
+5-10 s; Touhou never repeats a nonspell twice; telegraphs; move between attacks; escalate;
+breathers (Boghog: constant intensity wears players out).
+- **Boss attacks:** `Attack {guns, wind, fire, rest, at, laser}` in sim/boss.rs; data
+  `JAWS_ATTACKS` in tune.rs (3 per phase), JAWS_WIND 45, JAWS_REST 60, JAWS_HURRY 0.5 (past
+  half a phase's health). Boss: `attack`, `beat`; `attack_now() -> (Attack, Beat::Wind/Fire/Rest)`;
+  guns' emitters restart at each attack's first shot (gun delays now count from it); only
+  the attack's guns fire (`firing()` filters broken fins / enraged); charges() glow every
+  muzzle during the wind (new `others` [pectoral, belly, tail]); mouth_due() only for the
+  attack's mouth guns; drift() goes to the attack's spot (`at`, facing-relative; the next
+  one's while resting; sway x0.35 while firing). The laser is P3's 2nd attack
+  (`start_laser`); JAWS_LASER_EVERY and next_laser removed. Turns and lunges only start
+  in a rest.
+- **The Slam:** src/sim/slam.rs (impl World): `Slam::{Dash, Aim}`, World.rush/slam/reticle;
+  Controls.slam (key C/L, pad X = button 2, touch SLAM button). SLAM_DASH 7, REACH 170,
+  DMG 260, BOSS_DMG 400, CANCEL_R 36, AIM 36 (main loop runs 1/SLAM_SLOW=4 speed while
+  aiming), LINKS 3, BOUNCE 34, INVULN 60; RUSH_FILL by kind [0.08..1.5], RUSH_BOSS 0.00025
+  per damage, RUSH_START 1; dummy breaks fill it too. Events SlamDash/Slam (hit-stop
+  HITSTOP_SLAM 4, synth::dash whoosh, crunch+hit). Render: reticle brackets + dashed
+  line, sword form + afterimages while dashing; HUD RUSH gauge row; controls lists.
+- **Bot:** slams non-fodder targets in reach when rush >= 1, chains while a reticle shows;
+  never panic-bombs while invulnerable (that wasted ~1.4 bombs a run).
+- PG_SIM: cleared 100%, 0 deaths, 0 bombs; phases 20.5/22.6/24.4/21.3; derelict 100%
+  (18.5 s); score 3.66M; rank S 100%. Pacifist bullets avg 50 peak 180.
+- Screenshot script: pilgrim-forms frames 304-311 now; new boss-attacks (boss:1 seed 11
+  40,150,300,385,470) and slam-chain (stage:115 seed 3 PG_RUSH=3 1138..1174).
+- New hook PG_RUSH=<n>.
+
+**Decision asked (still open from v0.9.0):** the rank thresholds (the bot is S every run now).
+**Next:** Sprint 10 (Style) when he says go.
+
 ## v0.9.0 Feel (Sprint 8) - 2026-10-12
 
 **Jason:** "look at ... Lunar gothic mechanical shark with closed jaw.png. when the mouth opens and

@@ -36,6 +36,7 @@ fn mix(id: Id) -> (f32, f64) {
         Id::Glitch => (VOL_GLITCH, 0.12),
         Id::Chomp => (VOL_CHOMP, 0.15),
         Id::Crunch => (VOL_CRUNCH, 0.04),
+        Id::Dash => (VOL_DASH, 0.05),
         Id::Swallowed => (VOL_SWALLOWED, 2.0),
         Id::Tick => (VOL_TICK, 0.03),
         Id::Slam => (VOL_SLAM, 0.3),
@@ -153,6 +154,11 @@ impl Audio {
                 Event::BossBreach { .. } => self.music_target = 1.0,
                 Event::BossRoar { .. } => self.play(Id::Roar, 1.0),
                 Event::BossBite { .. } => self.play(Id::Chomp, 1.0),
+                Event::SlamDash { .. } => self.play(Id::Dash, 1.0),
+                Event::Slam { .. } => {
+                    self.play(Id::Crunch, 1.0);
+                    self.play(Id::Hit, 1.0);
+                }
                 Event::LaserWarn => self.play(Id::LaserCharge, 1.0),
                 Event::LaserFire => self.play(Id::LaserBeam, 1.0),
                 Event::BossTurn | Event::BossBreak { .. } => self.play(Id::Glitch, 1.0),

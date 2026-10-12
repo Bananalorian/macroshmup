@@ -556,6 +556,7 @@ fn hitstop(events: &[Event]) -> u32 {
             Event::Break { big, .. } => tune::HITSTOP[if big { 2 } else { 1 }],
             Event::PartBreak { .. } | Event::FinBreak { .. } => tune::HITSTOP[2],
             Event::BossBreak { .. } => tune::HITSTOP_BOSS,
+            Event::Slam { .. } => tune::HITSTOP_SLAM,
             _ => 0,
         })
         .max()
@@ -770,6 +771,23 @@ fn effects(w: &World, r: &mut Renderer, s: &Settings, audio: &mut Audio, chains:
     }
     for e in &w.events {
         match *e {
+            Event::SlamDash { x, y, .. } => {
+                // off it goes: teal sparks kicked back where it launched
+                for _ in 0..3 {
+                    r.parts.graze(x, y + 6.0, x, y);
+                }
+            }
+            Event::Slam { x, y, link } => {
+                // the sword strikes: a ring, sparks, and a jolt of aberration, bigger
+                // down the chain
+                let k = link as f32;
+                r.fx.shock(x, y, 40.0 + 14.0 * k, 2.0, 18);
+                r.parts.ring(x, y, 3.0 + k, 16, render::palette::TEAL);
+                for _ in 0..4 + 2 * link {
+                    r.parts.hit(x, y, false);
+                }
+                r.fx.aberrate(if s.reduce_flash { 0.3 } else { 0.8 + 0.3 * k });
+            }
             Event::Hit { x, y, beam } => {
                 if !beam || w.frame % 3 == 0 {
                     r.parts.hit(x, y, beam);
@@ -1070,6 +1088,12 @@ async fn amain() {
                     if slow_n % 4 != 0 {
                         continue;
                     }
+                } else if world.aiming() {
+                    // aiming a slam's next link: time slows right down
+                    slow_n += 1;
+                    if slow_n % tune::SLAM_SLOW != 0 {
+                        continue;
+                    }
                 } else if world.dip > 0 {
                     dip_skip = !dip_skip;
                     if dip_skip {
@@ -1097,12 +1121,15 @@ async fn amain() {
                 }
                 Scene::Stage { menu: None, over: Some(_), .. } => game.end_t += 1,
                 Scene::Stage { world, menu: None, over } => {
-                    let (drag, bomb) = input.take();
+                    let (drag, bomb, slam) = input.take();
                     // HOLD TO BEAM: fire held a moment becomes the beam
                     game.hold_t = if held.fire { game.hold_t + 1 } else { 0 };
                     let focus = focused(held.focus, game.settings.hold_beam, game.hold_t);
                     let bot_flies = game.settings.view.autopilot || game.run == Run::Demo;
-                    let mut c = if bot_flies { bot.decide(world) } else { Controls { mv: held.mv, drag, fire: held.fire, focus, bomb } };
+                    let mut c = if bot_flies { bot.decide(world) } else { Controls { mv: held.mv, drag, fire: held.fire, focus, bomb, slam } };
+                    if let Some(n) = hooks.rush {
+                        world.rush = world.rush.max(n);
+                    }
                     if hooks.bomb_at == Some(world.frame + 1) {
                         c.bomb = true;
                     }
@@ -1187,8 +1214,10 @@ async fn amain() {
                     menu: *menu,
                     toast: game.toast.as_ref().map(|(m, l)| (m.as_str(), *l)),
                     bomb_flash: input.bomb_flash,
+                    slam_flash: input.slam_flash,
                     lives: world.lives,
                     bombs: world.bombs,
+                    rush: world.rush,
                     over: *over,
                     pattern: world.hazards.preset,
                     bullets: world.hazards.bullets.len(),

@@ -151,11 +151,42 @@ pub fn intro_pose(t: u32) -> (f32, f32, f32, Option<f32>) {
     }
 }
 
-/// How close its guns are to firing, 0..1 (the art glows them red before they do).
+/// One of its attacks (see `JAWS_ATTACKS`): the guns that fire (by place in the
+/// phase's list), its wind-up, how long it fires, its rest after, where it fires
+/// from (px ahead of its home, px down), and whether it's the laser.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Attack {
+    pub guns: &'static [usize],
+    pub wind: u32,
+    pub fire: u32,
+    pub rest: u32,
+    pub at: (f32, f32),
+    pub laser: bool,
+}
+
+pub const fn attack(guns: &'static [usize], fire: u32, at: (f32, f32)) -> Attack {
+    Attack { guns, wind: JAWS_WIND, fire, rest: JAWS_REST, at, laser: false }
+}
+
+/// Where it is in an attack.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Beat {
+    /// Winding up, 0..1 of the way.
+    Wind(f32),
+    /// Firing, this many frames in.
+    Fire(u32),
+    /// Resting after it.
+    Rest,
+}
+
+/// How close its guns are to firing, 0..1 (the art glows them red before they do):
+/// the windows, the jaws, and the pectoral fin, the belly and the tail (these only
+/// as an attack winds up).
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Charges {
     pub windows: [f32; 4],
     pub mouth: f32,
+    pub others: [f32; 3],
 }
 
 /// A turret's health and hit flash.
@@ -224,7 +255,9 @@ pub struct Boss {
     next_lunge: u32,
     next_chomp: u32,
     pub laser: Option<Laser>,
-    next_laser: u32,
+    /// The attack it's on (its place in the phase's cycle), and frames into it.
+    pub attack: usize,
+    beat: u32,
     next_turn: u32,
     guns: Vec<Gunner>,
     /// Where its rings and spirals start turning from (seeded per run).
@@ -267,7 +300,8 @@ impl Boss {
             next_lunge: 0,
             next_chomp: 0,
             laser: None,
-            next_laser: 0,
+            attack: 0,
+            beat: 0,
             next_turn: 0,
             guns: Vec::new(),
             spin,
@@ -298,7 +332,7 @@ impl Boss {
         self.turn = 0;
         let (_, _, _, turns) = JAWS_PHASES[p as usize - 1];
         self.next_turn = if turns > 0 { turns } else { u32::MAX };
-        self.next_laser = JAWS_LASER_EVERY.1;
+        (self.attack, self.beat) = (0, 0);
         self.lunge = 0;
         self.next_lunge = self.later(JAWS_LUNGE_EVERY, 1);
         self.next_chomp = self.later((JAWS_CHOMP.0, JAWS_CHOMP.1), 2);
@@ -542,25 +576,79 @@ impl Boss {
         }
     }
 
-    /// How close each window and the jaws are to firing (the telegraph).
+    /// How close each of its guns is to firing (the telegraph): as an attack winds
+    /// up, all its muzzles glow brighter and brighter; as it fires, each window and
+    /// the jaws glow before each shot.
     pub fn charges(&self) -> Charges {
         let mut c = Charges::default();
         if self.act != Act::Fight || self.turn > 0 {
             return c;
         }
-        let bare = self.fins.iter().all(|f| !f.alive());
-        for g in self.guns.iter().filter(|g| !g.enraged || bare) {
-            let k = 1.0 - (g.e.until_next() as f32 / CHARGE_FRAMES as f32).min(1.0);
+        let Some((a, beat)) = self.attack_now() else { return c };
+        for k in self.firing(a) {
+            let g = &self.guns[k];
+            let charge = match beat {
+                Beat::Wind(w) => w,
+                Beat::Fire(_) => 1.0 - (g.e.until_next() as f32 / CHARGE_FRAMES as f32).min(1.0),
+                Beat::Rest => 0.0,
+            };
             match g.muzzle {
-                Muzzle::Window(i) => c.windows[i as usize % 4] = c.windows[i as usize % 4].max(k),
-                Muzzle::Mouth => c.mouth = c.mouth.max(k),
+                Muzzle::Window(i) => c.windows[i as usize % 4] = c.windows[i as usize % 4].max(charge),
+                Muzzle::Mouth => c.mouth = c.mouth.max(charge),
+                Muzzle::Pectoral if matches!(beat, Beat::Wind(_)) => c.others[0] = charge,
+                Muzzle::Belly if matches!(beat, Beat::Wind(_)) => c.others[1] = charge,
+                Muzzle::Tail if matches!(beat, Beat::Wind(_)) => c.others[2] = charge,
                 _ => {}
             }
         }
-        if self.laser.is_some() {
-            c.mouth = 1.0;
+        match beat {
+            Beat::Wind(w) if a.laser => c.mouth = w,
+            _ if self.laser.is_some() => c.mouth = 1.0,
+            _ => {}
         }
         c
+    }
+
+    /// The attack it's on and where it is in it (fighting only).
+    pub fn attack_now(&self) -> Option<(&'static Attack, Beat)> {
+        if self.act != Act::Fight {
+            return None;
+        }
+        let a = &JAWS_ATTACKS[self.phase as usize - 1][self.attack];
+        let beat = if self.beat < a.wind {
+            Beat::Wind(self.beat as f32 / a.wind as f32)
+        } else if self.beat < a.wind + a.fire {
+            Beat::Fire(self.beat - a.wind)
+        } else {
+            Beat::Rest
+        };
+        Some((a, beat))
+    }
+
+    /// The guns attack `a` fires that can fire now: not a broken fin's, and the
+    /// enraged ones only once both fins are gone.
+    fn firing(&self, a: &Attack) -> impl Iterator<Item = usize> + '_ {
+        let bare = self.fins.iter().all(|f| !f.alive());
+        a.guns.iter().copied().filter(move |&k| {
+            let g = &self.guns[k];
+            (!g.enraged || bare)
+                && match g.muzzle {
+                    Muzzle::Pectoral => self.fins[0].alive(),
+                    Muzzle::Tail if self.phase == 2 => self.fins[1].alive(),
+                    _ => true,
+                }
+        })
+    }
+
+    /// An attack's rest: shorter past half the phase's health.
+    fn rest_of(&self, a: &Attack) -> u32 {
+        let (hi, lo) = (if self.phase == 1 { JAWS_HP } else { floor(self.phase - 1) }, floor(self.phase));
+        if (self.hp - lo) / (hi - lo) < 0.5 { (a.rest as f32 * JAWS_HURRY) as u32 } else { a.rest }
+    }
+
+    /// Resting between attacks, with at least `frames` of the rest still to go.
+    fn resting(&self, frames: u32) -> bool {
+        self.attack_now().is_some_and(|(a, beat)| beat == Beat::Rest && a.wind + a.fire + self.rest_of(a) >= self.beat + frames)
     }
 
     /// Seconds left in the phase (for the HUD's timer).
@@ -582,12 +670,23 @@ impl Boss {
         out
     }
 
-    /// Ease toward its patrol: a slow sway across its home, a bob.
+    /// Ease toward its patrol: a slow sway across its home, a bob; fighting, toward
+    /// where its attack fires from (resting, where the next one will), swaying less
+    /// while it fires.
     fn drift(&mut self) {
         let home = if self.facing > 0.0 { JAWS_HOME.0 } else { JAWS_HOME.1 };
+        let ((ax, ay), sway) = match self.attack_now() {
+            Some((_, Beat::Rest)) => {
+                let cycle = JAWS_ATTACKS[self.phase as usize - 1];
+                (cycle[(self.attack + 1) % cycle.len()].at, 1.0)
+            }
+            Some((a, Beat::Fire(_))) => (a.at, 0.35),
+            Some((a, Beat::Wind(_))) => (a.at, 1.0),
+            None => ((0.0, 0.0), 1.0),
+        };
         let a = self.age as f32 * std::f32::consts::TAU;
-        let tx = home + JAWS_SWAY.0 * (a / JAWS_SWAY.1 as f32).sin();
-        let ty = JAWS_Y + JAWS_BOB.0 * (a / JAWS_BOB.1 as f32).sin();
+        let tx = home + self.facing * ax + sway * JAWS_SWAY.0 * (a / JAWS_SWAY.1 as f32).sin();
+        let ty = JAWS_Y + ay + JAWS_BOB.0 * (a / JAWS_BOB.1 as f32).sin();
         self.x += (tx - self.x) * JAWS_FOLLOW;
         self.y += (ty - self.y) * JAWS_FOLLOW;
     }
@@ -605,12 +704,22 @@ impl Boss {
         }
     }
 
-    /// Frames before its mouth next fires (or it's firing now: 0).
+    /// Frames before its mouth next fires (or it's firing now: 0): only in an attack
+    /// that fires from it.
     fn mouth_due(&self) -> u32 {
         if self.laser.is_some() {
             return 0;
         }
-        self.guns.iter().filter(|g| g.muzzle == Muzzle::Mouth).map(|g| if g.e.since < 12 { 0 } else { g.e.until_next() }).min().unwrap_or(u32::MAX)
+        let Some((a, beat)) = self.attack_now() else { return u32::MAX };
+        let mouth: Vec<usize> = self.firing(a).filter(|&k| self.guns[k].muzzle == Muzzle::Mouth).collect();
+        if mouth.is_empty() && !a.laser {
+            return u32::MAX;
+        }
+        match beat {
+            Beat::Wind(_) => a.wind - self.beat + mouth.iter().map(|&k| self.guns[k].e.gun.delay).min().unwrap_or(0),
+            Beat::Fire(_) => mouth.iter().map(|&k| if self.guns[k].e.since < 12 { 0 } else { self.guns[k].e.until_next() }).min().unwrap_or(u32::MAX),
+            Beat::Rest => u32::MAX,
+        }
     }
 
     fn jaw_wanted(&self) -> f32 {
@@ -671,7 +780,7 @@ impl Boss {
             self.next_chomp = self.later((JAWS_CHOMP.0, JAWS_CHOMP.1), 2);
         }
         if self.lunge == 0 {
-            if self.t >= self.next_lunge && quiet {
+            if self.t >= self.next_lunge && quiet && self.resting(JAWS_LUNGE.1) {
                 self.lunge = 1;
             }
             return;
@@ -765,43 +874,60 @@ impl Boss {
             self.end(Outcome::TimedOut, events);
             return;
         }
-        // now and then it turns round (never mid-laser)
-        if self.t >= self.next_turn && self.turn == 0 && self.laser.is_none() && self.lunge == 0 {
+        self.lase(events);
+        // one attack at a time: it winds up, fires, rests, and on to the next
+        let cycle = JAWS_ATTACKS[self.phase as usize - 1];
+        self.beat += 1;
+        let a = &cycle[self.attack];
+        if self.beat >= a.wind + a.fire + self.rest_of(a) {
+            (self.attack, self.beat) = ((self.attack + 1) % cycle.len(), 0);
+        }
+        let a = &cycle[self.attack];
+        if self.beat == a.wind {
+            // its first shot: its guns start afresh (their delays count from now)
+            let spin = self.spin + 37.0 * self.phase as f32 + 53.0 * self.attack as f32;
+            for &k in a.guns {
+                self.guns[k].e = Emitter::new(self.guns[k].e.gun, BOSS_ID, spin);
+            }
+            if a.laser {
+                self.start_laser(player, events);
+            }
+        }
+        // now and then it turns round, as a rest begins
+        if self.t >= self.next_turn && self.turn == 0 && self.lunge == 0 && self.resting(JAWS_TURN + 2) {
             self.turn = JAWS_TURN;
             self.next_turn = self.t + turns;
             events.push(Event::BossTurn);
         }
         self.turning();
-        if self.phase == 3 {
-            self.lase(player, events);
-        }
         // it holds still while it fires the laser
         if self.laser.is_none() {
             self.drift();
         }
-        let quiet = self.turn > 0;
-        let lasing = self.laser.is_some();
-        let bare = self.fins.iter().all(|f| !f.alive());
-        for k in 0..self.guns.len() {
-            if self.guns[k].enraged && !bare {
-                continue;
-            }
-            let m = self.guns[k].muzzle;
-            let alive = match m {
-                Muzzle::Pectoral => self.fins[0].alive(),
-                Muzzle::Tail if self.phase == 2 => self.fins[1].alive(),
-                _ => true,
-            };
-            let paused = lasing && matches!(m, Muzzle::Belly | Muzzle::Tail);
-            let (x, y) = self.muzzle(m);
-            hz.fire_gun(&mut self.guns[k].e, player, (x, y, !quiet && alive && !paused));
+        let Some((a, Beat::Fire(_))) = self.attack_now() else { return };
+        if self.turn > 0 {
+            return;
+        }
+        let guns: Vec<usize> = self.firing(a).collect();
+        for k in guns {
+            let (x, y) = self.muzzle(self.guns[k].muzzle);
+            hz.fire_gun(&mut self.guns[k].e, player, (x, y, true));
         }
     }
 
-    /// Phase 3's laser: it warns along a line just beside you, on the open side, then
-    /// sweeps through where you were toward your nearer wall. The way out is back
-    /// across the warning line, into the open.
-    fn lase(&mut self, player: (f32, f32), events: &mut Vec<Event>) {
+    /// Phase 3's laser attack: it warns along a line just beside you, on the open
+    /// side, then sweeps through where you were toward your nearer wall. The way out
+    /// is back across the warning line, into the open.
+    fn start_laser(&mut self, player: (f32, f32), events: &mut Vec<Event>) {
+        let (mx, my) = self.at((JAWS_MOUTH.0 + JAWS_MOUTH_OPEN.0, JAWS_MOUTH.1 + JAWS_MOUTH_OPEN.1));
+        let aim = (player.1 - my).atan2(player.0 - mx).to_degrees();
+        // right of the jaws (under 90 degrees), it sweeps right, toward that wall
+        let dir = if aim < 90.0 { -1.0 } else { 1.0 };
+        self.laser = Some(Laser { t: 0, x: mx, y: my, from: aim - dir * 6.0, to: aim + dir * (JAWS_LASER.2 - 6.0) });
+        events.push(Event::LaserWarn);
+    }
+
+    fn lase(&mut self, events: &mut Vec<Event>) {
         if let Some(l) = &mut self.laser {
             l.t += 1;
             if l.t == JAWS_LASER.0 {
@@ -809,17 +935,7 @@ impl Boss {
             }
             if l.t >= JAWS_LASER.0 + JAWS_LASER.1 {
                 self.laser = None;
-                self.next_laser = self.t + JAWS_LASER_EVERY.0;
             }
-            return;
-        }
-        if self.t >= self.next_laser && self.turn == 0 && self.lunge == 0 {
-            let (mx, my) = self.at((JAWS_MOUTH.0 + JAWS_MOUTH_OPEN.0, JAWS_MOUTH.1 + JAWS_MOUTH_OPEN.1));
-            let aim = (player.1 - my).atan2(player.0 - mx).to_degrees();
-            // right of the jaws (under 90 degrees), it sweeps right, toward that wall
-            let dir = if aim < 90.0 { -1.0 } else { 1.0 };
-            self.laser = Some(Laser { t: 0, x: mx, y: my, from: aim - dir * 6.0, to: aim + dir * (JAWS_LASER.2 - 6.0) });
-            events.push(Event::LaserWarn);
         }
     }
 }
@@ -1030,6 +1146,7 @@ mod tests {
             if b.lunge == 1 {
                 start_x = b.x;
                 lunges += 1;
+                assert!(matches!(b.attack_now(), Some((_, Beat::Rest))), "it lunges between attacks");
             }
             if b.lunge > 0 {
                 far = far.max(b.facing * (b.x - start_x));
@@ -1037,9 +1154,69 @@ mod tests {
             }
         }
         assert!(chomps >= 6, "{chomps} chomps");
-        assert!(lunges >= 4, "{lunges} lunges");
+        assert!(lunges >= 3, "{lunges} lunges");
         assert!(far > JAWS_LUNGE.2 * 0.6, "it lunged {far} px forward");
         assert!(ev.iter().any(|e| matches!(e, Event::BossBite { .. })), "and bit");
+    }
+
+    /// It attacks one at a time, in its phase's order: each winds up (its tell glowing,
+    /// no bullets), fires, then rests (no new bullets) before the next.
+    #[test]
+    fn it_attacks_one_at_a_time() {
+        for phase in 1..=4u8 {
+            let (mut hz, mut ev) = (Hazards::new(0, 1), vec![]);
+            let mut b = Boss::at_phase(0.0, phase);
+            let cycle = JAWS_ATTACKS[phase as usize - 1];
+            let (mut order, mut shots, mut told) = (vec![], vec![0usize; cycle.len()], vec![false; cycle.len()]);
+            let frames: u32 = cycle.iter().map(|a| a.wind + a.fire + a.rest).sum::<u32>() + 2;
+            for _ in 0..frames {
+                let n = hz.bullets.len();
+                b.step(&mut hz, (180.0, 300.0), &mut ev);
+                let (a, beat) = b.attack_now().unwrap();
+                if order.last() != Some(&b.attack) {
+                    order.push(b.attack);
+                }
+                let new = hz.bullets.len() - n;
+                match beat {
+                    Beat::Wind(w) => {
+                        assert_eq!(new, 0, "phase {phase} attack {}: no bullets as it winds up", b.attack);
+                        let c = b.charges();
+                        told[b.attack] |= w > 0.9 && (c.mouth > 0.8 || c.windows.iter().chain(&c.others).any(|&k| k > 0.8));
+                    }
+                    Beat::Fire(_) => shots[b.attack] += new,
+                    Beat::Rest => assert_eq!(new, 0, "phase {phase} attack {}: no new bullets as it rests", b.attack),
+                }
+                assert!(a.laser || b.laser.is_none(), "the laser is its own attack");
+            }
+            assert_eq!(order, (0..cycle.len()).chain([0]).collect::<Vec<_>>(), "phase {phase}: in order, then round again");
+            assert!(told.iter().all(|&t| t), "phase {phase}: every attack is telegraphed: {told:?}");
+            for (i, a) in cycle.iter().enumerate() {
+                assert!(a.laser || shots[i] > 0, "phase {phase} attack {i} fires");
+            }
+        }
+    }
+
+    /// Between attacks it swims somewhere else, so one safe spot doesn't do for them
+    /// all; and past half the phase's health it rests less.
+    #[test]
+    fn it_moves_between_attacks_and_hurries_when_hurt() {
+        let (mut hz, mut ev) = (Hazards::new(0, 1), vec![]);
+        let mut b = Boss::at_phase(0.0, 1);
+        let mut spots = vec![];
+        for _ in 0..1200 {
+            b.step(&mut hz, (180.0, 300.0), &mut ev);
+            if let Some((a, Beat::Fire(f))) = b.attack_now() {
+                if f == a.fire / 2 && b.turn == 0 {
+                    spots.push((b.attack, b.x, b.y));
+                }
+            }
+        }
+        let moved = spots.windows(2).filter(|w| w[0].0 != w[1].0).all(|w| (w[0].1 - w[1].1).hypot(w[0].2 - w[1].2) > 12.0);
+        assert!(spots.len() >= 3 && moved, "{spots:?}");
+        let a = &JAWS_ATTACKS[0][0];
+        assert_eq!(b.rest_of(a), a.rest);
+        b.hp = floor(1) + (JAWS_HP - floor(1)) * 0.4;
+        assert!(b.rest_of(a) < a.rest, "hurt, it rests less");
     }
 
     /// Hit hard (a bomb, a fin snapping off) it flinches: it recoils and its jaw drops.

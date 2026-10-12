@@ -152,10 +152,20 @@ pub fn draw(r: &Renderer, lay: &Layout, w: &World, hitboxes: bool, show_dot: boo
         draw_aura(a, px, py, w.frame);
     }
 
-    // afterimages at full speed
+    // aiming a slam's next link: brackets lock onto it, a line runs out to it
+    if let Some((_, r)) = w.reticle {
+        draw_reticle(a, ox, oy, (p.x, p.y), r, w.frame);
+    }
+
+    // afterimages at full speed; slamming, the ship's the sword
     let moving = (p.dx * p.dx + p.dy * p.dy).sqrt();
-    let form = p.blend(&w.tuning);
-    if shown && !p.focused() && moving >= w.tuning.speed * AFTERIMAGE_MIN {
+    let dashing = matches!(w.slam, Some(crate::sim::Slam::Dash { .. }));
+    let form = if dashing { 1.0 } else { p.blend(&w.tuning) };
+    if shown && dashing {
+        let at = [1, 2, 4].map(|k| (ox + snap(p.history[k].0), oy + snap(p.history[k].1)));
+        ship::draw_afterimages(a, form, 0, &at);
+    }
+    if shown && !dashing && !p.focused() && moving >= w.tuning.speed * AFTERIMAGE_MIN {
         let at = [2, 4, 6].map(|k| (ox + snap(p.history[k].0), oy + snap(p.history[k].1)));
         ship::draw_afterimages(a, form, p.bank, &at);
     }
@@ -167,7 +177,7 @@ pub fn draw(r: &Renderer, lay: &Layout, w: &World, hitboxes: bool, show_dot: boo
         fire_t: p.fire_t,
         beaming: p.beaming,
         hit_t: p.hit_t,
-        locked: p.locked,
+        locked: if dashing { p.locked.max(1) } else { p.locked },
         frame: w.frame,
     };
     if shown {
@@ -364,6 +374,29 @@ fn draw_wrap(a: &Atlas, ox: i32, oy: i32, x: f32, top: f32, hit: SimRect, frame:
             if t < 0.35 {
                 a.fill(p.0, p.1 + 1, 1, 1, Color { a: 0.3 * fade, ..TEAL });
             }
+        }
+    }
+}
+
+/// The slam's reticle on the target its next link would strike: teal corner brackets
+/// closing in and pulsing, and a dashed line from the ship out to it.
+fn draw_reticle(a: &Atlas, ox: i32, oy: i32, from: (f32, f32), r: SimRect, frame: u64) {
+    let pulse = (frame / 4 % 2) as i32;
+    let (x0, y0, x1, y1) = (ox + snap(r.x0) - 3 - pulse, oy + snap(r.y0) - 3 - pulse, ox + snap(r.x1) + 2 + pulse, oy + snap(r.y1) + 2 + pulse);
+    let c = Color { a: 0.9, ..TEAL_HOT };
+    let arm = 5;
+    for (x, y, dx, dy) in [(x0, y0, 1, 1), (x1, y0, -1, 1), (x0, y1, 1, -1), (x1, y1, -1, -1)] {
+        a.fill(x.min(x + dx * arm), y, arm, 1, c);
+        a.fill(x, y.min(y + dy * arm), 1, arm, c);
+    }
+    let (tx, ty) = ((r.x0 + r.x1) * 0.5, (r.y0 + r.y1) * 0.5);
+    let d = (tx - from.0).hypot(ty - from.1);
+    let steps = (d / 2.0) as i32;
+    for k in 2..steps {
+        if (k + (frame as i32 / 2)) % 4 < 2 {
+            let t = k as f32 / steps as f32;
+            let (x, y) = (from.0 + (tx - from.0) * t, from.1 + (ty - from.1) * t);
+            a.fill(ox + snap(x), oy + snap(y), 1, 1, Color { a: 0.55, ..TEAL });
         }
     }
 }

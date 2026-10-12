@@ -20,6 +20,7 @@
 //!   PG_BOOM=<0-3>                      set off a small/medium/large/boss blast 30 frames in
 //!   PG_INVINCIBLE=1                    bullets can't hurt you (as in the pause menu)
 //!   PG_BOMB=<frame>                    press bomb on that frame
+//!   PG_RUSH=<0-3>                      keep the rush gauge at least this full (slam chains)
 //!   PG_DIE=<frame>                     put a bullet on the ship on that frame
 //!   PG_KILL=<frame>                    break the boss's phase on that screen frame (F6 does it too)
 //!
@@ -123,6 +124,7 @@ pub struct Hooks {
     pub boom: Option<usize>,
     pub invincible: bool,
     pub bomb_at: Option<u64>,
+    pub rush: Option<f32>,
     pub die_at: Option<u64>,
     pub kill_at: Option<u64>,
     #[cfg_attr(target_arch = "wasm32", allow(dead_code))] // the sound dump is native-only
@@ -179,6 +181,7 @@ pub fn hooks() -> Hooks {
         mockup: env("PG_MOCKUP").is_some(),
         invincible: env("PG_INVINCIBLE").is_some(),
         bomb_at: env("PG_BOMB").and_then(|s| s.trim().parse().ok()),
+        rush: env("PG_RUSH").and_then(|s| s.trim().parse().ok()),
         die_at: env("PG_DIE").and_then(|s| s.trim().parse().ok()),
         kill_at: env("PG_KILL").and_then(|s| s.trim().parse().ok()),
         boom: env("PG_BOOM").and_then(|s| s.trim().parse().ok()).filter(|&n: &usize| n < 4),

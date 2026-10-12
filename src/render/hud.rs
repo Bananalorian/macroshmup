@@ -5,7 +5,7 @@ use super::Renderer;
 use super::art::Atlas;
 use super::font::{self, text_width};
 use super::layout::{IRect, Layout, Orient};
-use super::palette::{ASH, CORE, CREAM, DUSK, GEM, INK, SIGNAL, SLATE, STRIP, TEAL_HOT, VOID, WHITE_A, tone};
+use super::palette::{ASH, CORE, CREAM, DUSK, GEM, INK, SIGNAL, SLATE, STRIP, TEAL, TEAL_HOT, VOID, WHITE_A, tone};
 use macroquad::math::Rect;
 use crate::input::{Button, Mode, touch_buttons};
 use crate::menu::{self, ITEMS};
@@ -268,9 +268,12 @@ pub struct HudView<'a> {
     pub menu: Option<usize>,
     pub toast: Option<(&'a str, u32)>,
     pub bomb_flash: u32,
-    /// Ships left (including the one flying) and bombs.
+    pub slam_flash: u32,
+    /// Ships left (including the one flying) and bombs, and the rush gauge (slam
+    /// links, 0 to 3).
     pub lives: u8,
     pub bombs: u8,
+    pub rush: f32,
     /// The game-over menu's selected row, once the last ship is gone.
     pub over: Option<usize>,
     /// The sandbox: pattern number, bullets on screen, hits, grazes.
@@ -393,12 +396,13 @@ fn controls(mode: Mode) -> &'static [(&'static str, &'static str)] {
             ("SHIFT", "FOCUS"),
             ("Z+SHIFT", "BEAM"),
             ("X", "BOMB"),
+            ("C", "SLAM"),
             ("[ ]", "PATTERN"),
             ("ESC", "PAUSE"),
             ("M", "SOUND"),
             ("F11", "FULLSCREEN"),
         ],
-        Mode::Pad => &[("STICK", "MOVE"), ("A", "FIRE"), ("RB / RT", "FOCUS"), ("A+RB", "BEAM"), ("B", "BOMB"), ("LB", "PATTERN"), ("START", "PAUSE")],
+        Mode::Pad => &[("STICK", "MOVE"), ("A", "FIRE"), ("RB / RT", "FOCUS"), ("A+RB", "BEAM"), ("B", "BOMB"), ("X", "SLAM"), ("LB", "PATTERN"), ("START", "PAUSE")],
         Mode::Touch => &[("DRAG", "FLY + FIRE"), ("2ND FINGER", "FOCUS"), ("NEXT", "PATTERN"), ("II", "PAUSE")],
     }
 }
@@ -413,13 +417,14 @@ fn buttons(a: &Atlas, lay: &Layout, v: &HudView) {
     for (b, cx, cy, r) in touch_buttons(lay).into_iter().filter(|(b, ..)| v.stage.is_none() || *b != Button::Next) {
         let (cx, cy) = (cx as i32, cy as i32);
         let n = (r * 1.6) as i32;
-        let lit = b == Button::Bomb && v.bomb_flash > 0;
+        let lit = (b == Button::Bomb && v.bomb_flash > 0) || (b == Button::Slam && v.slam_flash > 0);
         for k in 0..n {
             let ang = k as f32 / n as f32 * std::f32::consts::TAU;
             a.fill(cx + (ang.cos() * r).round() as i32, cy + (ang.sin() * r).round() as i32, 1, 1, if lit { CREAM } else { SLATE });
         }
         match b {
             Button::Bomb => text_c(a, "BOMB", cx, cy - 3, 1, 1, if lit { CREAM } else { ASH }),
+            Button::Slam => text_c(a, "SLAM", cx, cy - 3, 1, 1, if lit { CREAM } else { ASH }),
             Button::Next => text_c(a, "NEXT", cx, cy - 3, 1, 1, ASH),
             Button::Pause => {
                 a.fill(cx - 3, cy - 4, 2, 9, ASH);
@@ -463,7 +468,9 @@ pub fn stage(r: &Renderer, lay: &Layout, v: &HudView) {
             icons(a, a.r.life_icon, v.lives, l1, y + 8);
             small(a, "BOMBS", l0, y + 18, ASH);
             icons(a, a.r.bomb_icon, v.bombs, l1, y + 18);
-            y += 32;
+            small(a, "RUSH", l0, y + 28, ASH);
+            rush_gauge(a, v.rush, l1, y + 29);
+            y += 42;
             hrule(a, l0, l1, y);
             let stats: [(&str, String); 3] = match v.stage {
                 Some(s) => [("GRAZE", v.grazes.to_string()), ("KILLS", format!("{}/{}", s.killed, s.spawned)), ("MISSES", v.hits.to_string())],
@@ -815,6 +822,21 @@ fn icons(a: &Atlas, icon: Rect, n: u8, right: i32, y: i32) {
     }
 }
 
+/// The rush gauge, right-aligned at `right`: a segment a slam link, teal when full,
+/// filling as kills come in.
+fn rush_gauge(a: &Atlas, rush: f32, right: i32, y: i32) {
+    for i in 0..crate::tune::SLAM_LINKS as i32 {
+        let x = right - (crate::tune::SLAM_LINKS as i32 - i) * 9 + 2;
+        let fill = (rush - i as f32).clamp(0.0, 1.0);
+        a.fill(x, y, 7, 5, SLATE);
+        a.fill(x + 1, y + 1, 5, 3, VOID);
+        let w = (fill * 5.0).floor() as i32;
+        if w > 0 {
+            a.fill(x + 1, y + 1, w, 3, if fill >= 1.0 { TEAL } else { ASH });
+        }
+    }
+}
+
 /// `n` icons starting at `x`.
 fn icons_left(a: &Atlas, icon: Rect, n: u8, x: i32, y: i32) {
     for i in 0..n.min(3) as i32 {
@@ -1017,9 +1039,11 @@ mod tests {
             assert!(text_width(&format!("{} 13/13", p.name), 1, 1) <= port - 8 - 100, "{}", p.name);
             assert!(text_width("BULLETS 8192  HITS 999  GRAZE 9999", 1, 1) <= port - 16);
         }
-        // the left panel's rows: the tuning hint clears the controls
+        // the left panel's rows (the score, lives/bombs/rush, the stats, then the
+        // sandbox flags) clear the controls listed under them
         let most = controls(Mode::Keys).len() as i32;
-        assert!(206 + font::GH as i32 <= CANVAS_H as i32 - 52 - most * 10, "the hint and the controls overlap");
+        let flags = 42 + 58 + 42 + 40;
+        assert!(flags + font::GH as i32 + 2 <= CANVAS_H as i32 - 14 - most * 10 - 8, "the panel's rows and the controls overlap");
         for mode in [Mode::Keys, Mode::Pad, Mode::Touch] {
             for (k, act) in controls(mode) {
                 assert!(text_width(k, 1, TRACK) + 8 + text_width(act, 1, TRACK) <= room, "{k} {act}");

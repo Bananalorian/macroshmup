@@ -34,6 +34,10 @@ the font and every sound are built when the game starts. Written in Rust on
 
 ![Its four phases: TEETH, FINS, GLITCH and EVENT HORIZON](docs/screenshots/boss-phases.png)
 
+![One attack at a time: the jaws wind up, fans fire, a rest, the windows glow red, their rings fire](docs/screenshots/boss-attacks.png)
+
+![The Slam: the reticle locks on, the sword dashes in and strikes, and chains on to the next target](docs/screenshots/slam-chain.png)
+
 ![Its death: every bullet cancels, blasts walk up from its tail, the screen whites out, then the tally](docs/screenshots/boss-death.png)
 
 ![Jason's JAWSTHIC beside the redraw at game size, traced from his sprite atlas](docs/screenshots/jawsthic-vs-art.png)
@@ -69,6 +73,12 @@ the font and every sound are built when the game starts. Written in Rust on
 ![Stage 1's enemies in bone white, all built in code](docs/screenshots/enemy-sheet.png)
 
 ## Status
+
+**v0.10, boss attacks & the Slam:** JAWSTHIC fights like a shmup boss now: each
+phase cycles through its own attacks one at a time, each telegraphed, then a rest
+while it swims somewhere new (the laser is one of them). And the Slam: press C (pad
+X) to become the sword, dash into a target, shatter the bullets round it, then chain
+on to the next in slow motion, 3 links, fed by a rush gauge that kills fill.
 
 **v0.9, feel:** JAWSTHIC is one living shark. Its lips close over its fangs when it
 shuts, like Jason's closed-jaw picture, and pull back as it bites. A wave runs
@@ -123,6 +133,7 @@ See [SPRINTS.md](SPRINTS.md) for the plan.
 | Fire | Z | A | automatic while you steer |
 | Focus (slow + beam) | Shift | RB or RT | a second finger |
 | Bomb (8 frames after a hit still saves you) | X | B | BOMB button |
+| Slam (dash into a target; again, as time slows, to chain on) | C | X | SLAM button |
 | Next sandbox pattern (sandbox only) | `]` (`[` goes back) | LB | NEXT button |
 | Pause, sandbox and tuning | Esc | Start | II button |
 | Sound on/off | M | | |

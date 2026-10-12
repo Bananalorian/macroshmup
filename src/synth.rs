@@ -708,6 +708,25 @@ pub fn glitch(seed: u32) -> Vec<f32> {
     b
 }
 
+/// The slam's dash: a short whoosh of noise rising fast, a bright edge on top.
+pub fn dash(seed: u32) -> Vec<f32> {
+    let len = 0.2;
+    let mut b = buf(len);
+    let mut r = Rng::new(seed);
+    let mut bp = Bq::default();
+    let mut ph = 0.0f32;
+    for (i, s) in b.iter_mut().enumerate() {
+        let t = i as f32 / SR;
+        let u = t / len;
+        let env = (u * 12.0).min(1.0) * (1.0 - u).powi(2);
+        let air = bp.bandpass(r.noise(), 600.0 + 5000.0 * u, 1.2) * 1.6;
+        ph += (300.0 + 1500.0 * u) / SR;
+        *s = (air + saw(ph) * 0.15) * env;
+    }
+    normalize(&mut b, 0.7);
+    b
+}
+
 /// The crunch under a kill: a bit-crushed snap and a short low knock.
 pub fn crunch(seed: u32) -> Vec<f32> {
     let mut b = buf(0.16);
@@ -806,6 +825,8 @@ pub enum Id {
     Chomp,
     /// The crunch under every kill.
     Crunch,
+    /// The slam's dash.
+    Dash,
     Swallowed,
     /// The score: a tally line's tick, a grade's slam, an extend's jingle.
     Tick,
@@ -919,6 +940,9 @@ pub fn bank() -> Vec<(Id, Vec<u8>)> {
     }
     for k in 0..3 {
         v.push((Id::Crunch, mono(crunch(1470 + k))));
+    }
+    for k in 0..2 {
+        v.push((Id::Dash, mono(dash(1490 + k))));
     }
     v.push((Id::Swallowed, mono(swallowed(1400))));
     v.push((Id::Tick, mono(tally_tick())));

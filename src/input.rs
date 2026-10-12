@@ -1,10 +1,11 @@
 //! Input from three sources at once: keyboard, controllers and touch. They're all
 //! merged into the same controls; whichever you used last decides the on-screen hints.
 //!
-//! Keyboard: arrows or WASD move, Z fire, Shift focus, X bomb, Esc pause.
-//! Controller: D-pad or left stick (8-way by default), A fire, RB/RT focus, B bomb, Start pause.
+//! Keyboard: arrows or WASD move, Z fire, Shift focus, X bomb, C slam, Esc pause.
+//! Controller: D-pad or left stick (8-way by default), A fire, RB/RT focus, B bomb, X slam,
+//! Start pause.
 //! Touch: drag anywhere to steer (relative, so your thumb never covers the ship),
-//! it fires while you steer, a second finger focuses, and there's a bomb button.
+//! it fires while you steer, a second finger focuses, and there are bomb and slam buttons.
 
 use crate::pad::{self, Pads};
 use crate::render::layout::{Layout, Orient};
@@ -46,24 +47,27 @@ pub struct Ui {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Button {
     Bomb,
+    Slam,
     Pause,
     /// The sandbox's next-pattern button.
     Next,
 }
 
 /// The on-screen touch buttons, in canvas px: (which, center x, center y, radius).
-pub fn touch_buttons(lay: &Layout) -> [(Button, f32, f32, f32); 3] {
+pub fn touch_buttons(lay: &Layout) -> [(Button, f32, f32, f32); 4] {
     let f = lay.field;
     match lay.orient {
         Orient::Portrait => [
             (Button::Bomb, (lay.cw - 34) as f32, (f.bottom() + 46) as f32, 17.0),
+            (Button::Slam, 34.0, (f.bottom() + 46) as f32, 17.0),
             (Button::Pause, (lay.cw - 12) as f32, 12.0, 10.0),
             (Button::Next, (lay.cw - 80) as f32, (f.bottom() + 52) as f32, 13.0),
         ],
         Orient::Landscape => [
             (Button::Bomb, ((f.right() + lay.cw) / 2) as f32, (lay.ch - 96) as f32, 20.0),
+            (Button::Slam, ((f.right() + lay.cw) / 2) as f32, (lay.ch - 150) as f32, 18.0),
             (Button::Pause, ((f.right() + lay.cw) / 2) as f32, 70.0, 12.0),
-            (Button::Next, ((f.right() + lay.cw) / 2) as f32, (lay.ch - 156) as f32, 15.0),
+            (Button::Next, ((f.right() + lay.cw) / 2) as f32, (lay.ch - 200) as f32, 15.0),
         ],
     }
 }
@@ -102,10 +106,12 @@ pub struct Input {
     seen: Vec<u64>,
     /// Touch steering since the last tick, in canvas px (scaled by sensitivity).
     pub drag: (f32, f32),
-    /// The bomb was pressed since the last tick.
+    /// The bomb and the slam were pressed since the last tick.
     pub bomb: bool,
-    /// Frames the bomb button shows pressed.
+    pub slam: bool,
+    /// Frames the bomb and slam buttons show pressed.
     pub bomb_flash: u32,
+    pub slam_flash: u32,
     /// A controller was just plugged in.
     pub connected: bool,
 }
@@ -123,16 +129,20 @@ impl Input {
             seen: Vec::new(),
             drag: (0.0, 0.0),
             bomb: false,
+            slam: false,
             bomb_flash: 0,
+            slam_flash: 0,
             connected: false,
         }
     }
 
-    /// Hand the next tick its share: the touch drag and any bomb press, then clear them.
-    pub fn take(&mut self) -> ((f32, f32), bool) {
-        let out = (self.drag, self.bomb);
+    /// Hand the next tick its share: the touch drag and any bomb or slam press, then
+    /// clear them.
+    pub fn take(&mut self) -> ((f32, f32), bool, bool) {
+        let out = (self.drag, self.bomb, self.slam);
         self.drag = (0.0, 0.0);
         self.bomb = false;
+        self.slam = false;
         out
     }
 
@@ -143,6 +153,7 @@ impl Input {
         self.button_fingers.clear();
         self.drag = (0.0, 0.0);
         self.bomb = false;
+        self.slam = false;
     }
 
     /// Read every device once per display frame.
@@ -150,6 +161,7 @@ impl Input {
         let mut h = Held::default();
         let mut ui = Ui::default();
         self.bomb_flash = self.bomb_flash.saturating_sub(1);
+        self.slam_flash = self.slam_flash.saturating_sub(1);
 
         // ---- touch (positions arrive in screen px)
         for t in touches() {
@@ -168,6 +180,11 @@ impl Input {
                     Some(Button::Bomb) => {
                         self.bomb = true;
                         self.bomb_flash = 8;
+                        self.button_fingers.push(t.id);
+                    }
+                    Some(Button::Slam) => {
+                        self.slam = true;
+                        self.slam_flash = 8;
                         self.button_fingers.push(t.id);
                     }
                     Some(Button::Pause) => {
@@ -241,6 +258,9 @@ impl Input {
             if p.pressed(pad::B) {
                 self.bomb = true;
             }
+            if p.pressed(pad::X) {
+                self.slam = true;
+            }
             ui.confirm |= p.pressed(pad::A);
             ui.back |= p.pressed(pad::B);
             ui.pause |= p.pressed(pad::START) || p.pressed(pad::BACK);
@@ -278,6 +298,9 @@ impl Input {
         h.focus |= focus;
         if hit(&[KeyCode::X, KeyCode::K]) {
             self.bomb = true;
+        }
+        if hit(&[KeyCode::C, KeyCode::L]) {
+            self.slam = true;
         }
         ui.confirm |= hit(&[KeyCode::Enter, KeyCode::KpEnter, KeyCode::Z, KeyCode::Space]);
         ui.back |= hit(&[KeyCode::Escape, KeyCode::Backspace, KeyCode::X]);

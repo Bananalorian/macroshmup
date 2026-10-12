@@ -14,6 +14,7 @@ pub struct Controls {
     pub focus: bool,
     /// Pressed this frame.
     pub bomb: bool,
+    pub slam: bool,
 }
 
 /// The numbers the tuning panel can change while you play.
