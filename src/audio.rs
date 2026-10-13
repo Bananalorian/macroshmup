@@ -42,6 +42,9 @@ fn mix(id: Id) -> (f32, f64) {
         Id::Tick => (VOL_TICK, 0.03),
         Id::Slam => (VOL_SLAM, 0.3),
         Id::Extend => (VOL_EXTEND, 1.0),
+        Id::KitUp => (VOL_KIT, 0.2),
+        Id::ShieldBreak => (VOL_SHIELD, 0.2),
+        Id::ShieldUp => (VOL_KIT, 0.5),
     }
 }
 
@@ -188,6 +191,11 @@ impl Audio {
                 Event::Points { how: crate::sim::score::Award::Grade(..), .. } => self.play(Id::Slam, 1.0),
                 Event::Points { .. } => {}
                 Event::Extend => self.play(Id::Extend, 1.0),
+                Event::Kit { level, .. } => self.play_variant(Id::KitUp, level as usize - 1, 1.0),
+                Event::ShieldBreak { .. } => self.play(Id::ShieldBreak, 1.0),
+                Event::ShieldUp { .. } => self.play(Id::ShieldUp, 1.0),
+                // the death covers it
+                Event::AugmentLost { .. } => {}
             }
         }
         self.beam_target = if w.player.beaming { 1.0 } else { 0.0 };

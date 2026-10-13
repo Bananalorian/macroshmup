@@ -236,6 +236,33 @@ impl Particles {
         self.spawn(Kind::Cross, x, tip, 0.0, 0.0, 8.0, TEAL, 1.0);
     }
 
+    /// Teal sparks drawn in to `(x, y)` from up to `r` px round it, arriving as they
+    /// fade: a piece of the kit coming online.
+    pub fn gather(&mut self, x: f32, y: f32, r: f32, n: u16) {
+        for _ in 0..n {
+            let a = self.rng.range(0.0, std::f32::consts::TAU);
+            let d = self.rng.range(r * 0.5, r);
+            let life = self.rng.range(9.0, 14.0);
+            let c = if self.rng.chance(0.25) { CREAM } else { TEAL };
+            self.spawn(Kind::Spark, x + a.cos() * d, y + a.sin() * d, a + std::f32::consts::PI, d / life, life, c, 1.0);
+        }
+    }
+
+    /// The shield breaking: its hexagon (`outline`, from `(x, y)`) flies apart into
+    /// teal shards and sparks, outward.
+    pub fn shield_shatter(&mut self, x: f32, y: f32, outline: &[(i32, i32)]) {
+        for &(dx, dy) in outline.iter().step_by(2) {
+            let (fx, fy) = (dx as f32, dy as f32);
+            let a = fy.atan2(fx) + self.rng.range(-0.3, 0.3);
+            let s = self.rng.range(0.8, 2.6);
+            let life = self.rng.range(16.0, 34.0);
+            self.spawn(Kind::Shard, x + fx, y + fy, a, s, life, TEAL, 0.94);
+            if self.rng.chance(0.25) {
+                self.spawn(Kind::Spark, x + fx, y + fy, a, s * 1.6, life * 0.5, TEAL, 0.9);
+            }
+        }
+    }
+
     /// An enemy's engine: a gray dot thrown up behind it (they fly nose down).
     pub fn exhaust(&mut self, x: f32, y: f32) {
         let a = -std::f32::consts::FRAC_PI_2 + self.rng.range(-0.25, 0.25);

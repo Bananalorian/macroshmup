@@ -3,6 +3,68 @@
 Every version is one build sprint. Newest first. Versions are tagged in git, and
 each tag publishes a GitHub Release with downloads.
 
+## [0.13.0] - 2026-10-13 - Augments & shield
+
+### Added
+- **The kit, earned by style** ([coming online](docs/screenshots/kit.png)). The first
+  time a life reaches B, the left augment comes online; A, the right one; S, the
+  shield. A life keeps what it earns, even through a bomb that saves it, and loses it
+  all with the ship.
+  - Each piece arrives with teal sparks gathering where it'll sit, a ring, a chime a
+    step higher for each, and its word over the ship: AUGMENT 1 OF 2, AUGMENT 2 OF 2,
+    SHIELD ONLINE.
+- **The augments:** bone engine pods like the ship's own, after Jason's ship atlas: a
+  red beacon on top, teal dashes running up a dark window, a jet underneath.
+  - They trail the ship a little, spread wide for the wide shot, and tuck in beside
+    the sword for the beam.
+  - Each fires a slim bolt straight up every 6 frames while you fire, with the wide
+    shot or the beam. Together they add about a fifth to your damage.
+- **The shield** ([breaking](docs/screenshots/shield.png)): a faint dotted teal
+  hexagon round the ship, a glint running round it.
+  - A hit breaks it instead of you. It lights up and flies apart into teal shards,
+    the bullets within 40 px pop, and you blink untouchable for 1.5 s.
+  - It costs one style rank (a hit costs two), and it isn't a miss.
+  - It recharges in 20 s, drawing itself back round the ship as it does.
+- **KIT in the HUD**, under RUSH: a box for each augment and one for the shield,
+  filling as it recharges. On a phone it sits beside the bombs.
+- `PG_KIT=1`-`3` starts with the kit (for captures, or to try it out), and the
+  balance report shows when each piece is earned and how often the shield breaks.
+
+### Fixed
+- **A hit cost three style ranks, and a bomb two.** A dropped rank landed right at the
+  bottom of the rank below, and the same frame's drain tipped it one further. Now it
+  lands just inside, so a hit costs two and a bomb one, as v0.11.0 said.
+
+### Checked
+- **Tests prove:**
+  - style earns the kit a piece at a time (B, A, S), a rank that skips ahead earns
+    each piece, falling back and rising again earns nothing more, and the sandbox
+    earns none;
+  - the augments trail to their posts, spread wide or tucked in, and fire a bolt
+    each every 6 frames while you fire (none without the kit), hurting what they hit;
+  - the shield takes a hit instead of you: you aren't struck, it isn't a miss, the
+    bullets round you pop and the far ones stay, it costs one rank, you're untouchable
+    a moment, and it comes back after 20 s; without it a hit is a hit;
+  - a bomb that saves you keeps the kit, and a life lost loses it (both augments
+    shatter);
+  - in play, a hit leaves you exactly two ranks down;
+  - the new sounds are clean and never clip.
+- **Captures:** [the kit coming online](docs/screenshots/kit.png) in a run from the
+  top (the left augment, the right, the shield, then in play), and
+  [the shield breaking](docs/screenshots/shield.png). Every screenshot is retaken.
+- **PG_SIM=200, against v0.12.0:**
+  - cleared 100%, with no deaths and no bombs;
+  - the bot earns the left augment in every run (median 0:47), the right in every run
+    (0:50) and the shield in 92% (1:00). It's never hit, so its shield never breaks;
+  - kills per run rose from 393 to 408 (95% of everything), and bullets on screen
+    fell from 31 to 28 on average;
+  - JAWSTHIC's phases take 15.2 / 20.1 / 19.5 / 17.5 s (they took 18.5 / 23.2 /
+    23.1 / 21.3), and the derelict 15.7 s (18.1);
+  - the bot's best style rank is S in 90% of runs and SS in 2%, and the median score
+    is 4.08M (it was 3.99M).
+- Native and web builds are warning-free, and all 284 tests pass in both debug and
+  release.
+
 ## [0.12.0] - 2026-10-13 - The Swarm
 
 ### Added

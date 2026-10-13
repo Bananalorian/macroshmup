@@ -51,6 +51,7 @@ The toolchain is pinned in `rust-toolchain.toml` and CI uses the same version. D
 | `PG_GRAY=1` | grayscale screenshots (value check) |
 | `PG_WAV=1` | dump every synthesized sound to `./shots/sfx/` |
 | `PG_RUSH=3` | keep the rush gauge full (slam chains for captures) |
+| `PG_KIT=3` | keep the kit: 1 the left augment, 2 both, 3 the shield too |
 
 Debug keys (debug builds only): F1 hitboxes · F2 grayscale · F3 quarter speed · F4 frame step · F5 invincible ·
 F6 next section (or boss phase) · F7 next sandbox pattern · F8 performance overlay · F9 export sprite sheets.

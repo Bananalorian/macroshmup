@@ -660,14 +660,50 @@ Done when
 
 ---
 
-### Sprint 12 — Augments & shield · v0.13.0 · *proposal*
+### Sprint 12 — Augments & shield · v0.13.0
 **Goal:** two drones at your sides and a shield, the ship's kit growing.
+
+How the genre does it (research, 2026-10-13):
+- **Gradius's options** (the first, 1985): invulnerable pods that copy your fire,
+  trailing your path or flanking you; Gradius V lets you pick their formation.
+- **R-Type's Force and bits:** pods that block bullets as well as fire.
+- **Formation as a choice:** some games let you spread options wide or pull them in,
+  each with its own fire (Shoot 1UP's swarm spreads into a fan or gathers into one
+  beam).
+- **A shield that recharges** is rare in shmups. Where it's done, it soaks a hit and
+  then needs time to come back, often only while you aren't being hit (Halo's
+  regenerating shield is the model most players know).
+
+Jason's calls (2026-10-13): earned by **style milestones**, and the augments look
+like **engine pods** from his ship atlas.
+
+Built (v0.13.0):
+- **Earned by style:** the first time a life reaches B, the left augment comes online;
+  A, the right one; S, the shield. A life keeps what it earns (a saving bomb keeps it
+  too) and loses it all with the ship. Each piece arrives with teal sparks gathering
+  where it'll sit, a ring, a chime a step higher for each, and its word over the ship
+  (AUGMENT 1 OF 2, AUGMENT 2 OF 2, SHIELD ONLINE).
+- **The augments:** bone engine pods like the ship's own (a red beacon, teal dashes
+  running up a dark window, a jet underneath). They trail the ship a little, spread
+  wide for the wide shot and tuck in beside the sword for the beam, and each fires a
+  slim bolt straight up every 6 frames while you fire. Together they add about a
+  fifth to your damage.
+- **The shield:** a faint dotted teal hexagon round the ship, a glint running round
+  it. A hit breaks it instead of you: it lights up and flies apart into teal shards,
+  the bullets within 40 px pop, you blink untouchable for 1.5 s, and the style rank
+  drops one (a hit costs two). It isn't a miss. It recharges in 20 s, drawing itself
+  back round the ship as it does.
+- **The HUD:** KIT under RUSH, a box for each augment and one for the shield (filling
+  as it recharges); on a phone, beside the bombs.
+- **Fixed:** a dropped rank landed right at the bottom of the rank below, and the
+  same frame's drain tipped it one further, so a hit cost three ranks and a bomb two.
+  Now they cost two and one, as v0.11.0 meant.
 
 Build
 - **The augments:** one on either side, following the ship and firing with it.
 - **The shield:** it takes one hit, then recharges.
 - **How they're earned** gets decided before the sprint (start with them, style, or
-  pickups).
+  pickups). (Style milestones, Jason's call.)
 
 ---
 

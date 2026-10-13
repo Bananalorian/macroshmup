@@ -11,6 +11,8 @@ pub enum ShotKind {
     Bolt,
     /// The angled streams from the wing pods.
     Pod,
+    /// An augment's bolt, straight up.
+    Aug,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]

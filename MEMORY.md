@@ -3,6 +3,41 @@
 Session notes for Claude Code: what shipped, tuning that changed, known issues, what's next.
 Newest first.
 
+## v0.13.0 Augments & shield (Sprint 12) - 2026-10-13
+
+**Jason:** "ok i have lots to discuss but lets get sprint 12 done". His picks (AskUserQuestion):
+earned by "Style milestones (Recommended)", look "Engine pods (Recommended)". He has lots to
+discuss next: ask what before starting anything.
+Research (in SPRINTS.md): Gradius options, R-Type Force/bits, formations, recharging shields.
+- src/sim/kit.rs: `Kit { level, aug[2], recharge, fire_cd }`; augments() = min(level,2);
+  shield_up(); charge(); post(side, blend); earn(rank, at) -> new levels (KIT_RANKS [2,3,4]);
+  follow(ship, blend); fire(firing, shots) -> ShotKind::Aug; break_shield(); tick() -> true when
+  back. World.kit; restyled() earns on a rising rank (not GameOver); final_death pushes
+  AugmentLost per augment and resets; collide_bullets: shield_up -> shield_break() (cancel within
+  SHIELD_CANCEL_R, invuln SHIELD_INVULN + blink, style drop(1), no hit_t red flash, not counted
+  in hits); World::give_kit(level) for PG_KIT. Events Kit{level,x,y}, ShieldBreak, ShieldUp,
+  AugmentLost. src/sim/kit_tests.rs (in play).
+- Tune: KIT_RANKS, AUG_WIDE (24,6), AUG_FOCUS (15,2), AUG_FOLLOW .35, AUG_FIRE 6, AUG_SPEED 13,
+  AUG_LEN 14, AUG_HIT_W 6, AUG_DMG 2, SHIELD_RECHARGE 1200, SHIELD_CANCEL_R 40, SHIELD_INVULN 90,
+  HITSTOP_SHIELD 6, SHIELD_HEX (22,30), VOL_KIT .5, VOL_SHIELD .6, STYLE_LAND 10.
+- Art: ship.rs AUGMENT 9x13 letters (b beacon, v window, n teal) via part(); draw_augment();
+  AUG_SHOT 3x14 (the first 3x8 read as a "+", too faint). scene.rs shield_outline() (hexagon
+  pixels) + draw_kit_shield (dotted, glint; partial while recharging). particles gather(),
+  shield_shatter(). popups Style::Kit words. HUD KitView + kit_gauge (left panel row KIT at
+  y+38, y += 52; portrait beside the bombs). synth kit_up(level), shield_break, shield_up.
+- **Bug fixed:** style.drop() landed at rank*100 and the same tick's drain tipped it a rank
+  further (a hit cost 3 ranks, a bomb 2, since v0.11). Now + STYLE_LAND.
+- PG_SIM: KIT EARNED / SHIELD BROKEN lines. Kit median 0:47 / 0:50 / 1:00 (shield 92%), shield
+  never breaks (bot never hit). Kills 408 (95%), bullets 28, phases 15.2/20.1/19.5/17.5 s,
+  derelict 15.7 s, score 4.08M, best style S90 SS2.
+- Screenshots: kit.png (seed 7 run: frames 2152, 2906, 3707, 3730; ship positions from the sim),
+  shield.png (sandbox:0 PG_KIT=3 PG_DIE=100, frames 99-140). style.png frame 3707; tally from
+  stage end at 14099 (+72/+118/+152/+286).
+
+**Open:** the rings (he'll show me); rank thresholds; boss phases are ~16% shorter with the
+kit (his call whether to retune); the kit words compete with point popups mid slam chain.
+**Next:** whatever Jason wants to discuss, then Sprint 13 (arcade shell) on go.
+
 ## v0.12.0 The Swarm (Sprint 11) - 2026-10-13
 
 **Jason:** "rank words yes. also the slam should pause briefly on slam attacks. the slowmo makes

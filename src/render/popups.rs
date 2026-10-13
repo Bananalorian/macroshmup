@@ -24,6 +24,8 @@ pub enum Style {
     /// A boss phase's grade and bonus.
     Grade(u8, Grade),
     Extend,
+    /// A piece of the kit coming online (`n` its level): its word over the ship.
+    Kit,
 }
 
 impl Style {
@@ -35,6 +37,7 @@ impl Style {
             Style::Big => 72,
             Style::Grade(..) => 120,
             Style::Extend => 120,
+            Style::Kit => 90,
         }
     }
 }
@@ -137,6 +140,13 @@ impl Popups {
         self.push(Popup { x: FIELD_W as f32 * 0.5, y: FIELD_H as f32 * 0.6, n: 0, style: Style::Extend, t: 0 });
     }
 
+    /// A piece of the kit came online (`level` 1-3), the ship at `(x, y)`.
+    pub fn kit(&mut self, level: u8, x: f32, y: f32) {
+        let x = x.clamp(56.0, FIELD_W as f32 - 56.0);
+        let y = (y - 58.0).max(30.0);
+        self.push(Popup { x, y, n: level as u32, style: Style::Kit, t: 0 });
+    }
+
     pub fn tick(&mut self) {
         for p in &mut self.list {
             p.t += 1;
@@ -172,6 +182,21 @@ impl Popups {
                     outlined(a, &s, x, y, 2, 1, Color { a: fade, ..c });
                 }
                 Style::Grade(_, g) => draw_grade(a, ox + p.x.round() as i32, oy + p.y.round() as i32, g, p.n, p.t, fade),
+                Style::Kit => {
+                    // flickers in, then rises and fades
+                    if p.t < 24 && p.t % 6 >= 4 {
+                        continue;
+                    }
+                    let (word, sub) = match p.n {
+                        1 => ("AUGMENT", "1 OF 2"),
+                        2 => ("AUGMENT", "2 OF 2"),
+                        _ => ("SHIELD", "ONLINE"),
+                    };
+                    let y = oy + (p.y - p.t as f32 * 0.15) as i32;
+                    let x = ox + p.x as i32;
+                    outlined(a, word, x - text_width(word, 2, 2) / 2, y, 2, 2, Color { a: fade, ..TEAL_HOT });
+                    outlined(a, sub, x - text_width(sub, 1, 2) / 2, y + 18, 1, 2, Color { a: fade, ..CREAM });
+                }
                 Style::Extend => {
                     if p.t < 60 && p.t % 8 >= 5 {
                         continue;

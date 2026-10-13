@@ -274,6 +274,8 @@ pub struct HudView<'a> {
     pub lives: u8,
     pub bombs: u8,
     pub rush: f32,
+    /// The kit this life has earned.
+    pub kit: KitView,
     /// The style rank (Stage 1 only).
     pub style: Option<StyleView>,
     /// The game-over menu's selected row, once the last ship is gone.
@@ -315,6 +317,14 @@ pub struct StyleView {
     pub mult: f32,
     pub since: u32,
     pub rose: bool,
+}
+
+/// The kit as the HUD shows it: how much is earned (0-3: the left augment, the
+/// right, the shield) and how charged the shield is (0-1).
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct KitView {
+    pub level: u8,
+    pub charge: f32,
 }
 
 /// What the HUD shows of Stage 1.
@@ -483,7 +493,9 @@ pub fn stage(r: &Renderer, lay: &Layout, v: &HudView) {
             icons(a, a.r.bomb_icon, v.bombs, l1, y + 18);
             small(a, "RUSH", l0, y + 28, ASH);
             rush_gauge(a, v.rush, l1, y + 29);
-            y += 42;
+            small(a, "KIT", l0, y + 38, ASH);
+            kit_gauge(a, v.kit, l1, y + 39);
+            y += 52;
             hrule(a, l0, l1, y);
             let stats: [(&str, String); 3] = match v.stage {
                 Some(s) => [("GRAZE", v.grazes.to_string()), ("KILLS", format!("{}/{}", s.killed, s.spawned)), ("MISSES", v.hits.to_string())],
@@ -566,6 +578,7 @@ pub fn stage(r: &Renderer, lay: &Layout, v: &HudView) {
             }
             icons_left(a, a.r.life_icon, v.lives, 72, 8);
             icons_left(a, a.r.bomb_icon, v.bombs, 72 + 3 * 9 + 8, 8);
+            kit_gauge(a, v.kit, 72 + 6 * 9 + 16 + 3 * 9, 9);
             hrule(a, 0, lay.cw, f.y - 1);
             hrule(a, 0, lay.cw, f.bottom());
             let t = tuning_lines(v.settings);
@@ -881,6 +894,21 @@ fn rush_gauge(a: &Atlas, rush: f32, right: i32, y: i32) {
     for i in 0..crate::tune::SLAM_LINKS as i32 {
         let x = right - (crate::tune::SLAM_LINKS as i32 - i) * 9 + 2;
         let fill = (rush - i as f32).clamp(0.0, 1.0);
+        a.fill(x, y, 7, 5, SLATE);
+        a.fill(x + 1, y + 1, 5, 3, VOID);
+        let w = (fill * 5.0).floor() as i32;
+        if w > 0 {
+            a.fill(x + 1, y + 1, w, 3, if fill >= 1.0 { TEAL } else { ASH });
+        }
+    }
+}
+
+/// The kit, right-aligned at `right`: a box for each augment, teal once it's online,
+/// and apart from them the shield's, filling as it recharges, teal when it's up.
+fn kit_gauge(a: &Atlas, k: KitView, right: i32, y: i32) {
+    let fills = [(k.level >= 1) as u8 as f32, (k.level >= 2) as u8 as f32, if k.level >= 3 { k.charge } else { 0.0 }];
+    for (i, &fill) in fills.iter().enumerate() {
+        let x = right - (3 - i as i32) * 9 + 2 - if i < 2 { 3 } else { 0 };
         a.fill(x, y, 7, 5, SLATE);
         a.fill(x + 1, y + 1, 5, 3, VOID);
         let w = (fill * 5.0).floor() as i32;

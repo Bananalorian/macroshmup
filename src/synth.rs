@@ -854,6 +854,11 @@ pub enum Id {
     Tick,
     Slam,
     Extend,
+    /// A piece of the kit coming online (a variant for each: the augments, the shield).
+    KitUp,
+    /// The shield breaking, and charging back up.
+    ShieldBreak,
+    ShieldUp,
 }
 
 /// Every sound as (id, wav bytes). Variants share an id.
@@ -899,6 +904,70 @@ pub fn slam(seed: u32) -> Vec<f32> {
     }
     let mut b = reverb(&b, 0.3, 1.1, 0.55);
     normalize(&mut b, 0.8);
+    b
+}
+
+/// A piece of the kit coming online: a quick rising sweep into a held two-note chime,
+/// a step higher for each piece (`level` 1-3), the shield's ringing longest.
+pub fn kit_up(level: u32) -> Vec<f32> {
+    let mut b = buf(0.7);
+    let root = 523.25 * 2f32.powf(level as f32 * 3.0 / 12.0);
+    for (i, s) in b.iter_mut().enumerate() {
+        let t = i as f32 / SR;
+        // the sweep: up an octave in 80 ms
+        if t < 0.08 {
+            let f = root * 0.5 * (1.0 + t / 0.08);
+            *s += sq(f * t, 0.5) * 0.12 * (1.0 - t / 0.08);
+        }
+        for (k, at) in [(1.0f32, 0.07f32), (1.5, 0.12)] {
+            let u = t - at;
+            if u > 0.0 {
+                let ring = if level >= 3 { 4.0 } else { 7.0 };
+                *s += ((TAU * root * k * u).sin() * 0.6 + sq(root * k * u, 0.25) * 0.2) * (-u * ring).exp() * attack(u, 0.004) * 0.35;
+            }
+        }
+    }
+    let mut b = reverb(&b, 0.3, 1.0, 0.5);
+    normalize(&mut b, 0.65);
+    b
+}
+
+/// The shield breaking: a glassy crack (bright noise, a cluster of high pings) over
+/// a soft thud.
+pub fn shield_break(seed: u32) -> Vec<f32> {
+    let mut r = Rng::new(seed);
+    let thud = hit(seed + 1);
+    let mut b = buf(0.5);
+    let pings: Vec<(f32, f32)> = (0..6).map(|_| (r.range(2200.0, 5200.0), r.range(0.0, 0.05))).collect();
+    let mut bp = Bq::default();
+    for (i, s) in b.iter_mut().enumerate() {
+        let t = i as f32 / SR;
+        let crack = bp.bandpass(r.noise(), 3800.0, 1.2) * (-t * 30.0).exp() * 0.8;
+        let mut ring = 0.0;
+        for &(f, at) in &pings {
+            let u = t - at;
+            if u > 0.0 {
+                ring += (TAU * f * u).sin() * (-u * 18.0).exp() * 0.18;
+            }
+        }
+        *s = crack + ring + thud.get(i).copied().unwrap_or(0.0) * 0.6;
+    }
+    let mut b = reverb(&b, 0.25, 0.9, 0.5);
+    normalize(&mut b, 0.8);
+    b
+}
+
+/// The shield back up: a soft shimmer rising into a high note.
+pub fn shield_up() -> Vec<f32> {
+    let mut b = buf(0.6);
+    for (i, s) in b.iter_mut().enumerate() {
+        let t = i as f32 / SR;
+        let f = 660.0 + 660.0 * (t / 0.25).min(1.0);
+        let shimmer = 0.6 + 0.4 * (TAU * 18.0 * t).sin();
+        *s = (TAU * f * t).sin() * shimmer * attack(t, 0.08) * (-(t - 0.25).max(0.0) * 6.0).exp() * 0.4;
+    }
+    let mut b = reverb(&b, 0.35, 1.1, 0.55);
+    normalize(&mut b, 0.5);
     b
 }
 
@@ -973,6 +1042,11 @@ pub fn bank() -> Vec<(Id, Vec<u8>)> {
     v.push((Id::Tick, mono(tally_tick())));
     v.push((Id::Slam, mono(slam(1500))));
     v.push((Id::Extend, mono(extend_jingle())));
+    for level in 1..=3 {
+        v.push((Id::KitUp, mono(kit_up(level))));
+    }
+    v.push((Id::ShieldBreak, mono(shield_break(1600))));
+    v.push((Id::ShieldUp, mono(shield_up())));
     v
 }
 

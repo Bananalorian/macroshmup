@@ -567,6 +567,7 @@ fn hitstop(events: &[Event], bombing: bool) -> u32 {
             Event::PartBreak { .. } | Event::FinBreak { .. } => tune::HITSTOP[2],
             Event::BossBreak { .. } => tune::HITSTOP_BOSS,
             Event::Slam { .. } => tune::HITSTOP_SLAM,
+            Event::ShieldBreak { .. } => tune::HITSTOP_SHIELD,
             _ => 0,
         })
         .max()
@@ -768,6 +769,12 @@ fn effects(w: &World, r: &mut Renderer, s: &Settings, audio: &mut Audio, chains:
             r.parts.trail(p.x + nx as f32, p.y + ny as f32 + 3.0, false);
         }
     }
+    // the augments' jets
+    if flying && w.frame % 4 == 2 {
+        for &(ax, ay) in &w.kit.aug[..w.kit.augments()] {
+            r.parts.trail(ax, ay + 8.0, false);
+        }
+    }
     // the blades lock into the laser form: sparks off the crossbar, a glint at the tip
     if flying && p.locked == 1 {
         r.parts.lock(p.x, p.y + render::ship::BAR as f32, p.y + render::ship::TIP as f32);
@@ -835,6 +842,35 @@ fn effects(w: &World, r: &mut Renderer, s: &Settings, audio: &mut Audio, chains:
                 r.parts.hit(x, y, false);
                 r.fx.aberrate(if s.reduce_flash { 0.6 } else { 1.6 });
             }
+            Event::Kit { level, x, y } => {
+                // a piece of the kit comes online: teal sparks gather where it'll sit,
+                // a ring, a jolt of aberration and its word
+                let (gx, gy) = if level <= 2 {
+                    let (dx, dy) = sim::kit::Kit::post(level as usize - 1, p.blend(&w.tuning));
+                    (x + dx, y + dy)
+                } else {
+                    (x, y)
+                };
+                r.parts.gather(gx, gy, if level >= 3 { 44.0 } else { 24.0 }, 20);
+                r.parts.ring(gx, gy, 2.0, 18, TEAL_C);
+                r.fx.aberrate(if s.reduce_flash { 0.3 } else { 0.8 });
+                r.popups.kit(level, x, y);
+            }
+            Event::ShieldBreak { x, y } => {
+                // the hexagon flies apart, the bullets round you pop, a shock ring
+                r.parts.shield_shatter(x, y, &render::scene::shield_outline());
+                for &(cx, cy) in &w.cancelled {
+                    r.parts.cancel(cx, cy);
+                }
+                r.parts.ring(x, y, 4.0, 16, TEAL_C);
+                r.fx.shock(x, y, 80.0, 2.5, 20);
+                r.fx.surge(if s.reduce_flash { 0.5 } else { 1.4 }, 10);
+            }
+            Event::ShieldUp { x, y } => {
+                r.parts.gather(x, y, 48.0, 28);
+                r.parts.ring(x, y, 3.0, 14, TEAL_C);
+            }
+            Event::AugmentLost { x, y } => r.parts.shatter(x, y, &r.atlas.r.ship.augment_pixels),
             Event::Death { x, y } => {
                 // the sheet's destroy frames: the hull shatters into its own pixels
                 r.parts.shatter(x, y, &r.atlas.r.ship.pixels);
@@ -1132,6 +1168,9 @@ async fn amain() {
                     let focus = focused(held.focus, game.settings.hold_beam, game.hold_t);
                     let bot_flies = game.settings.view.autopilot || game.run == Run::Demo;
                     let mut c = if bot_flies { bot.decide(world) } else { Controls { mv: held.mv, drag, fire: held.fire, focus, bomb, slam } };
+                    if let Some(n) = hooks.kit.filter(|&n| world.kit.level < n && world.alive()) {
+                        world.give_kit(n);
+                    }
                     if let Some(n) = hooks.rush {
                         world.rush = world.rush.max(n);
                     }
@@ -1223,6 +1262,7 @@ async fn amain() {
                     lives: world.lives,
                     bombs: world.bombs,
                     rush: world.rush,
+                    kit: hud::KitView { level: world.kit.level, charge: world.kit.charge() },
                     style: world.stage.as_ref().map(|_| hud::StyleView { rank: world.style.rank(), fill: world.style.fill(), mult: world.style.mult(), since: world.style.since, rose: world.style.rose }),
                     over: *over,
                     pattern: world.hazards.preset,

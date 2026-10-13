@@ -133,6 +133,15 @@ pub fn draw(r: &Renderer, lay: &Layout, w: &World, hitboxes: bool, show_dot: boo
                 let src = a.r.ship.bolt[(s.age / 2 % 4) as usize];
                 a.blit(src, ox + snap(s.x) - 1, oy + snap(ty), 1, Color { a: SHOT_ALPHA, ..Color::new(1.0, 1.0, 1.0, 1.0) });
             }
+            ShotKind::Aug => {
+                let src = a.r.ship.aug_shot[(s.age / 2 % 2) as usize];
+                a.blit(src, ox + snap(s.x) - 1, oy + snap(ty), 1, Color { a: SHOT_ALPHA, ..Color::new(1.0, 1.0, 1.0, 1.0) });
+                // the frame it leaves, a flash on the augment's cap
+                if s.age == 0 {
+                    let m = a.r.ship.muzzle[1];
+                    a.blit(m, ox + snap(s.x) - 2, oy + snap(s.y) - 9 - m.h as i32, 1, Color { a: 0.8, ..Color::new(1.0, 1.0, 1.0, 1.0) });
+                }
+            }
             ShotKind::Pod => {
                 let src = a.r.ship.pod_shot[(s.age / 2 % 2) as usize];
                 let ang = s.vx.atan2(-s.vy);
@@ -179,8 +188,13 @@ pub fn draw(r: &Renderer, lay: &Layout, w: &World, hitboxes: bool, show_dot: boo
         frame: w.frame,
     };
     if shown {
+        // the augments beside it, then the ship, then its shield round both
+        for &(ax, ay) in &w.kit.aug[..w.kit.augments()] {
+            ship::draw_augment(a, ox + snap(ax), oy + snap(ay), w.frame, p.fire_t > 0, p.thrust());
+        }
         ship::draw(a, px, py, &pose);
         draw_shields(a, w, px, py);
+        draw_kit_shield(a, w, px, py);
     }
     if let Some(b) = w.bomb {
         draw_bomb_ring(a, ox, oy, b.x, b.y, b.t.saturating_sub(1), w.frame);
@@ -276,6 +290,51 @@ fn draw_shields(a: &Atlas, w: &World, x: i32, y: i32) {
         }
         _ if w.invuln > 0 => ring(20.0 + (f % 8) as f32 * 0.25, 24, Color { a: 0.3, ..TEAL }, 0.05),
         _ => {}
+    }
+}
+
+/// The kit's shield, round the hitbox: every pixel of a pointy-topped hexagon's
+/// outline, in order round it from the top.
+pub fn shield_outline() -> Vec<(i32, i32)> {
+    let (w, h) = crate::tune::SHIELD_HEX;
+    let v = [(0.0, -h), (w, -h * 0.5), (w, h * 0.5), (0.0, h), (-w, h * 0.5), (-w, -h * 0.5)];
+    let mut out = vec![];
+    for i in 0..6 {
+        let (a, b) = (v[i], v[(i + 1) % 6]);
+        let n = (b.0 - a.0).abs().max((b.1 - a.1).abs()).round() as i32;
+        for k in 0..n {
+            let t = k as f32 / n as f32;
+            out.push(((a.0 + (b.0 - a.0) * t).round() as i32, (a.1 + (b.1 - a.1) * t).round() as i32));
+        }
+    }
+    out
+}
+
+/// The kit's shield: a faint dotted teal hexagon round the ship, a glint running
+/// round it. Broken, it draws itself back round from the top as it recharges.
+fn draw_kit_shield(a: &Atlas, w: &World, x: i32, y: i32) {
+    let k = &w.kit;
+    if k.level < 3 {
+        return;
+    }
+    let pts = shield_outline();
+    let n = pts.len();
+    if k.shield_up() {
+        let glint = (w.frame as usize * 2) % n;
+        for (i, &(dx, dy)) in pts.iter().enumerate().step_by(2) {
+            let behind = (glint + n - i) % n;
+            let alpha = if behind < 8 { 0.7 - behind as f32 * 0.06 } else { 0.2 };
+            a.fill(x + dx, y + dy, 1, 1, Color { a: alpha, ..TEAL });
+        }
+    } else {
+        let upto = (k.charge() * n as f32) as usize;
+        for &(dx, dy) in pts[..upto].iter().step_by(2) {
+            a.fill(x + dx, y + dy, 1, 1, Color { a: 0.18, ..TEAL });
+        }
+        // the end it's drawing, a little brighter
+        if let Some(&(dx, dy)) = pts.get(upto.saturating_sub(1)) {
+            a.fill(x + dx, y + dy, 1, 1, Color { a: 0.5, ..TEAL });
+        }
     }
 }
 

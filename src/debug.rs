@@ -21,6 +21,7 @@
 //!   PG_INVINCIBLE=1                    bullets can't hurt you (as in the pause menu)
 //!   PG_BOMB=<frame>                    press bomb on that frame
 //!   PG_RUSH=<0-3>                      keep the rush gauge at least this full (slam chains)
+//!   PG_KIT=<1-3>                       keep the kit at least this far: 1 the left augment, 2 both, 3 the shield too
 //!   PG_DIE=<frame>                     put a bullet on the ship on that frame
 //!   PG_KILL=<frame>                    break the boss's phase on that screen frame (F6 does it too)
 //!
@@ -125,6 +126,7 @@ pub struct Hooks {
     pub invincible: bool,
     pub bomb_at: Option<u64>,
     pub rush: Option<f32>,
+    pub kit: Option<u8>,
     pub die_at: Option<u64>,
     pub kill_at: Option<u64>,
     #[cfg_attr(target_arch = "wasm32", allow(dead_code))] // the sound dump is native-only
@@ -182,6 +184,7 @@ pub fn hooks() -> Hooks {
         invincible: env("PG_INVINCIBLE").is_some(),
         bomb_at: env("PG_BOMB").and_then(|s| s.trim().parse().ok()),
         rush: env("PG_RUSH").and_then(|s| s.trim().parse().ok()),
+        kit: env("PG_KIT").and_then(|s| s.trim().parse().ok()).filter(|&n: &u8| (1..=3).contains(&n)),
         die_at: env("PG_DIE").and_then(|s| s.trim().parse().ok()),
         kill_at: env("PG_KILL").and_then(|s| s.trim().parse().ok()),
         boom: env("PG_BOOM").and_then(|s| s.trim().parse().ok()).filter(|&n: &usize| n < 4),
@@ -358,6 +361,19 @@ fn stage_report(seeds: u32) {
     println!("STYLE, TIME AT EACH: {}", time.join("  "));
     let peak: Vec<String> = (0..7).map(|k| format!("{} {:.0}%", RANKS[k], pct(runs.iter().filter(|r| r.style_peak == k as u8).count()))).collect();
     println!("STYLE, BEST REACHED: {}", peak.join("  "));
+    // the kit: how often, and how soon, each piece is earned; how often the shield breaks
+    let kit: Vec<String> = ["LEFT AUGMENT", "RIGHT AUGMENT", "SHIELD"]
+        .iter()
+        .enumerate()
+        .map(|(k, name)| {
+            let mut at: Vec<u32> = runs.iter().filter_map(|r| r.kit_at[k]).collect();
+            at.sort_unstable();
+            let med = at.get(at.len() / 2).map_or("-".to_string(), |&f| format!("{}:{:02}", f / 3600, f / 60 % 60));
+            format!("{name} {:.0}% (median {med})", pct(at.len()))
+        })
+        .collect();
+    println!("KIT EARNED: {}", kit.join("  "));
+    println!("SHIELD BROKEN: {:.2} a run", runs.iter().map(|r| r.shield_breaks).sum::<u32>() as f32 / n);
     println!("done in {:.1} s", start.elapsed().as_secs_f32());
 }
 

@@ -240,6 +240,10 @@ pub struct StageRun {
     /// Frames at each style rank (D to SSS), and the best reached.
     pub style_frames: [u64; 7],
     pub style_peak: u8,
+    /// The run's frame each piece of the kit was first earned (the left augment, the
+    /// right, the shield), and how often the shield broke.
+    pub kit_at: [Option<u32>; 3],
+    pub shield_breaks: u32,
 }
 
 /// The bot plays Stage 1 from the top with 3 lives, with or without bombs, shooting
@@ -261,6 +265,11 @@ pub fn stage_trial(seed: u64, bombs: bool, shoot: bool) -> StageRun {
         for e in &w.events {
             match *e {
                 Event::Bomb { .. } => run.bombs += 1,
+                Event::Kit { level, .. } => {
+                    let k = &mut run.kit_at[level as usize - 1];
+                    *k = k.or(Some(w.frame as u32));
+                }
+                Event::ShieldBreak { .. } => run.shield_breaks += 1,
                 // (the run's frame, not the stage clock, which jumps ahead when it dies)
                 Event::Kill { kind: EnemyKind::Hull, .. } => run.hull_kill = hull_at.map(|t0| w.frame as u32 - t0),
                 Event::BossPhase(_) => {

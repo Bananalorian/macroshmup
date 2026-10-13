@@ -12,6 +12,9 @@ pub mod enemy;
 #[cfg(test)]
 mod fairness;
 pub mod geom;
+pub mod kit;
+#[cfg(test)]
+mod kit_tests;
 #[cfg(test)]
 mod lives;
 pub mod pattern;
@@ -115,6 +118,15 @@ pub enum Event {
     Points { x: f32, y: f32, n: u32, how: Award },
     /// The score passed an extend: an extra ship.
     Extend,
+    /// The kit grew to `level` (1 the left augment, 2 the right, 3 the shield), the
+    /// ship at `(x, y)`.
+    Kit { level: u8, x: f32, y: f32 },
+    /// The shield took a hit at `(x, y)` and broke (the bullets round you popped).
+    ShieldBreak { x: f32, y: f32 },
+    /// The shield's recharged, round the ship at `(x, y)`.
+    ShieldUp { x: f32, y: f32 },
+    /// An augment went down with the ship, at `(x, y)`.
+    AugmentLost { x: f32, y: f32 },
 }
 
 /// Something shots can hit: a target dummy, part `p` of enemy `i` (0 is its body), or
@@ -233,6 +245,8 @@ pub struct World {
     pub reticle: Option<(Target, Rect)>,
     /// The style rank (Stage 1 only), and what's dealing damage right now.
     pub style: style::Style,
+    /// The augments and the shield this life has earned by style.
+    pub kit: kit::Kit,
     by: By,
     pub foes: Foes,
     /// Stage 1's script and clock (none in the sandbox).
@@ -280,6 +294,7 @@ impl World {
             slam: None,
             reticle: None,
             style: style::Style::default(),
+            kit: kit::Kit::default(),
             by: By::Shot,
             foes: Foes::new(seed),
             stage: None,
@@ -416,6 +431,9 @@ impl World {
             let y0 = FIELD_H as f32 + 24.0;
             self.player.place(START_X, y0 + (START_Y - y0) * k);
         }
+        // the augments follow the ship, wherever it's going (a slam's dash too)
+        let blend = if dashing { 1.0 } else { self.player.blend(&self.tuning) };
+        self.kit.follow((self.player.x, self.player.y), blend);
         for d in &mut self.dummies {
             d.tick(f);
         }
@@ -461,6 +479,8 @@ impl World {
             self.events.push(Event::Volley { x: p.x, y: p.y });
         }
         p.fire_cd = p.fire_cd.saturating_sub(1);
+        let fire = p.firing || p.beaming;
+        self.kit.fire(fire, &mut self.shots);
 
         self.collide_shots();
         self.fire_beam();
@@ -473,6 +493,9 @@ impl World {
         if self.stage.is_some() {
             let r = self.style.tick();
             self.restyled(r);
+        }
+        if self.kit.tick() {
+            self.events.push(Event::ShieldUp { x: self.player.x, y: self.player.y });
         }
         self.invuln = self.invuln.saturating_sub(1);
         self.dip = self.dip.saturating_sub(1);
@@ -562,7 +585,20 @@ impl World {
     fn restyled(&mut self, r: Option<u8>) {
         if let Some(rank) = r {
             self.events.push(Event::Style { rank, up: self.style.rose });
+            // a new rank can earn this life's kit, a piece at a time
+            if self.style.rose && self.life != Life::GameOver {
+                let (x, y) = (self.player.x, self.player.y);
+                for level in self.kit.earn(rank, (x, y)) {
+                    self.events.push(Event::Kit { level, x, y });
+                }
+            }
         }
+    }
+
+    /// Start with the kit up to `level` (PG_KIT, for captures and trying it out).
+    pub fn give_kit(&mut self, level: u8) {
+        let at = (self.player.x, self.player.y);
+        self.kit.earn(KIT_RANKS[(level.clamp(1, 3) - 1) as usize], at);
     }
 
     /// Cancelled bullets turned into shards that fly to you.
@@ -673,6 +709,11 @@ impl World {
         }
         self.lives = self.lives.saturating_sub(1);
         self.life = Life::Dead { t: 0 };
+        // the kit goes down with the ship: the next life earns it again
+        for &(x, y) in &self.kit.aug[..self.kit.augments()] {
+            self.events.push(Event::AugmentLost { x, y });
+        }
+        self.kit = kit::Kit::default();
         let r = self.style.reset();
         self.restyled(r);
         self.beam = None;
@@ -971,7 +1012,9 @@ impl World {
             hit |= self.foes.list.iter().any(|e| e.alive() && !e.kind.scenery() && e.body().dist(px, py) < HITBOX_R);
             hit |= self.boss.as_ref().is_some_and(|b| b.crashes(px, py, HITBOX_R) || b.laser.is_some_and(|l| l.touches(px, py, HITBOX_R)));
         }
-        if hit {
+        if hit && self.kit.shield_up() {
+            self.shield_break(px, py);
+        } else if hit {
             // struck: the deathbomb window opens
             self.hits += 1;
             self.life = Life::Struck { left: DEATHBOMB };
@@ -980,6 +1023,21 @@ impl World {
             self.player.hit_t = BUMP_FLASH;
             self.events.push(Event::Struck { x: px, y: py });
         }
+    }
+
+    /// The shield took the hit instead of you: it breaks, the bullets round you pop,
+    /// you blink untouchable a moment (the hull doesn't flash red: you weren't hit),
+    /// and the style rank drops one (not two).
+    fn shield_break(&mut self, x: f32, y: f32) {
+        self.kit.break_shield();
+        let mut out = std::mem::take(&mut self.cancelled);
+        self.hazards.cancel_within(x, y, SHIELD_CANCEL_R, &mut out);
+        self.cancelled = out;
+        self.invuln = self.invuln.max(SHIELD_INVULN);
+        self.invuln_blink = true;
+        let r = self.style.drop(1);
+        self.restyled(r);
+        self.events.push(Event::ShieldBreak { x, y });
     }
 
     fn refill_shots(&mut self) {
@@ -1071,6 +1129,7 @@ mod tests {
         w.debug_strike();
         w.tick(Controls::default());
         assert!(w.events.contains(&Event::Style { rank: 2, up: false }), "struck: S to B");
+        assert_eq!(w.style.rank(), 2, "and it stays B: the frame's drain doesn't tip it into C");
         let mut sandbox = World::new(1, Tuning::default());
         sandbox.stylish(style::Move::Kill, 500.0);
         assert_eq!(sandbox.style.points, 0.0, "the sandbox keeps no style");

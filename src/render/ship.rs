@@ -75,6 +75,13 @@ const POD: [&str; 13] = [
     "..o2o..", ".o343o.", "o34443o", "o3vnv3o", "o3vvv3o", "s3vnv3s", "o3vvv3o", "o3vnv3o", "o34443o", "o33k33o", "o34443o", ".o343o.", "..o2o..",
 ];
 
+/// An augment (Sprint 12): an engine pod like the ship's own, after the atlas's pods,
+/// 9 wide around its center: a red beacon on its cap (`b`), a dark window down its
+/// middle (`v`) where teal dashes run (`n`), and a nozzle underneath.
+const AUGMENT: [&str; 13] = [
+    "..ooooo..", ".o34b43o.", "o3444433o", "o34vvv32o", "o34vnv32o", "o34vvv32o", "o34vnv32o", "o34vvv32o", "o34vnv32o", "o3444322o", ".o33322o.", "..o222o..", "...ooo...",
+];
+
 /// A pixel of a part: `(x, y, letter)`. The letters: `o` outline, `0`-`4` bone dark
 /// to light, `c` channel core, `v` dark window, and the lights `h` heart, `b`
 /// beacon, `k` keel, `s` strobe, `n` window.
@@ -359,6 +366,12 @@ pub struct ShipArt {
     pub bolt: [Rect; 4],
     pub pod_shot: [Rect; 2],
     pub dot: Rect,
+    /// An augment, its lights (from its center), every pixel of it lit (what it
+    /// shatters into), and its bolt (2 frames).
+    pub augment: Rect,
+    pub augment_lights: Vec<Light>,
+    pub augment_pixels: Vec<(i8, i8, Color)>,
+    pub aug_shot: [Rect; 2],
     /// Every pixel of the ship in its flight form, lights lit, relative to the
     /// hitbox: the death shatters it into exactly these.
     pub pixels: Vec<(i8, i8, Color)>,
@@ -374,7 +387,8 @@ impl ShipArt {
     #[cfg(test)]
     pub fn rects(&self) -> Vec<Rect> {
         let mut v: Vec<Rect> = self.frames.iter().flatten().flat_map(|f| [f.r, f.sil]).collect();
-        v.push(self.dot);
+        v.extend([self.dot, self.augment]);
+        v.extend(self.aug_shot);
         for set in [&self.flame_idle, &self.flame_thrust, &self.jet_idle, &self.jet_thrust, &self.muzzle, &self.bolt] {
             v.extend(set);
         }
@@ -424,6 +438,12 @@ const BOLT: [&[&str]; 4] = [
     &[".R.", "RCR", "RCR", "RRR", "RRR", ".R.", ".R.", ".R.", ".R.", ".R.", ".r.", "...", ".r.", "...", "...", ".r.", "...", "..."],
     &[".R.", "RCR", "RCR", "RCR", "RRR", "RRR", ".R.", ".R.", ".R.", ".r.", ".r.", "...", "...", ".r.", "...", "...", "...", ".r."],
 ];
+/// An augment's bolt: like the ship's, slimmer and shorter: a hot head, a solid
+/// shaft, a dotted tail.
+const AUG_SHOT: [&[&str]; 2] = [
+    &[".R.", "RCR", "RCR", "RRR", ".R.", ".R.", ".R.", ".R.", ".r.", ".r.", "...", ".r.", "...", ".r."],
+    &[".R.", "RCR", "RCR", "RRR", ".R.", ".R.", ".R.", ".r.", ".r.", ".r.", "...", "...", ".r.", "..."],
+];
 /// The thinner pod shot.
 const POD_SHOT: [&[&str]; 2] = [
     &["R.", "CR", "RR", "R.", "R.", "R.", "r.", "r.", "r.", "..", "r.", "..", "..", "r."],
@@ -469,6 +489,8 @@ fn frame_image(form: usize, bank: i8) -> (Image, Vec<Light>, [(i32, i32); 3], [(
 }
 
 pub fn build(p: &mut Packer) -> ShipArt {
+    let (aug_img, aug_lights, aug_pixels) = part(&AUGMENT);
+    let aug = p.add(&aug_img);
     let frames = (0..FORMS)
         .map(|form| {
             (0..BANKS)
@@ -492,6 +514,64 @@ pub fn build(p: &mut Packer) -> ShipArt {
         pod_shot: POD_SHOT.map(|g| small(p, g)),
         dot: small(p, &DOT),
         pixels: ship_pixels(),
+        augment: aug,
+        augment_lights: aug_lights,
+        augment_pixels: aug_pixels,
+        aug_shot: AUG_SHOT.map(|g| small(p, g)),
+    }
+}
+
+/// A part drawn in the ship's letters, centered: its image (lights unlit), its
+/// lights from the center, and every pixel lit.
+fn part(rows: &[&str]) -> (Image, Vec<Light>, Vec<(i8, i8, Color)>) {
+    let (w, h) = (rows[0].len() as i32, rows.len() as i32);
+    let (cx, cy) = (w / 2, h / 2);
+    let mut img = Image::gen_image_color(w as u16, h as u16, Color::new(0.0, 0.0, 0.0, 0.0));
+    let (mut lights, mut pixels) = (vec![], vec![]);
+    for (y, row) in rows.iter().enumerate() {
+        for (x, ch) in row.chars().enumerate() {
+            let col = match ch {
+                'o' => OUTLINE,
+                d @ '0'..='4' => BONE[d as usize - '0' as usize],
+                'c' | 'v' | 'n' => VOIDISH,
+                'h' | 'b' | 'k' | 's' => RED_DIM,
+                _ => continue,
+            };
+            img.set_pixel(x as u32, y as u32, col);
+            let (dx, dy) = (x as i32 - cx, y as i32 - cy);
+            let glow = match ch {
+                'n' => Some(Glow::Window),
+                'b' => Some(Glow::Beacon),
+                _ => None,
+            };
+            if let Some(glow) = glow {
+                lights.push(Light { dx, dy, glow });
+            }
+            pixels.push((dx as i8, dy as i8, glow.map_or(col, lit)));
+        }
+    }
+    (img, lights, pixels)
+}
+
+/// Draw an augment centered on whole pixel `(x, y)`: its jet underneath, its beacon
+/// blinking, teal dashes running up its window (faster while it fires).
+pub fn draw_augment(a: &Atlas, x: i32, y: i32, frame: u64, firing: bool, thrust: bool) {
+    let art = &a.r.ship;
+    let r = art.augment;
+    let (ox, oy) = (x - (r.w as i32) / 2, y - (r.h as i32) / 2);
+    let jet = if thrust { art.jet_thrust[(frame / 3 % 4) as usize] } else { art.jet_idle[(frame / 4 % 4) as usize] };
+    a.blit(jet, x - 1, oy + r.h as i32, 1, WHITE);
+    a.blit(r, ox, oy, 1, WHITE);
+    let speed = if firing { 2 } else { 5 };
+    for l in &art.augment_lights {
+        let on = match l.glow {
+            Glow::Beacon => frame % 40 < 20,
+            _ => (l.dy + (frame / speed) as i32).rem_euclid(4) < 2,
+        };
+        if on {
+            let c = if l.glow == Glow::Beacon { SIGNAL } else if firing { TEAL_HOT } else { TEAL };
+            a.fill(x + l.dx, y + l.dy, 1, 1, c);
+        }
     }
 }
 

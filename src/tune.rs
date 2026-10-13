@@ -270,6 +270,35 @@ pub const STYLE_BLANK: f32 = 20.0;
 pub const STYLE_SLAM: (f32, f32) = (34.0, 17.0);
 pub const STYLE_GRAZE: f32 = 5.0;
 pub const STYLE_BREAK: f32 = 70.0;
+/// Dropped ranks (a hit, a bomb, the shield breaking), the meter lands this far into
+/// the rank it lands on.
+pub const STYLE_LAND: f32 = 10.0;
+
+/// The kit (Sprint 12), earned by style (Jason's call): the rank a life must first
+/// reach for the left augment, the right one and the shield (B, A, S). A life keeps
+/// what it earns until it's lost.
+pub const KIT_RANKS: [u8; 3] = [2, 3, 4];
+/// The augments, engine pods at the ship's sides: where each sits from the hitbox
+/// (px; the left one mirrors it) spread for the wide shot and tucked in for the beam;
+/// how much of the way there it closes each frame (they trail the ship a little,
+/// though the ship never drifts); a bolt every so many frames while you fire, its
+/// speed (px a frame), length, width and damage.
+pub const AUG_WIDE: (f32, f32) = (24.0, 6.0);
+pub const AUG_FOCUS: (f32, f32) = (15.0, 2.0);
+pub const AUG_FOLLOW: f32 = 0.35;
+pub const AUG_FIRE: u32 = 6;
+pub const AUG_SPEED: f32 = 13.0;
+pub const AUG_LEN: f32 = 14.0;
+pub const AUG_HIT_W: f32 = 6.0;
+pub const AUG_DMG: f32 = 2.0;
+/// The shield: frames to recharge once it breaks, how close a bullet must be to pop
+/// when it does (px), frames you blink untouchable after, and the hit-stop as it goes.
+pub const SHIELD_RECHARGE: u32 = 20 * 60;
+pub const SHIELD_CANCEL_R: f32 = 40.0;
+pub const SHIELD_INVULN: u32 = 90;
+pub const HITSTOP_SHIELD: u32 = 6;
+/// How it shows: a hexagon round the ship this wide and tall from the hitbox (px).
+pub const SHIELD_HEX: (f32, f32) = (22.0, 30.0);
 
 /// Hit-stop on a slam's strike (frames): a brief pause on each hit of a chain.
 pub const HITSTOP_SLAM: u32 = 8;
@@ -860,6 +889,8 @@ pub const VOL_CRUNCH: f32 = 0.45;
 pub const VOL_DASH: f32 = 0.5;
 /// A new style rank's stinger.
 pub const VOL_STYLE: f32 = 0.4;
+pub const VOL_KIT: f32 = 0.5;
+pub const VOL_SHIELD: f32 = 0.6;
 pub const CRUNCH_BY_SIZE: [f32; 4] = [0.7, 0.85, 1.0, 1.0];
 pub const VOL_SWALLOWED: f32 = 0.7;
 /// The score: the tally's ticks, a grade's or the rank's slam, an extend.

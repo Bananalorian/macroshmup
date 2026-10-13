@@ -93,9 +93,10 @@ impl Style {
         out
     }
 
-    /// Down `n` ranks, to the bottom of the one it lands on.
+    /// Down `n` ranks, to just above the bottom of the one it lands on (right at the
+    /// bottom, the same frame's drain would tip it into the rank below).
     pub fn drop(&mut self, n: u8) -> Option<u8> {
-        self.set(self.rank().saturating_sub(n) as f32 * 100.0)
+        self.set(self.rank().saturating_sub(n) as f32 * 100.0 + STYLE_LAND)
     }
 
     /// Back to D (a death).

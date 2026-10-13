@@ -38,6 +38,10 @@ the font and every sound are built when the game starts. Written in Rust on
 
 ![The Swarm: chevrons warn of a school at the left edge, the remoras swim in, a lancer's red aim line on the Pilgrim, scenery in the breather, the overrun](docs/screenshots/swarm.png)
 
+![The kit coming online in a run: AUGMENT 1 OF 2, AUGMENT 2 OF 2, SHIELD ONLINE, then the ship with both augments and its shield](docs/screenshots/kit.png)
+
+![The shield takes a hit: the hexagon lights up, flies apart into teal shards, the bullets round the ship pop, and it blinks untouchable](docs/screenshots/shield.png)
+
 ![The Slam: the reticle locks on, the sword dashes in and strikes, and chains on to the next target](docs/screenshots/slam-chain.png)
 
 ![The style rank slamming in to S, SAINT, in the right panel, the multiplier at x1.75](docs/screenshots/style.png)
@@ -77,6 +81,11 @@ the font and every sound are built when the game starts. Written in Rust on
 ![Stage 1's enemies in bone white, all built in code](docs/screenshots/enemy-sheet.png)
 
 ## Status
+
+**v0.13, augments & shield:** the ship's kit grows with your style. The first time
+a life reaches B, an augment comes online at the ship's side (an engine pod firing
+with you); A, a second; S, a shield that takes a hit for you and recharges. Lose the
+ship and you lose the kit.
 
 **v0.12, the swarm:** Stage 1 is rebuilt as a swarm rising to an overrun: 432
 enemies, few gunships, fewer bullets. Lancers stop, aim at you and rush; schools of
