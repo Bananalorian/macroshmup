@@ -31,9 +31,33 @@ pub enum EnemyKind {
     Heavy,
     /// The mid-boss: the derelict hull.
     Hull,
+    /// A bone lance: it stops, takes aim at you, and rushes.
+    Lancer,
+    /// A little fish that swims across in a school.
+    Remora,
+    /// Scenery to shoot: drifting debris, a satellite, a monolith.
+    Debris,
+    Satellite,
+    Monolith,
 }
 
 impl EnemyKind {
+    #[cfg(test)]
+    pub const ALL: [EnemyKind; 12] = [
+        EnemyKind::Drone,
+        EnemyKind::Courier,
+        EnemyKind::Usher,
+        EnemyKind::Gunship,
+        EnemyKind::Buoy,
+        EnemyKind::Heavy,
+        EnemyKind::Hull,
+        EnemyKind::Lancer,
+        EnemyKind::Remora,
+        EnemyKind::Debris,
+        EnemyKind::Satellite,
+        EnemyKind::Monolith,
+    ];
+
     /// (hit points, hurtbox width, height)
     pub fn stats(self) -> (f32, f32, f32) {
         match self {
@@ -44,12 +68,23 @@ impl EnemyKind {
             EnemyKind::Buoy => BUOY,
             EnemyKind::Heavy => HEAVY,
             EnemyKind::Hull => HULL,
+            EnemyKind::Lancer => LANCER,
+            EnemyKind::Remora => REMORA,
+            EnemyKind::Debris => DEBRIS,
+            EnemyKind::Satellite => SATELLITE,
+            EnemyKind::Monolith => MONOLITH,
         }
     }
 
     /// Popcorn: low HP, small, many.
     pub fn fodder(self) -> bool {
-        matches!(self, EnemyKind::Drone | EnemyKind::Courier | EnemyKind::Usher)
+        matches!(self, EnemyKind::Drone | EnemyKind::Courier | EnemyKind::Usher | EnemyKind::Lancer | EnemyKind::Remora)
+    }
+
+    /// Scenery: it never fires, it's harmless to touch, and it doesn't count toward
+    /// the stage's kills.
+    pub fn scenery(self) -> bool {
+        matches!(self, EnemyKind::Debris | EnemyKind::Satellite | EnemyKind::Monolith)
     }
 
     /// High-HP enemies arrive one at a time, and their bullets cancel when they die.
@@ -70,6 +105,8 @@ impl EnemyKind {
             (EnemyKind::Buoy, _) => BUOY_SPIRAL,
             (EnemyKind::Heavy, _) => HEAVY_GUNS,
             (EnemyKind::Hull, _) => HULL_GUNS,
+            (EnemyKind::Remora, 1) => REMORA_GUNS,
+            (EnemyKind::Lancer | EnemyKind::Remora | EnemyKind::Debris | EnemyKind::Satellite | EnemyKind::Monolith, _) => &[],
         }
     }
 }
@@ -167,6 +204,9 @@ pub enum Path {
     Hover { from: (f32, f32), at: (f32, f32), enter: u32, stay: u32, sway: f32 },
     /// Sink from `(x, y)` at `vy` px a frame, swaying `sway` px side to side.
     Drift { x: f32, y: f32, vy: f32, sway: f32 },
+    /// Fly in from `from` to `at` over `enter` frames, take aim for `wait`, then rush
+    /// along `dir` (set as it locks on) at `speed` px a frame.
+    Rush { from: (f32, f32), at: (f32, f32), enter: u32, wait: u32, speed: f32, dir: (f32, f32) },
 }
 
 impl Path {
@@ -185,6 +225,25 @@ impl Path {
                 (x, at.1 - LEAVE_ACCEL * gone * gone * 0.5)
             }
             Path::Drift { x, y, vy, sway } => (x + sway * wave(t as f32), y + vy * t as f32),
+            Path::Rush { from, at, enter, wait, speed, dir } => {
+                if t < enter {
+                    let k = 1.0 - (1.0 - t as f32 / enter as f32).powi(2);
+                    (from.0 + (at.0 - from.0) * k, from.1 + (at.1 - from.1) * k)
+                } else if t < enter + wait {
+                    at
+                } else {
+                    let d = speed * (t - enter - wait) as f32;
+                    (at.0 + dir.0 * d, at.1 + dir.1 * d)
+                }
+            }
+        }
+    }
+
+    /// A lancer taking aim: frames into its aim and how long it lasts.
+    pub fn aiming(&self, t: u32) -> Option<(u32, u32)> {
+        match *self {
+            Path::Rush { enter, wait, .. } if t >= enter && t < enter + wait => Some((t - enter, wait)),
+            _ => None,
         }
     }
 
@@ -192,6 +251,7 @@ impl Path {
     pub fn settled(&self, t: u32) -> bool {
         match *self {
             Path::Hover { enter, stay, .. } => t >= enter && t < enter + stay,
+            Path::Rush { enter, .. } => t >= enter,
             _ => true,
         }
     }
@@ -346,6 +406,14 @@ impl Enemy {
 
     fn step(&mut self, hz: &mut Hazards, player: (f32, f32), fire_ok: bool, events: &mut Vec<Event>) {
         self.t += 1;
+        // a lancer locks on: it'll rush at where you are now
+        if let Path::Rush { enter, wait, ref mut dir, .. } = self.path {
+            if self.t == enter + wait {
+                let (dx, dy) = (player.0 - self.x, player.1 - self.y);
+                let d = dx.hypot(dy);
+                *dir = if d < 1.0 { (0.0, 1.0) } else { (dx / d, dy / d) };
+            }
+        }
         let (x, y) = self.path.pos(self.t);
         (self.vx, self.vy) = (x - self.x, y - self.y);
         (self.x, self.y) = (x, y);

@@ -201,7 +201,7 @@ fn bullet_image(size: u16, wobble: bool, f: impl Fn(f32, f32) -> f32, (outline, 
 /// The enemy bullets' sprites, and the guns' turrets.
 pub struct BulletArt {
     /// [hue][kind][wobble frame][turn] (round bullets repeat their one turn).
-    pub frames: [[[[Rect; TURNS]; 2]; 7]; 5],
+    pub frames: [[[[Rect; TURNS]; 2]; 7]; 4],
     /// The spawn bloom, growing over 4 frames.
     pub bloom: [Rect; 4],
     pub turret: Rect,
@@ -210,7 +210,7 @@ pub struct BulletArt {
 fn bullet_art(p: &mut Packer) -> BulletArt {
     use crate::sim::bullets::{Kind, seg_dist};
     use crate::sim::bullets::Hue;
-    let mut frames = [[[[Rect::default(); TURNS]; 2]; 7]; 5];
+    let mut frames = [[[[Rect::default(); TURNS]; 2]; 7]; 4];
     for hue in Hue::ALL {
     let rims = super::palette::hue_rims(hue);
     let frames = &mut frames[hue as usize];

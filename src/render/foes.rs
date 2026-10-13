@@ -4,15 +4,17 @@
 //! them all alike: chunky bevels lit from the top left, regolith speckle and pits.
 //! Red only where it means danger: lights, a gun about to fire, the derelict's
 //! weak points and, once it cracks, its burning seams.
-//! Also the breather's background: drifting debris and the tiny tumbling figure.
+//! Also the breather's background: drifting debris and the tiny tumbling figure; and
+//! the scenery you can shoot (a rock, a dead satellite, a monolith), which has no red
+//! at all: it can't hurt you.
 
 use super::art::{Atlas, Packer, grid_image};
 use super::palette::{SIGNAL, WHITE_A, tone};
 use crate::sim::World;
-use crate::sim::enemy::{Enemy, EnemyKind};
+use crate::sim::enemy::{Enemy, EnemyKind, Path};
 use crate::sim::pattern::Mount;
 use crate::sim::rng::Rng;
-use crate::tune::{CHARGE_FRAMES, HULL_EMERGE, MUZZLE_FRAMES};
+use crate::tune::{CHARGE_FRAMES, HULL_EMERGE, LANCE_LINE, LANCER_TURN, MUZZLE_FRAMES, SIDE_WARNING, WRECK_SPIN};
 use macroquad::prelude::*;
 use std::f32::consts::TAU;
 
@@ -33,6 +35,13 @@ pub struct FoeArt {
     pub buoy: [FoeSprite; 4],
     pub heavy: FoeSprite,
     pub hull: FoeSprite,
+    /// The Swarm's fodder, drawn nose down and turned to face where they're going.
+    pub lancer: FoeSprite,
+    pub remora: FoeSprite,
+    /// Scenery to shoot.
+    pub rock: FoeSprite,
+    pub satellite: FoeSprite,
+    pub monolith: FoeSprite,
     /// The derelict's weak points: the hanging gun pods and the nose gun.
     pub pod: FoeSprite,
     pub nose: FoeSprite,
@@ -49,7 +58,7 @@ impl FoeArt {
     #[cfg(test)]
     pub fn rects(&self) -> Vec<Rect> {
         let mut v = vec![self.socket, self.figure];
-        for s in [&self.drone, &self.courier, &self.usher, &self.gunship, &self.heavy, &self.hull, &self.pod, &self.nose] {
+        for s in [&self.drone, &self.courier, &self.usher, &self.gunship, &self.heavy, &self.hull, &self.pod, &self.nose, &self.lancer, &self.remora, &self.rock, &self.satellite, &self.monolith] {
             v.extend([s.r, s.sil]);
         }
         for b in &self.buoy {
@@ -68,6 +77,11 @@ impl FoeArt {
             EnemyKind::Buoy => &self.buoy[(frame / 8 % 4) as usize],
             EnemyKind::Heavy => &self.heavy,
             EnemyKind::Hull => &self.hull,
+            EnemyKind::Lancer => &self.lancer,
+            EnemyKind::Remora => &self.remora,
+            EnemyKind::Debris => &self.rock,
+            EnemyKind::Satellite => &self.satellite,
+            EnemyKind::Monolith => &self.monolith,
         }
     }
 }
@@ -352,6 +366,73 @@ fn bailiff() -> Image {
     ], 15)
 }
 
+/// The lancer: a bone lance, nose down, broad fins swept back from its shoulders, and
+/// a red eye in a black socket that blazes as it takes aim.
+fn lancer() -> Image {
+    paint(13, 25, &[
+        poly(&[(1.6, -2.0), (6.4, -12.4), (6.4, -4.0), (4.0, 2.0)], PLATE, true),
+        poly(&[(4.4, -3.0), (6.4, -4.0), (4.0, 2.0)], SIDE, true),
+        poly(&[(0.0, -11.4), (1.8, -10.0), (3.4, -4.0), (3.4, 2.0), (2.4, 7.0), (1.0, 10.4), (0.0, 12.4)], PLATE, true),
+        poly(&[(2.0, 3.0), (3.4, 2.0), (2.4, 7.0), (1.0, 10.4), (0.0, 12.4), (0.0, 6.0)], SIDE, true),
+        P::Rect(0.0, -9.0, 0.0, -4.0, SLOT, false),
+        P::Rect(-1.0, -3.0, 1.0, 1.0, SLOT, false),
+        P::Rect(0.0, -2.0, 0.0, 0.0, LIGHT, false),
+    ], 16)
+}
+
+/// The remora: a little bone fish, nose down, a forked tail, the ridged sucker disc on
+/// its head (it rides with sharks) and two red eyes.
+fn remora() -> Image {
+    paint(13, 15, &[
+        poly(&[(0.0, -3.0), (2.0, -4.0), (5.4, -7.4), (5.0, -4.0), (2.6, -1.0)], PLATE, true),
+        poly(&[(0.0, -4.4), (2.4, -3.6), (4.0, -0.4), (4.4, 2.6), (3.4, 5.4), (1.6, 7.0), (0.0, 7.4)], PLATE, true),
+        poly(&[(3.0, 3.0), (4.4, 2.6), (3.4, 5.4), (1.6, 7.0), (0.0, 7.4), (0.0, 5.0)], SIDE, true),
+        P::Rect(-1.0, 0.0, 1.0, 3.0, GRILLE, false),
+        P::Rect(3.0, 4.0, 3.0, 4.0, LIGHT, true),
+    ], 17)
+}
+
+/// Scenery: a chunk of rock, cratered, a seam split across it.
+fn rock() -> Image {
+    paint(19, 15, &[
+        poly(&[(-8.4, -2.0), (-5.0, -6.4), (1.0, -7.4), (6.0, -5.0), (9.4, 0.0), (7.0, 5.4), (1.0, 7.4), (-5.0, 6.0), (-9.4, 2.0)], PLATE, false),
+        poly(&[(9.4, 0.0), (7.0, 5.4), (1.0, 7.4), (-5.0, 6.0), (-2.0, 3.0), (5.0, 1.0)], SIDE, false),
+        P::Disc(-3.0, -2.0, 1.6, CRATER, false),
+        P::Disc(3.0, -3.0, 1.0, CRATER, false),
+        P::Disc(1.0, 4.0, 1.2, CRATER, false),
+        P::Rect(4.0, -1.0, 7.0, -1.0, RECESSED, false),
+    ], 18)
+}
+
+/// Scenery: a dead satellite, its two wings of cells, a dish, no lights.
+fn satellite() -> Image {
+    paint(29, 13, &[
+        P::Rect(5.0, -5.0, 14.0, 5.0, PLATE, true),
+        P::Rect(6.0, -4.0, 13.0, 4.0, GRILLE, true),
+        P::Rect(3.0, -1.0, 5.0, 0.0, SIDE, true),
+        poly(&[(0.0, -6.4), (2.6, -6.4), (3.6, -4.0), (3.6, 4.0), (2.6, 6.4), (0.0, 6.4)], PLATE, true),
+        P::Rect(-3.0, 3.0, 3.0, 5.0, SIDE, false),
+        P::Disc(0.0, -1.0, 2.0, RECESSED, false),
+        P::Disc(0.0, -1.0, 0.8, SLOT, false),
+    ], 19)
+}
+
+/// Scenery: a monolith, a slab with a pointed top, a saint carved into its niche and
+/// bands cut under it.
+fn monolith() -> Image {
+    paint(13, 29, &[
+        poly(&[(0.0, -14.4), (2.4, -13.4), (4.6, -11.0), (6.4, -7.4), (6.4, 14.4), (0.0, 14.4)], PLATE, true),
+        P::Rect(4.0, -7.0, 6.0, 14.0, SIDE, false),
+        poly(&[(0.0, -9.4), (1.4, -8.4), (2.4, -6.0), (2.4, 3.0), (0.0, 3.0)], RECESSED, true),
+        P::Disc(0.0, -5.0, 1.0, PLATE, false),
+        P::Rect(-1.0, -3.0, 1.0, 2.0, PLATE, false),
+        P::Rect(-4.0, 6.0, 4.0, 7.0, GRILLE, false),
+        P::Rect(-4.0, 10.0, 4.0, 11.0, GRILLE, false),
+        P::Disc(-3.0, -4.0, 0.9, CRATER, false),
+        P::Disc(3.0, 12.0, 1.0, CRATER, false),
+    ], 20)
+}
+
 /// The heavy (after NOTARY): two tall towers, windows dark, guns beneath, bridged by
 /// a block with a red light over its ring launcher.
 fn notary() -> Image {
@@ -575,6 +656,11 @@ pub fn build(p: &mut Packer) -> FoeArt {
         buoy: [0, 1, 2, 3].map(|f| foe(p, &inspector(f), 2)),
         heavy: foe(p, &notary(), 3),
         hull: foe(p, &derelict(), 6),
+        lancer: foe(p, &lancer(), 1),
+        remora: foe(p, &remora(), 1),
+        rock: foe(p, &rock(), 1),
+        satellite: foe(p, &satellite(), 1),
+        monolith: foe(p, &monolith(), 1),
         pod: foe(p, &pod(), 2),
         nose: foe(p, &nose(), 2),
         socket: p.add(&socket),
@@ -612,6 +698,13 @@ fn flash(a: &Atlas, sil: Rect, x: i32, y: i32) {
 pub fn draw(a: &Atlas, w: &World, ox: i32, oy: i32) {
     let art = &a.r.foes;
     let f = w.frame;
+    // scenery underneath everything, turning slowly as it sinks (a monolith stays upright)
+    for e in w.foes.list.iter().filter(|e| e.kind.scenery() && e.alive()) {
+        let spin = WRECK_SPIN[e.kind as usize - EnemyKind::Debris as usize];
+        let way = if e.id % 2 == 0 { 1.0 } else { -1.0 };
+        let ang = if spin > 0.0 { e.t as f32 * spin * way + e.id as f32 } else { 0.0 };
+        turned(a, e, art.sprite(e.kind, f), ox, oy, ang);
+    }
     for kind in [EnemyKind::Hull, EnemyKind::Heavy, EnemyKind::Buoy, EnemyKind::Gunship, EnemyKind::Usher, EnemyKind::Drone, EnemyKind::Courier] {
         for e in w.foes.list.iter().filter(|e| e.kind == kind && e.alive()) {
             let s = art.sprite(kind, f);
@@ -636,6 +729,106 @@ pub fn draw(a: &Atlas, w: &World, ox: i32, oy: i32) {
                 flash(a, s.sil, x, y);
             }
             draw_telegraphs(a, e, ox, oy, f);
+        }
+    }
+    // the Swarm, turned to face where it's going
+    let me = (w.player.x, w.player.y);
+    for e in w.foes.list.iter().filter(|e| matches!(e.kind, EnemyKind::Lancer | EnemyKind::Remora) && e.alive()) {
+        let ang = heading(e, me);
+        if e.kind == EnemyKind::Lancer {
+            aim_line(a, e, me, ox, oy, f);
+        }
+        turned(a, e, art.sprite(e.kind, f), ox, oy, ang);
+        // a lancer taking aim: its eye blazes
+        if let Some((into, wait)) = e.path.aiming(e.t) {
+            let k = into as f32 / wait as f32;
+            let (ex, ey) = (ang.sin(), -ang.cos());
+            let lit = if into + 12 > wait && f % 4 < 2 { 1.0 } else { 0.5 + 0.4 * k };
+            a.fill(ox + snap(e.x + ex) - 1, oy + snap(e.y + ey) - 1, 2, 2, Color { a: lit, ..SIGNAL });
+        }
+        draw_telegraphs(a, e, ox, oy, f);
+    }
+}
+
+/// An enemy drawn turned by `ang` (nose down at 0), with its hit flash.
+fn turned(a: &Atlas, e: &Enemy, s: &FoeSprite, ox: i32, oy: i32, ang: f32) {
+    let (cx, cy) = (ox as f32 + e.x.round(), oy as f32 + e.y.round() - jolt(e) as f32);
+    if ang == 0.0 {
+        let (x, y) = (snap(cx - s.r.w * 0.5), snap(cy - s.r.h * 0.5));
+        a.blit(s.r, x, y, 1, WHITE);
+        if e.parts[0].flash > 0 {
+            flash(a, s.sil, x, y);
+        }
+        return;
+    }
+    a.blit_rot(s.r, cx, cy, ang, WHITE);
+    if e.parts[0].flash > 0 {
+        a.blit_rot(s.sil, cx, cy, ang, Color { a: 0.55, ..SIGNAL });
+    }
+}
+
+/// Which way a lancer or a remora faces (the angle to turn a nose-down sprite): a
+/// lancer flies in nose down, swings round to point at you as it takes aim, and
+/// rushes the way it locked; a remora faces the way it swims.
+pub fn heading(e: &Enemy, me: (f32, f32)) -> f32 {
+    match e.path {
+        Path::Rush { enter, wait, dir, .. } => {
+            if e.t < enter {
+                0.0
+            } else if e.t < enter + wait {
+                let k = ((e.t - enter) as f32 / LANCER_TURN as f32).min(1.0);
+                (-(me.0 - e.x)).atan2(me.1 - e.y) * k
+            } else {
+                (-dir.0).atan2(dir.1)
+            }
+        }
+        _ if e.vx != 0.0 || e.vy != 0.0 => (-e.vx).atan2(e.vy),
+        _ => 0.0,
+    }
+}
+
+/// A lancer taking aim: a red dashed line from its nose toward you, marching your
+/// way and brightening until it locks on.
+fn aim_line(a: &Atlas, e: &Enemy, me: (f32, f32), ox: i32, oy: i32, f: u64) {
+    let Some((into, wait)) = e.path.aiming(e.t) else { return };
+    let (dx, dy) = (me.0 - e.x, me.1 - e.y);
+    let d = dx.hypot(dy).max(1.0);
+    let (ux, uy) = (dx / d, dy / d);
+    let k = into as f32 / wait as f32;
+    let blink = into + 12 > wait && f % 4 < 2;
+    let alpha = if blink { 0.8 } else { 0.2 + 0.4 * k };
+    let mut s = 12.0 + (f % 6) as f32;
+    while s < d.min(LANCE_LINE) {
+        for t in [s, s + 1.0] {
+            a.fill(ox + snap(e.x + ux * t), oy + snap(e.y + uy * t), 1, 1, Color { a: alpha, ..SIGNAL });
+        }
+        s += 6.0;
+    }
+}
+
+/// Warnings at the edges: red chevrons where a school's about to come in from beyond
+/// a side, marching inward faster as it nears (one for each side and height).
+pub fn draw_incoming(a: &Atlas, w: &World, ox: i32, oy: i32) {
+    let Some(stage) = &w.stage else { return };
+    let mut shown: Vec<(bool, i32)> = vec![];
+    for (side, y, left) in stage.incoming(SIDE_WARNING) {
+        let right = side == crate::sim::stage1::Side::Right;
+        let band = (y / 24.0).round() as i32;
+        if shown.contains(&(right, band)) {
+            continue;
+        }
+        shown.push((right, band));
+        let k = 1.0 - left as f32 / SIDE_WARNING as f32;
+        let step = if left < 40 { 3 } else { 6 };
+        let lead = (w.frame / step % 3) as i32;
+        let cy = oy + snap(y);
+        for c in 0..3 {
+            let alpha = if c == lead { 0.45 + 0.45 * k } else { 0.15 + 0.2 * k };
+            for dy in -3i32..=3 {
+                let dx = 3 - dy.abs() + c * 4 + 1;
+                let x = if right { ox + crate::tune::FIELD_W as i32 - 1 - dx } else { ox + dx };
+                a.fill(x, cy + dy, 1, 1, Color { a: alpha, ..SIGNAL });
+            }
         }
     }
 }
@@ -729,6 +922,9 @@ pub fn engines(kind: EnemyKind) -> &'static [(f32, f32)] {
         EnemyKind::Buoy => &[],
         EnemyKind::Heavy => &[(-16.0, -15.0), (16.0, -15.0)],
         EnemyKind::Hull => &[],
+        // they turn, so a lancer's wake is thrown from where it faces (main's effects)
+        EnemyKind::Lancer | EnemyKind::Remora => &[],
+        EnemyKind::Debris | EnemyKind::Satellite | EnemyKind::Monolith => &[],
     }
 }
 

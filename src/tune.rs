@@ -3,7 +3,7 @@
 //! frame, angles in degrees (0 is right, 90 is straight down the screen).
 
 use crate::sim::boss::{Attack, BossGun, Muzzle, attack, bgun, enraged};
-use crate::sim::bullets::{Behavior, Hue, Kind};
+use crate::sim::bullets::{Behavior, Kind};
 use crate::sim::enemy::{Arm, arm};
 use crate::sim::pattern::{Gun, Mount, Preset, Shape};
 
@@ -234,23 +234,22 @@ pub const BLASTS: [Blast; 4] = [
 
 /// The Slam (pad X, key C): frames the dash takes, how far it reaches (px), its damage
 /// (and to the boss), how close a bullet must be to where it strikes to shatter (px),
-/// frames of slowed time to aim the next link (the screen runs at 1/`SLAM_SLOW` speed
-/// meanwhile), links in a chain, how far it bounces back off what it hit (px), and
-/// frames it can't be hurt after a chain.
+/// frames to aim the next link after a strike (time runs on: each strike freezes the
+/// game a moment instead, `HITSTOP_SLAM`), links in a chain, how far it bounces back
+/// off what it hit (px), and frames it can't be hurt after a chain.
 pub const SLAM_DASH: u32 = 7;
 pub const SLAM_REACH: f32 = 170.0;
 pub const SLAM_DMG: f32 = 260.0;
 pub const SLAM_BOSS_DMG: f32 = 400.0;
 pub const SLAM_CANCEL_R: f32 = 36.0;
-pub const SLAM_AIM: u32 = 36;
-pub const SLAM_SLOW: u32 = 4;
+pub const SLAM_AIM: u32 = 60;
 pub const SLAM_LINKS: u32 = 3;
 pub const SLAM_BOUNCE: f32 = 34.0;
 pub const SLAM_INVULN: u32 = 60;
 /// The rush gauge (a segment a link): what each kill fills (drone, courier, usher,
-/// gunship, buoy, heavy, derelict), what each point of damage to the boss fills, and
-/// what you start with.
-pub const RUSH_FILL: [f32; 7] = [0.08, 0.1, 0.12, 0.35, 0.4, 0.8, 1.5];
+/// gunship, buoy, heavy, derelict, lancer, remora, debris, satellite, monolith), what
+/// each point of damage to the boss fills, and what you start with.
+pub const RUSH_FILL: [f32; 12] = [0.08, 0.1, 0.12, 0.35, 0.4, 0.8, 1.5, 0.1, 0.06, 0.15, 0.25, 0.3];
 pub const RUSH_BOSS: f32 = 0.00025;
 pub const RUSH_START: f32 = 1.0;
 /// The style rank (Devil May Cry's, D to SSS, 100 points a rank): what each rank
@@ -263,16 +262,17 @@ pub const STYLE_STALE: f32 = 0.42;
 pub const STYLE_COOL: u32 = 330;
 pub const STYLE_BOSS: (f32, f32) = (130.0, 11.0);
 /// What each move is worth: a kill, by what died (drone, courier, usher, gunship,
-/// buoy, heavy, derelict); point-blank, on top; a slam's strike and each further
-/// link; a graze; a break (a weak point, a fin, a boss phase).
-pub const STYLE_KILL: [f32; 7] = [11.0, 13.0, 16.0, 34.0, 38.0, 78.0, 156.0];
+/// buoy, heavy, derelict, lancer, remora, debris, satellite, monolith); point-blank,
+/// on top; a slam's strike and each further link; a graze; a break (a weak point, a
+/// fin, a boss phase).
+pub const STYLE_KILL: [f32; 12] = [11.0, 13.0, 16.0, 34.0, 38.0, 78.0, 156.0, 34.0, 18.0, 24.0, 34.0, 46.0];
 pub const STYLE_BLANK: f32 = 20.0;
 pub const STYLE_SLAM: (f32, f32) = (34.0, 17.0);
 pub const STYLE_GRAZE: f32 = 5.0;
 pub const STYLE_BREAK: f32 = 70.0;
 
-/// Hit-stop on a slam's strike (frames).
-pub const HITSTOP_SLAM: u32 = 4;
+/// Hit-stop on a slam's strike (frames): a brief pause on each hit of a chain.
+pub const HITSTOP_SLAM: u32 = 8;
 
 /// Hit-stop: frames the game holds still after a kill of each blast size (fodder
 /// never stops the flow), and after a boss phase breaks.
@@ -302,7 +302,7 @@ pub const HOLE_TILT: f32 = 0.18;
 // the NEXT button or the pause menu). Speeds are px per frame.
 
 const fn gun(mount: Mount, shape: Shape, kind: Kind, speed: f32, every: u32, delay: u32, behavior: Behavior) -> Gun {
-    Gun { mount, shape, kind, speed, every, delay, behavior, hue: Hue::Red }
+    Gun { mount, shape, kind, speed, every, delay, behavior }
 }
 const STRAIGHT: Behavior = Behavior::Straight;
 
@@ -311,54 +311,54 @@ pub const SANDBOX: &[Preset] = &[
     Preset {
         name: "AIMED FANS",
         guns: &[
-            gun(Mount::Dummy(1), Shape::Fan { n: 5, spread: 48.0, aimed: true }, Kind::Orb, 2.6, 50, 30, STRAIGHT).hue(Hue::Red),
-            gun(Mount::At(80.0, 40.0), Shape::Fan { n: 3, spread: 24.0, aimed: true }, Kind::Small, 3.2, 70, 60, STRAIGHT).hue(Hue::Amber),
-            gun(Mount::At(280.0, 40.0), Shape::Fan { n: 3, spread: 24.0, aimed: true }, Kind::Small, 3.2, 70, 95, STRAIGHT).hue(Hue::Amber),
+            gun(Mount::Dummy(1), Shape::Fan { n: 5, spread: 48.0, aimed: true }, Kind::Orb, 2.6, 50, 30, STRAIGHT),
+            gun(Mount::At(80.0, 40.0), Shape::Fan { n: 3, spread: 24.0, aimed: true }, Kind::Small, 3.2, 70, 60, STRAIGHT),
+            gun(Mount::At(280.0, 40.0), Shape::Fan { n: 3, spread: 24.0, aimed: true }, Kind::Small, 3.2, 70, 95, STRAIGHT),
         ],
         fill: 0,
     },
     Preset {
         name: "RINGS",
         guns: &[
-            gun(Mount::At(180.0, 56.0), Shape::Ring { n: 20, turn: 9.0 }, Kind::Small, 1.8, 36, 20, STRAIGHT).hue(Hue::Teal),
-            gun(Mount::At(88.0, 70.0), Shape::Ring { n: 14, turn: -6.0 }, Kind::Orb, 1.5, 60, 38, STRAIGHT).hue(Hue::Blue),
-            gun(Mount::At(272.0, 70.0), Shape::Ring { n: 14, turn: 6.0 }, Kind::Orb, 1.5, 60, 68, STRAIGHT).hue(Hue::Blue),
+            gun(Mount::At(180.0, 56.0), Shape::Ring { n: 20, turn: 9.0 }, Kind::Small, 1.8, 36, 20, STRAIGHT),
+            gun(Mount::At(88.0, 70.0), Shape::Ring { n: 14, turn: -6.0 }, Kind::Orb, 1.5, 60, 38, STRAIGHT),
+            gun(Mount::At(272.0, 70.0), Shape::Ring { n: 14, turn: 6.0 }, Kind::Orb, 1.5, 60, 68, STRAIGHT),
         ],
         fill: 0,
     },
     Preset {
         name: "SPIRAL",
-        guns: &[gun(Mount::At(180.0, 70.0), Shape::Spiral { arms: 3, spin: 11.0, flip: 40 }, Kind::Rice, 2.2, 5, 20, STRAIGHT).hue(Hue::Violet)],
+        guns: &[gun(Mount::At(180.0, 70.0), Shape::Spiral { arms: 3, spin: 11.0, flip: 40 }, Kind::Rice, 2.2, 5, 20, STRAIGHT)],
         fill: 0,
     },
     Preset {
         name: "STREAMS",
         guns: &[
-            gun(Mount::At(107.0, 46.0), Shape::Stream { burst: 8, gap: 4 }, Kind::Needle, 4.5, 75, 20, STRAIGHT).hue(Hue::Red),
-            gun(Mount::At(253.0, 46.0), Shape::Stream { burst: 8, gap: 4 }, Kind::Needle, 4.5, 75, 57, STRAIGHT).hue(Hue::Red),
+            gun(Mount::At(107.0, 46.0), Shape::Stream { burst: 8, gap: 4 }, Kind::Needle, 4.5, 75, 20, STRAIGHT),
+            gun(Mount::At(253.0, 46.0), Shape::Stream { burst: 8, gap: 4 }, Kind::Needle, 4.5, 75, 57, STRAIGHT),
         ],
         fill: 0,
     },
     Preset {
         name: "RANDOM CONE",
-        guns: &[gun(Mount::Sweep { y: 40.0, x0: 93.0, x1: 267.0, period: 360 }, Shape::Cone { n: 3, spread: 70.0, jitter: 0.25 }, Kind::Small, 2.4, 6, 20, STRAIGHT).hue(Hue::Amber)],
+        guns: &[gun(Mount::Sweep { y: 40.0, x0: 93.0, x1: 267.0, period: 360 }, Shape::Cone { n: 3, spread: 70.0, jitter: 0.25 }, Kind::Small, 2.4, 6, 20, STRAIGHT)],
         fill: 0,
     },
     Preset {
         name: "ACCELERATE",
-        guns: &[gun(Mount::At(180.0, 70.0), Shape::Ring { n: 16, turn: 7.0 }, Kind::Orb, 0.6, 45, 20, Behavior::Accel { accel: 0.05, max: 3.6 }).hue(Hue::Blue)],
+        guns: &[gun(Mount::At(180.0, 70.0), Shape::Ring { n: 16, turn: 7.0 }, Kind::Orb, 0.6, 45, 20, Behavior::Accel { accel: 0.05, max: 3.6 })],
         fill: 0,
     },
     Preset {
         name: "SLOW, PAUSE, AIM",
-        guns: &[gun(Mount::At(180.0, 80.0), Shape::Ring { n: 12, turn: 15.0 }, Kind::Orb, 3.0, 70, 20, Behavior::SlowAim { slow: 30, pause: 20, speed: 3.2 }).hue(Hue::Violet)],
+        guns: &[gun(Mount::At(180.0, 80.0), Shape::Ring { n: 12, turn: 15.0 }, Kind::Orb, 3.0, 70, 20, Behavior::SlowAim { slow: 30, pause: 20, speed: 3.2 })],
         fill: 0,
     },
     Preset {
         name: "CURVE",
         guns: &[
-            gun(Mount::At(180.0, 56.0), Shape::Fan { n: 5, spread: 100.0, aimed: false }, Kind::Rice, 2.0, 24, 20, Behavior::Curve { turn: 0.7, frames: 120 }).hue(Hue::Teal),
-            gun(Mount::At(180.0, 56.0), Shape::Fan { n: 5, spread: 100.0, aimed: false }, Kind::Rice, 2.0, 24, 32, Behavior::Curve { turn: -0.7, frames: 120 }).hue(Hue::Teal),
+            gun(Mount::At(180.0, 56.0), Shape::Fan { n: 5, spread: 100.0, aimed: false }, Kind::Rice, 2.0, 24, 20, Behavior::Curve { turn: 0.7, frames: 120 }),
+            gun(Mount::At(180.0, 56.0), Shape::Fan { n: 5, spread: 100.0, aimed: false }, Kind::Rice, 2.0, 24, 32, Behavior::Curve { turn: -0.7, frames: 120 }),
         ],
         fill: 0,
     },
@@ -373,22 +373,22 @@ pub const SANDBOX: &[Preset] = &[
             20,
             Behavior::Split { at: 70, n: 10, kind: Kind::Small, speed: 2.0 },
         )
-        .hue(Hue::Amber)],
+        ],
         fill: 0,
     },
     Preset {
         name: "PULL",
         guns: &[
-            gun(Mount::At(53.0, 60.0), Shape::Ring { n: 10, turn: 13.0 }, Kind::Small, 2.2, 30, 20, Behavior::Pull { x: 180.0, y: 120.0, pull: 0.035, max: 3.0 }).hue(Hue::Violet),
-            gun(Mount::At(307.0, 60.0), Shape::Ring { n: 10, turn: -13.0 }, Kind::Small, 2.2, 30, 35, Behavior::Pull { x: 180.0, y: 120.0, pull: 0.035, max: 3.0 }).hue(Hue::Violet),
+            gun(Mount::At(53.0, 60.0), Shape::Ring { n: 10, turn: 13.0 }, Kind::Small, 2.2, 30, 20, Behavior::Pull { x: 180.0, y: 120.0, pull: 0.035, max: 3.0 }),
+            gun(Mount::At(307.0, 60.0), Shape::Ring { n: 10, turn: -13.0 }, Kind::Small, 2.2, 30, 35, Behavior::Pull { x: 180.0, y: 120.0, pull: 0.035, max: 3.0 }),
         ],
         fill: 0,
     },
     Preset {
         name: "LAYERED",
         guns: &[
-            gun(Mount::At(180.0, 56.0), Shape::Ring { n: 18, turn: 10.0 }, Kind::Small, 1.6, 40, 20, STRAIGHT).hue(Hue::Teal),
-            gun(Mount::Dummy(1), Shape::Fan { n: 3, spread: 20.0, aimed: true }, Kind::Orb, 3.0, 30, 40, STRAIGHT).hue(Hue::Red),
+            gun(Mount::At(180.0, 56.0), Shape::Ring { n: 18, turn: 10.0 }, Kind::Small, 1.6, 40, 20, STRAIGHT),
+            gun(Mount::Dummy(1), Shape::Fan { n: 3, spread: 20.0, aimed: true }, Kind::Orb, 3.0, 30, 40, STRAIGHT),
         ],
         fill: 0,
     },
@@ -457,6 +457,15 @@ pub const USHER: (f32, f32, f32) = (16.0, 22.0, 18.0);
 pub const GUNSHIP: (f32, f32, f32) = (140.0, 30.0, 24.0);
 pub const BUOY: (f32, f32, f32) = (220.0, 24.0, 24.0);
 pub const HEAVY: (f32, f32, f32) = (1100.0, 48.0, 34.0);
+/// The Swarm's fodder (v0.12.0): the lancer (a bone lance that stops, points itself at
+/// you and rushes) and the remora (a little fish that swims across in a school).
+pub const LANCER: (f32, f32, f32) = (5.0, 10.0, 18.0);
+pub const REMORA: (f32, f32, f32) = (2.0, 11.0, 9.0);
+/// The scenery you can shoot (it doesn't shoot back, and it's harmless to touch):
+/// drifting debris, a satellite, a monolith.
+pub const DEBRIS: (f32, f32, f32) = (30.0, 18.0, 14.0);
+pub const SATELLITE: (f32, f32, f32) = (60.0, 28.0, 12.0);
+pub const MONOLITH: (f32, f32, f32) = (90.0, 12.0, 28.0);
 /// The derelict: the hull (the spire, the shoulders and the iris eye at its heart),
 /// and its three weak points.
 pub const HULL: (f32, f32, f32) = (2400.0, 112.0, 70.0);
@@ -476,6 +485,26 @@ pub const USHER_ENTER: u32 = 35;
 pub const USHER_STAY: u32 = 70;
 pub const GUNSHIP_STAY: u32 = 240;
 pub const BUOY_DRIFT: f32 = 0.38;
+/// A lancer flies in (frames) to its height, takes aim at you (frames: its eye lights
+/// and a red line shows where it's going), locks on, and rushes (px a frame).
+pub const LANCER_RUSH: (u32, u32, f32) = (30, 48, 4.6);
+/// How it shows: it swings round to point at you over this many frames, and its aim
+/// line reaches this far (px).
+pub const LANCER_TURN: u32 = 12;
+pub const LANCE_LINE: f32 = 200.0;
+/// Remoras swim across in a school this fast (px a frame), this far apart (frames);
+/// a school is warned at the edge it comes in from this many frames ahead.
+pub const REMORA_SPEED: f32 = 2.6;
+pub const REMORA_GAP: u32 = 6;
+pub const SIDE_WARNING: u32 = 120;
+/// Scenery sinks this fast (px a frame), swaying this far (px) side to side; shot
+/// down, it breaks into this many shards that fly to you (debris, satellite,
+/// monolith), each worth `SHARD_POINTS`.
+pub const WRECK_DRIFT: f32 = 0.7;
+pub const WRECK_SWAY: f32 = 3.0;
+pub const WRECK_SHARDS: [u32; 3] = [10, 18, 28];
+/// How fast each turns as it sinks (radians a frame; the monolith stays upright).
+pub const WRECK_SPIN: [f32; 3] = [0.012, 0.004, 0.0];
 /// Buoys stop firing below this share of the playfield.
 pub const BUOY_QUIET: f32 = 0.6;
 pub const HEAVY_STAY: u32 = 450;
@@ -500,38 +529,40 @@ pub const HULL_SWAY: f32 = 12.0;
 /// In a firing flight of popcorn, this share fire (the rest are just obstacles).
 pub const DRONE_FIRE_SHARE: f32 = 0.8;
 /// Popcorn: one aimed shot, about half a second in.
-pub const DRONE_GUNS: &[Arm] = &[arm(0, 0, gun(Mount::Owner { dx: 0.0, dy: 6.0 }, Shape::Fan { n: 1, spread: 0.0, aimed: true }, Kind::Small, 2.9, 10_000, 34, STRAIGHT).hue(Hue::Red))];
+/// Remoras in a firing school: one aimed shot each, a little after they come in.
+pub const REMORA_GUNS: &[Arm] = &[arm(0, 0, gun(Mount::Owner { dx: 0.0, dy: 0.0 }, Shape::Fan { n: 1, spread: 0.0, aimed: true }, Kind::Small, 2.7, 10_000, 50, STRAIGHT))];
+pub const DRONE_GUNS: &[Arm] = &[arm(0, 0, gun(Mount::Owner { dx: 0.0, dy: 6.0 }, Shape::Fan { n: 1, spread: 0.0, aimed: true }, Kind::Small, 2.9, 10_000, 34, STRAIGHT))];
 /// Couriers: one fast aimed needle, early.
-pub const COURIER_GUNS: &[Arm] = &[arm(0, 0, gun(Mount::Owner { dx: 0.0, dy: 10.0 }, Shape::Fan { n: 1, spread: 0.0, aimed: true }, Kind::Needle, 3.5, 10_000, 24, STRAIGHT).hue(Hue::Red))];
+pub const COURIER_GUNS: &[Arm] = &[arm(0, 0, gun(Mount::Owner { dx: 0.0, dy: 10.0 }, Shape::Fan { n: 1, spread: 0.0, aimed: true }, Kind::Needle, 3.5, 10_000, 24, STRAIGHT))];
 /// Ushers: an aimed shot from each prong, twice, while they wait.
 pub const USHER_GUNS: &[Arm] = &[
-    arm(0, 0, gun(Mount::Owner { dx: -10.0, dy: 10.0 }, Shape::Fan { n: 1, spread: 0.0, aimed: true }, Kind::Small, 2.7, 34, 40, STRAIGHT).hue(Hue::Violet)),
-    arm(0, 0, gun(Mount::Owner { dx: 10.0, dy: 10.0 }, Shape::Fan { n: 1, spread: 0.0, aimed: true }, Kind::Small, 2.7, 34, 40, STRAIGHT).hue(Hue::Violet)),
+    arm(0, 0, gun(Mount::Owner { dx: -10.0, dy: 10.0 }, Shape::Fan { n: 1, spread: 0.0, aimed: true }, Kind::Small, 2.7, 34, 40, STRAIGHT)),
+    arm(0, 0, gun(Mount::Owner { dx: 10.0, dy: 10.0 }, Shape::Fan { n: 1, spread: 0.0, aimed: true }, Kind::Small, 2.7, 34, 40, STRAIGHT)),
 ];
 /// Gunships: aimed 3-way fans, then 5-way, while they hover.
 pub const GUNSHIP_GUNS: &[Arm] = &[
-    arm(0, 0, gun(Mount::Owner { dx: 0.0, dy: 11.0 }, Shape::Fan { n: 3, spread: 24.0, aimed: true }, Kind::Rice, 2.9, 90, 56, STRAIGHT).hue(Hue::Amber)),
-    arm(0, 0, gun(Mount::Owner { dx: 0.0, dy: 11.0 }, Shape::Fan { n: 5, spread: 48.0, aimed: true }, Kind::Small, 2.5, 90, 101, STRAIGHT).hue(Hue::Red)),
+    arm(0, 0, gun(Mount::Owner { dx: 0.0, dy: 11.0 }, Shape::Fan { n: 3, spread: 24.0, aimed: true }, Kind::Rice, 2.9, 90, 56, STRAIGHT)),
+    arm(0, 0, gun(Mount::Owner { dx: 0.0, dy: 11.0 }, Shape::Fan { n: 5, spread: 48.0, aimed: true }, Kind::Small, 2.5, 90, 101, STRAIGHT)),
 ];
 /// Buoys: a static ring, or a three-armed spiral.
-pub const BUOY_RING: &[Arm] = &[arm(0, 0, gun(Mount::Owner { dx: 0.0, dy: 0.0 }, Shape::Ring { n: 11, turn: 5.6 }, Kind::Orb, 1.55, 50, 30, STRAIGHT).hue(Hue::Teal))];
-pub const BUOY_SPIRAL: &[Arm] = &[arm(0, 0, gun(Mount::Owner { dx: 0.0, dy: 0.0 }, Shape::Spiral { arms: 3, spin: 13.0, flip: 0 }, Kind::Rice, 1.85, 10, 30, STRAIGHT).hue(Hue::Violet))];
+pub const BUOY_RING: &[Arm] = &[arm(0, 0, gun(Mount::Owner { dx: 0.0, dy: 0.0 }, Shape::Ring { n: 11, turn: 5.6 }, Kind::Orb, 1.55, 50, 30, STRAIGHT))];
+pub const BUOY_SPIRAL: &[Arm] = &[arm(0, 0, gun(Mount::Owner { dx: 0.0, dy: 0.0 }, Shape::Spiral { arms: 3, spin: 13.0, flip: 0 }, Kind::Rice, 1.85, 10, 30, STRAIGHT))];
 /// Heavies: slow rings of big orbs (static) layered with needle bursts from both flanks
 /// (aimed) and a sprinkle of small ones (random).
 pub const HEAVY_GUNS: &[Arm] = &[
-    arm(0, 0, gun(Mount::Owner { dx: 0.0, dy: 6.0 }, Shape::Ring { n: 12, turn: 10.0 }, Kind::Large, 1.35, 64, 56, STRAIGHT).hue(Hue::Blue)),
-    arm(0, 0, gun(Mount::Owner { dx: -16.0, dy: 15.0 }, Shape::Stream { burst: 4, gap: 5 }, Kind::Needle, 3.3, 70, 90, STRAIGHT).hue(Hue::Red)),
-    arm(0, 0, gun(Mount::Owner { dx: 16.0, dy: 15.0 }, Shape::Stream { burst: 4, gap: 5 }, Kind::Needle, 3.3, 70, 90, STRAIGHT).hue(Hue::Red)),
-    arm(0, 0, gun(Mount::Owner { dx: 0.0, dy: 10.0 }, Shape::Cone { n: 3, spread: 90.0, jitter: 0.25 }, Kind::Small, 2.2, 26, 70, STRAIGHT).hue(Hue::Amber)),
+    arm(0, 0, gun(Mount::Owner { dx: 0.0, dy: 6.0 }, Shape::Ring { n: 12, turn: 10.0 }, Kind::Large, 1.35, 64, 56, STRAIGHT)),
+    arm(0, 0, gun(Mount::Owner { dx: -16.0, dy: 15.0 }, Shape::Stream { burst: 4, gap: 5 }, Kind::Needle, 3.3, 70, 90, STRAIGHT)),
+    arm(0, 0, gun(Mount::Owner { dx: 16.0, dy: 15.0 }, Shape::Stream { burst: 4, gap: 5 }, Kind::Needle, 3.3, 70, 90, STRAIGHT)),
+    arm(0, 0, gun(Mount::Owner { dx: 0.0, dy: 10.0 }, Shape::Cone { n: 3, spread: 90.0, jitter: 0.25 }, Kind::Small, 2.2, 26, 70, STRAIGHT)),
 ];
 /// The derelict. First: aimed fans from the hanging gun pods and slow rings from the
 /// nose gun. Cracked: a reversing spiral from the iris and aimed needle bursts.
 pub const HULL_GUNS: &[Arm] = &[
-    arm(1, 0, gun(Mount::Owner { dx: -44.0, dy: 41.0 }, Shape::Fan { n: 5, spread: 36.0, aimed: true }, Kind::Rice, 2.7, 60, 20, STRAIGHT).hue(Hue::Amber)),
-    arm(3, 0, gun(Mount::Owner { dx: 44.0, dy: 41.0 }, Shape::Fan { n: 5, spread: 36.0, aimed: true }, Kind::Rice, 2.7, 60, 50, STRAIGHT).hue(Hue::Amber)),
-    arm(2, 0, gun(Mount::Owner { dx: 0.0, dy: 46.0 }, Shape::Ring { n: 14, turn: 4.5 }, Kind::Orb, 1.55, 64, 40, STRAIGHT).hue(Hue::Teal)),
-    arm(0, 2, gun(Mount::Owner { dx: 0.0, dy: -2.0 }, Shape::Spiral { arms: 5, spin: 8.5, flip: 30 }, Kind::Rice, 1.95, 10, 0, STRAIGHT).hue(Hue::Violet)),
-    arm(0, 2, gun(Mount::Owner { dx: 0.0, dy: 26.0 }, Shape::Stream { burst: 5, gap: 4 }, Kind::Needle, 3.4, 90, 50, STRAIGHT).hue(Hue::Red)),
+    arm(1, 0, gun(Mount::Owner { dx: -44.0, dy: 41.0 }, Shape::Fan { n: 5, spread: 36.0, aimed: true }, Kind::Rice, 2.7, 60, 20, STRAIGHT)),
+    arm(3, 0, gun(Mount::Owner { dx: 44.0, dy: 41.0 }, Shape::Fan { n: 5, spread: 36.0, aimed: true }, Kind::Rice, 2.7, 60, 50, STRAIGHT)),
+    arm(2, 0, gun(Mount::Owner { dx: 0.0, dy: 46.0 }, Shape::Ring { n: 14, turn: 4.5 }, Kind::Orb, 1.55, 64, 40, STRAIGHT)),
+    arm(0, 2, gun(Mount::Owner { dx: 0.0, dy: -2.0 }, Shape::Spiral { arms: 5, spin: 8.5, flip: 30 }, Kind::Rice, 1.95, 10, 0, STRAIGHT)),
+    arm(0, 2, gun(Mount::Owner { dx: 0.0, dy: 26.0 }, Shape::Stream { burst: 5, gap: 4 }, Kind::Needle, 3.4, 90, 50, STRAIGHT)),
 ];
 
 // ------------------------------------------------------------------ the boss: JAWSTHIC
@@ -653,36 +684,36 @@ const HOLE_PULL: Behavior = Behavior::Pull { x: HOLE_X, y: HOLE_Y, pull: 0.006, 
 /// Phase 1, TEETH: aimed 5-way fans of crystal shards from the jaws over slow static
 /// rings from the windows, one window after another: orbs, then slower stars.
 pub const JAWS_P1: &[BossGun] = &[
-    bgun(Muzzle::Mouth, gun(O, Shape::Fan { n: 5, spread: 48.0, aimed: true }, Kind::Diamond, 2.8, 40, 0, STRAIGHT).hue(Hue::Red)),
-    bgun(Muzzle::Window(0), gun(O, Shape::Ring { n: 12, turn: 7.0 }, Kind::Orb, 1.3, 168, 0, STRAIGHT).hue(Hue::Teal)),
-    bgun(Muzzle::Window(1), gun(O, Shape::Ring { n: 12, turn: -7.0 }, Kind::Star, 1.0, 168, 42, STRAIGHT).hue(Hue::Amber)),
-    bgun(Muzzle::Window(2), gun(O, Shape::Ring { n: 12, turn: 7.0 }, Kind::Orb, 1.3, 168, 84, STRAIGHT).hue(Hue::Teal)),
-    bgun(Muzzle::Window(3), gun(O, Shape::Ring { n: 12, turn: -7.0 }, Kind::Star, 1.0, 168, 126, STRAIGHT).hue(Hue::Blue)),
+    bgun(Muzzle::Mouth, gun(O, Shape::Fan { n: 5, spread: 48.0, aimed: true }, Kind::Diamond, 2.8, 40, 0, STRAIGHT)),
+    bgun(Muzzle::Window(0), gun(O, Shape::Ring { n: 12, turn: 7.0 }, Kind::Orb, 1.3, 168, 0, STRAIGHT)),
+    bgun(Muzzle::Window(1), gun(O, Shape::Ring { n: 12, turn: -7.0 }, Kind::Star, 1.0, 168, 42, STRAIGHT)),
+    bgun(Muzzle::Window(2), gun(O, Shape::Ring { n: 12, turn: 7.0 }, Kind::Orb, 1.3, 168, 84, STRAIGHT)),
+    bgun(Muzzle::Window(3), gun(O, Shape::Ring { n: 12, turn: -7.0 }, Kind::Star, 1.0, 168, 126, STRAIGHT)),
 ];
 /// Phase 2, FINS: the pectoral fin and the tail fin spin opposing spirals while the
 /// jaws fire aimed needle bursts. Breaking a fin silences its spiral.
 pub const JAWS_P2: &[BossGun] = &[
-    bgun(Muzzle::Pectoral, gun(O, Shape::Spiral { arms: 3, spin: 7.0, flip: 0 }, Kind::Rice, 1.85, 8, 0, STRAIGHT).hue(Hue::Violet)),
-    bgun(Muzzle::Tail, gun(O, Shape::Spiral { arms: 3, spin: -7.0, flip: 0 }, Kind::Rice, 1.85, 8, 4, STRAIGHT).hue(Hue::Blue)),
-    bgun(Muzzle::Mouth, gun(O, Shape::Stream { burst: 5, gap: 4 }, Kind::Needle, 3.3, 84, 40, STRAIGHT).hue(Hue::Red)),
+    bgun(Muzzle::Pectoral, gun(O, Shape::Spiral { arms: 3, spin: 7.0, flip: 0 }, Kind::Rice, 1.85, 8, 0, STRAIGHT)),
+    bgun(Muzzle::Tail, gun(O, Shape::Spiral { arms: 3, spin: -7.0, flip: 0 }, Kind::Rice, 1.85, 8, 4, STRAIGHT)),
+    bgun(Muzzle::Mouth, gun(O, Shape::Stream { burst: 5, gap: 4 }, Kind::Needle, 3.3, 84, 40, STRAIGHT)),
     // its fins gone, its windows open up: slow rings of stars
-    enraged(Muzzle::Window(0), gun(O, Shape::Ring { n: 14, turn: 9.0 }, Kind::Star, 1.15, 120, 0, STRAIGHT).hue(Hue::Amber)),
-    enraged(Muzzle::Window(3), gun(O, Shape::Ring { n: 14, turn: -9.0 }, Kind::Star, 1.15, 120, 60, STRAIGHT).hue(Hue::Amber)),
+    enraged(Muzzle::Window(0), gun(O, Shape::Ring { n: 14, turn: 9.0 }, Kind::Star, 1.15, 120, 0, STRAIGHT)),
+    enraged(Muzzle::Window(3), gun(O, Shape::Ring { n: 14, turn: -9.0 }, Kind::Star, 1.15, 120, 60, STRAIGHT)),
 ];
 /// Phase 3, GLITCH: a curtain of rice like a corrupted screen, each row slipping
 /// sideways, a lane drifting through it; slow stars sprinkled off the tail; and the
 /// laser sweeps (they pause the curtain).
 pub const JAWS_P3: &[BossGun] = &[
-    bgun(Muzzle::Belly, gun(O, Shape::Curtain { n: 23, spacing: 15.0, gap: 4, period: 22, jitter: 3.0 }, Kind::Rice, 1.5, 26, 0, STRAIGHT).hue(Hue::Teal)),
-    bgun(Muzzle::Tail, gun(O, Shape::Cone { n: 2, spread: 140.0, jitter: 0.3 }, Kind::Star, 1.05, 26, 20, STRAIGHT).hue(Hue::Violet)),
+    bgun(Muzzle::Belly, gun(O, Shape::Curtain { n: 23, spacing: 15.0, gap: 4, period: 22, jitter: 3.0 }, Kind::Rice, 1.5, 26, 0, STRAIGHT)),
+    bgun(Muzzle::Tail, gun(O, Shape::Cone { n: 2, spread: 140.0, jitter: 0.3 }, Kind::Star, 1.05, 26, 20, STRAIGHT)),
 ];
 /// Phase 4, EVENT HORIZON: everything it throws bends toward the black hole: a turning
 /// flower of stars from its jaws, spiral arms off its tail; and aimed needle bursts,
 /// straight.
 pub const JAWS_P4: &[BossGun] = &[
-    bgun(Muzzle::Mouth, gun(O, Shape::Flower { n: 18, petals: 5, turn: 9.0 }, Kind::Star, 2.1, 56, 0, HOLE_PULL).hue(Hue::Amber)),
-    bgun(Muzzle::Tail, gun(O, Shape::Spiral { arms: 2, spin: 11.0, flip: 0 }, Kind::Rice, 1.85, 11, 0, HOLE_PULL).hue(Hue::Violet)),
-    bgun(Muzzle::Mouth, gun(O, Shape::Stream { burst: 4, gap: 5 }, Kind::Needle, 3.5, 72, 30, STRAIGHT).hue(Hue::Red)),
+    bgun(Muzzle::Mouth, gun(O, Shape::Flower { n: 18, petals: 5, turn: 9.0 }, Kind::Star, 2.1, 56, 0, HOLE_PULL)),
+    bgun(Muzzle::Tail, gun(O, Shape::Spiral { arms: 2, spin: 11.0, flip: 0 }, Kind::Rice, 1.85, 11, 0, HOLE_PULL)),
+    bgun(Muzzle::Mouth, gun(O, Shape::Stream { burst: 4, gap: 5 }, Kind::Needle, 3.5, 72, 30, STRAIGHT)),
 ];
 pub const JAWS_GUNS: [&[BossGun]; 4] = [JAWS_P1, JAWS_P2, JAWS_P3, JAWS_P4];
 
@@ -714,7 +745,7 @@ pub const JAWS_ATTACKS: [&[Attack]; 4] = [
 
 /// Points for destroying each kind of enemy: drone, courier, usher, gunship, buoy,
 /// heavy, the derelict.
-pub const KILL_POINTS: [u32; 7] = [500, 750, 1_500, 7_500, 10_000, 40_000, 200_000];
+pub const KILL_POINTS: [u32; 12] = [500, 750, 1_500, 7_500, 10_000, 40_000, 200_000, 1_000, 300, 2_500, 5_000, 8_000];
 /// A kill this close to the Pilgrim (px) scores this many times over (a teal ring flashes).
 pub const POINT_BLANK: (f32, u32) = (48.0, 2);
 /// Each of the derelict's gun pods and its nose gun.

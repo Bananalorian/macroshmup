@@ -1,10 +1,11 @@
 //! Stage 1's checks: the dead zone and the ceasefire, crashing into enemies, heavies
-//! taking their bullets with them, the opening seconds, the timeline, and the bot
-//! clearing the stage.
+//! taking their bullets with them, the Swarm (lancers, remoras, scenery), the opening
+//! seconds, the timeline, and the bot clearing the stage.
 
 use super::bot;
 use super::enemy::{EnemyKind, Path};
 use super::player::Controls;
+use super::score::Award;
 use super::stage1::{self, frames};
 use super::{Event, Life, Target, World};
 use crate::tune::*;
@@ -82,6 +83,104 @@ fn crashing_into_an_enemy_is_a_hit() {
         w.tick(Controls::default());
     }
     assert_eq!(w.hits, 0);
+}
+
+/// A lancer flies in, holds still while it takes aim, locks on to where you are when
+/// its aim runs out, and rushes there in a straight line: dodge after it locks and it
+/// misses. It never fires.
+#[test]
+fn a_lancer_takes_aim_locks_on_and_rushes_where_you_were() {
+    let mut w = empty();
+    w.invincible = true;
+    let (enter, wait, speed) = LANCER_RUSH;
+    w.foes.add(EnemyKind::Lancer, 0, Path::Rush { from: (100.0, -16.0), at: (100.0, 90.0), enter, wait, speed, dir: (0.0, 1.0) });
+    w.player.x = 220.0;
+    for _ in 0..enter + 1 {
+        w.tick(Controls::default());
+    }
+    assert_eq!((w.foes.list[0].x, w.foes.list[0].y), (100.0, 90.0), "in place");
+    for _ in enter + 1..enter + wait - 1 {
+        w.tick(Controls::default());
+        let e = &w.foes.list[0];
+        assert_eq!((e.x, e.y), (100.0, 90.0), "it holds still while it aims");
+        assert!(e.path.aiming(e.t).is_some());
+    }
+    let me = (w.player.x, w.player.y);
+    w.tick(Controls::default());
+    assert!(w.foes.list[0].path.aiming(w.foes.list[0].t).is_none(), "locked on");
+    // you move: it doesn't follow
+    w.player.x = 40.0;
+    for _ in 0..10 {
+        w.tick(Controls::default());
+    }
+    let e = &w.foes.list[0];
+    let (mx, my) = (e.x - 100.0, e.y - 90.0);
+    let (tx, ty) = (me.0 - 100.0, me.1 - 90.0);
+    let cross = (mx * ty - my * tx) / tx.hypot(ty);
+    assert!(cross.abs() < 0.5, "straight at where you were: {mx},{my} vs {tx},{ty}");
+    assert!((mx.hypot(my) - speed * 10.0).abs() < 0.5, "at its speed");
+    assert_eq!(w.hazards.bullets.len(), 0, "it never fires");
+}
+
+/// Scenery is harmless: it never fires and touching it does nothing. Shot down, it
+/// breaks into shards that fly to you, and it isn't counted among the stage's kills;
+/// the slam never picks it.
+#[test]
+fn scenery_is_harmless_and_breaks_into_shards() {
+    for (k, kind) in [EnemyKind::Debris, EnemyKind::Satellite, EnemyKind::Monolith].into_iter().enumerate() {
+        let mut w = empty();
+        let (x, y) = (w.player.x, w.player.y);
+        w.foes.add(kind, 0, parked(x, y - 2.0));
+        for _ in 0..120 {
+            w.tick(Controls::default());
+        }
+        assert_eq!(w.hits, 0, "{kind:?}: touching it is harmless");
+        assert!(matches!(w.life, Life::Alive), "{kind:?}");
+        assert_eq!(w.hazards.bullets.len(), 0, "{kind:?}: it never fires");
+        assert!(w.slam_target((x, y), (0.0, 0.0), None).is_none(), "{kind:?}: nothing worth a slam");
+        let killed = w.stage.as_ref().unwrap().killed;
+        w.events.clear();
+        w.build_boxes();
+        w.hurt(Target::Foe(0, 0), kind.stats().0);
+        assert!(w.events.iter().any(|e| matches!(e, Event::Kill { kind: k, .. } if *k == kind)));
+        let n = WRECK_SHARDS[k];
+        assert!(w.events.iter().any(|e| matches!(e, Event::Points { n: p, how: Award::Shards, .. } if *p == n * SHARD_POINTS)), "{kind:?}: its shards pay");
+        assert!(w.cancel_shards && w.cancelled.len() == n as usize, "{kind:?}: {n} shards fly to you");
+        assert_eq!(w.stage.as_ref().unwrap().killed, killed, "{kind:?}: not counted among the kills");
+    }
+}
+
+/// A school of remoras crosses the screen in the upper half and swims out the far
+/// side; in a firing school, every other one fires a single aimed shot.
+#[test]
+fn a_school_of_remoras_crosses_and_every_other_one_fires_once() {
+    let mut w = empty();
+    w.invincible = true;
+    w.player.x = 30.0;
+    let school: Vec<_> = stage1::arrivals().into_iter().filter(|a| a.kind == EnemyKind::Remora && a.variant == 1).take(1).collect();
+    let first = school[0].frame;
+    let all: Vec<_> = stage1::arrivals().into_iter().filter(|a| a.kind == EnemyKind::Remora && a.frame >= first && a.frame < first + 120).collect();
+    assert!(all.len() >= 8);
+    assert_eq!(all.iter().filter(|a| a.variant == 1).count(), all.len().div_ceil(2), "every other one fires");
+    for a in &all {
+        w.foes.add(a.kind, a.variant, a.path);
+    }
+    let mut owners = std::collections::HashSet::new();
+    for t in 0..400 {
+        w.tick(Controls::default());
+        w.events.clear();
+        let b = &w.hazards.bullets;
+        for i in 0..b.len() {
+            assert_eq!((0..b.len()).filter(|&j| b.owner[j] == b.owner[i]).count(), 1, "one shot each");
+            owners.insert(b.owner[i]);
+        }
+        for e in &w.foes.list {
+            assert!(e.y > 0.0 && e.y < FIELD_H as f32 * 0.5 + 30.0, "frame {t}: in the upper half");
+        }
+    }
+    assert!(w.foes.list.is_empty(), "all swam out the far side");
+    let firing = all.iter().filter(|a| a.variant == 1).count();
+    assert!(!owners.is_empty() && owners.len() <= firing, "{} fired, of {firing} firing remoras", owners.len());
 }
 
 #[test]

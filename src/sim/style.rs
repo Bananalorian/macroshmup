@@ -25,8 +25,9 @@ pub enum Move {
 }
 
 pub const MOVES: usize = 9;
-/// The ranks' letters, D to SSS.
+/// The ranks' letters, D to SSS, and their words (Jason's pick: a gothic pilgrimage).
 pub const RANKS: [&str; 7] = ["D", "C", "B", "A", "S", "SS", "SSS"];
+pub const WORDS: [&str; 7] = ["DAMNED", "CURSED", "BLESSED", "ANOINTED", "SAINT", "SERAPH", "SANCTUS"];
 
 #[derive(Clone, Debug, Default)]
 pub struct Style {

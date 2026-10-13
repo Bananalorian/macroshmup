@@ -96,6 +96,7 @@ pub fn draw(r: &Renderer, lay: &Layout, w: &World, hitboxes: bool, show_dot: boo
         super::jawsthic::draw(r, b, ox, oy, w.frame);
     }
     super::foes::draw(a, w, ox, oy);
+    super::foes::draw_incoming(a, w, ox, oy);
 
     // enemies
     for (i, d) in w.dummies.iter().enumerate() {

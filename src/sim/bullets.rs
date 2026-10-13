@@ -44,20 +44,22 @@ impl Kind {
     }
 }
 
-/// A bullet's color: the hue of its rim. Every bullet keeps a white-hot core and a
-/// black outline whatever its hue, so it reads by value first.
+/// A bullet's color: what you have to do about it (Jason's rule, v0.12.0). Red, it's
+/// aimed at you: keep moving. Blue, it's a fixed shape: read it and route through.
+/// Violet, it spins or bends. Amber, it's a random scatter. (Never teal: teal is the
+/// Pilgrim's.) Every bullet keeps a white-hot core and a black outline whatever its
+/// hue, so it reads by value first.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub enum Hue {
     #[default]
     Red,
-    Teal,
     Violet,
     Amber,
     Blue,
 }
 
 impl Hue {
-    pub const ALL: [Hue; 5] = [Hue::Red, Hue::Teal, Hue::Violet, Hue::Amber, Hue::Blue];
+    pub const ALL: [Hue; 4] = [Hue::Red, Hue::Violet, Hue::Amber, Hue::Blue];
 }
 
 /// How a bullet flies after it's fired.

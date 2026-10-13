@@ -55,7 +55,7 @@ The black hole image uses the same family: disk highlights around `#DFDBD1`, spa
 Its RGB streaks are mostly red, with thin hints of green and blue.
 
 ### Color rules
-- **Enemy bullets** are the only things with a white-hot core, a colored rim and a black outline. Each pattern has its hue (red, teal, violet, amber, blue; Jason, v0.6.4), so layered patterns read as separate families. Red still marks danger everywhere else: telegraphs and enemy lights.
+- **Enemy bullets** are the only things with a white-hot core, a colored rim and a black outline. Each bullet's hue says what to do about it (Jason, v0.12.0): red is aimed at you, blue is a fixed shape (rings, curtains, fans thrown straight), violet spins or bends, amber is a random scatter. Teal is the Pilgrim's alone. Red still marks danger everywhere else: telegraphs and enemy lights.
 - **Teal means you.** Engines, trails, collected shards, graze sparks, the hitbox.
 - The Pilgrim's red bolts stay (they're on your sheet), but they're drawn translucent (60% or less), streaked and without an outline, so they never read as enemy bullets.
 - **The boss** gets red highlights: seams and a core that glow brighter as it charges an attack, so the color doubles as a telegraph.
@@ -611,8 +611,41 @@ Done when
 
 ---
 
-### Sprint 11 — The Swarm · v0.12.0 · *proposal*
+### Sprint 11 — The Swarm · v0.12.0
 **Goal:** lots of fodder, overpowered, then overrun.
+
+From the level-design guide Jason pasted (2026-10-13):
+- Each level has a concept and a signature enemy.
+- Enemies have roles: popcorn (dies in a hit or two, there to be killed), snipers
+  (aimed fire), turrets (fixed patterns that make lanes), tanks (take time to kill).
+- Introduce, iterate, twist: a new enemy comes alone first, then in numbers, then
+  mixed with others or in a new situation.
+- Never bring an enemy in from a side or the bottom without a 2-3 second warning.
+- Show which way things are going (visual directionality).
+- Color-code the bullets by what they do.
+
+Built (v0.12.0):
+- **The lancer**, the signature popcorn: it flies in, stops, swings round to point at
+  you (a red dashed line marks its aim, its eye blazes), locks on and rushes where you
+  were. It never fires; it's a body to dodge or kill first.
+- **Remoras:** little bone fish (they ride with sharks) in schools of 8 to 14, swimming
+  across from beyond the sides in the upper half; in some, every other fish fires one
+  aimed shot. Each school is warned at its edge 2 seconds ahead by red chevrons.
+- **Scenery to shoot:** a rock, a dead satellite and a monolith drift down. Harmless,
+  they break into shards that fly to you; they don't count among the stage's kills,
+  and the Slam never picks them.
+- **The stage, rebuilt:** 432 enemies (it was 294), 14 gunships (it was 31). The lancer
+  comes alone, then in pairs, then three and four at once; the schools start quiet,
+  then fire. The breather fills with scenery; the derelict keeps its section. HEAVIES
+  rises to an overrun: 3.6 fodder a second, then 4.7, then 7.1 in its last 10 seconds.
+- **Bullet colors by what to do** (Jason's pick of three schemes): red aimed at you,
+  blue a fixed shape, violet spinning or bending, amber a random scatter.
+- **The Slam pauses instead of slowing time** (Jason: the slow-mo felt like lag): the
+  aim runs at full speed, and each strike freezes 8 frames.
+- **The style ranks are named** (Jason's pick, a gothic pilgrimage): DAMNED, CURSED,
+  BLESSED, ANOINTED, SAINT, SERAPH, SANCTUS.
+- **The ship's size** stays as it is: v0.10.2's always-on hitbox (Jason's call) answers
+  it. Open if he wants more.
 
 Build
 - **More fodder:** new popcorn types that rush you, swarm and dive, with Stage 1's waves
@@ -623,7 +656,7 @@ Build
 
 Done when
 - `PG_SIM` shows kill counts up, bullets down, and a stage that's fair but crowded by
-  the end.
+  the end. (v0.12.0: kills 265 → 393 a run, bullets 34 → 31 on average, no deaths.)
 
 ---
 

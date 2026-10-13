@@ -1,7 +1,8 @@
 //! The Slam: the Pilgrim closes into the sword and dashes into a target, hits it hard
-//! and shatters the bullets around it. Then time slows: a reticle picks the next
-//! target the way you're steering, and the slam button chains on to it, 3 links in
-//! all. Each link spends a segment of the rush gauge, and kills fill it.
+//! and shatters the bullets around it; the game freezes a moment on each strike.
+//! Then a reticle picks the next target the way you're steering, and the slam button
+//! chains on to it, 3 links in all. Each link spends a segment of the rush gauge, and
+//! kills fill it.
 //!
 //! The ship can't be hurt from the dash's start to a little after the chain's end,
 //! and it bounces back off what it hits, so it's never left inside an enemy.
@@ -16,8 +17,8 @@ pub enum Slam {
     /// Dashing from `from` into `target` (`to` is where it strikes), `t` frames in;
     /// link `link` of the chain.
     Dash { from: (f32, f32), to: (f32, f32), target: Target, t: u32, link: u32 },
-    /// Struck: time slows for `t` frames while you aim the next link (never straight
-    /// back into `last` while there's anything else).
+    /// Struck: `t` frames into aiming the next link (never straight back into `last`
+    /// while there's anything else).
     Aim { t: u32, last: Target, link: u32 },
 }
 
@@ -27,7 +28,8 @@ fn nearest(r: &Rect, x: f32, y: f32) -> (f32, f32) {
 }
 
 impl World {
-    /// Aiming a chain's next link: the screen runs slow.
+    /// Aiming a chain's next link.
+    #[cfg(test)]
     pub fn aiming(&self) -> bool {
         matches!(self.slam, Some(Slam::Aim { .. }))
     }
@@ -49,7 +51,7 @@ impl World {
             let along = if held && d > 1.0 { (dx * ux + dy * uy) / d } else { 1.0 };
             (along > -0.2).then(|| d * (2.0 - along))
         };
-        let worth = |t: &Target| !matches!(*t, Target::Foe(i, _) if self.foes.list[i].kind.fodder());
+        let worth = |t: &Target| !matches!(*t, Target::Foe(i, _) if self.foes.list[i].kind.fodder() || self.foes.list[i].kind.scenery());
         let pick = |skip: Option<Target>| {
             self.boxes
                 .iter()
@@ -229,8 +231,8 @@ mod tests {
         assert_eq!(w.rush, 3.0);
     }
 
-    /// After a strike time slows and the reticle picks the next target the way you
-    /// steer; the slam chains on to it, 3 links at most, then the chain ends.
+    /// After a strike the reticle picks the next target the way you steer; the slam
+    /// chains on to it, 3 links at most, then the chain ends.
     #[test]
     fn it_chains_to_the_target_you_steer_toward() {
         let left = (DummyKind::Big, START_X - 90.0, START_Y - 160.0);
@@ -320,7 +322,9 @@ mod tests {
         w.rush = 0.0;
         w.fill_rush(RUSH_FILL[3]);
         assert!(w.rush > 0.0 && w.rush < 1.0);
-        assert!(RUSH_FILL.windows(2).all(|p| p[1] >= p[0]), "bigger kills fill more");
+        let mut by_hp = crate::sim::enemy::EnemyKind::ALL;
+        by_hp.sort_by(|a, b| a.stats().0.total_cmp(&b.stats().0));
+        assert!(by_hp.windows(2).all(|p| RUSH_FILL[p[1] as usize] >= RUSH_FILL[p[0] as usize]), "bigger kills fill more");
         w.fill_rush(10.0);
         assert_eq!(w.rush, SLAM_LINKS as f32);
     }

@@ -18,7 +18,7 @@ the font and every sound are built when the game starts. Written in Rust on
 | | |
 |---|---|
 | ![Gunships alternate sides, popcorn around them](docs/screenshots/gunships.png) | ![A heavy: rings of big orbs and needle bursts](docs/screenshots/heavies.png) |
-| ![Turret buoys: teal rings and violet spirals among amber fans](docs/screenshots/buoys.png) | |
+| ![Turret buoys: blue rings and violet spirals among red aimed fire; chevrons at the right edge warn of a school](docs/screenshots/buoys.png) | |
 | ![The derelict rises out of the disk, its turrets firing](docs/screenshots/derelict.png) | ![The same in grayscale: bullet cores are the brightest pixels](docs/screenshots/derelict-gray.png) |
 | ![The breather: the disk flares, debris drifts, a tiny figure falls](docs/screenshots/breather.png) | ![WARNING](docs/screenshots/warning.png) |
 | ![The stage-clear tally: JAWSTHIC destroyed](docs/screenshots/stage-end.png) | ![The pattern sandbox](docs/screenshots/sandbox.png) |
@@ -36,9 +36,11 @@ the font and every sound are built when the game starts. Written in Rust on
 
 ![One attack at a time: the jaws wind up, fans fire, a rest, the windows glow red, their rings fire](docs/screenshots/boss-attacks.png)
 
+![The Swarm: chevrons warn of a school at the left edge, the remoras swim in, a lancer's red aim line on the Pilgrim, scenery in the breather, the overrun](docs/screenshots/swarm.png)
+
 ![The Slam: the reticle locks on, the sword dashes in and strikes, and chains on to the next target](docs/screenshots/slam-chain.png)
 
-![The style rank slamming in to S in the right panel, the multiplier at x1.75](docs/screenshots/style.png)
+![The style rank slamming in to S, SAINT, in the right panel, the multiplier at x1.75](docs/screenshots/style.png)
 
 ![Its death: every bullet cancels, blasts walk up from its tail, the screen whites out, then the tally](docs/screenshots/boss-death.png)
 
@@ -75,6 +77,14 @@ the font and every sound are built when the game starts. Written in Rust on
 ![Stage 1's enemies in bone white, all built in code](docs/screenshots/enemy-sheet.png)
 
 ## Status
+
+**v0.12, the swarm:** Stage 1 is rebuilt as a swarm rising to an overrun: 432
+enemies, few gunships, fewer bullets. Lancers stop, aim at you and rush; schools of
+remoras swim in from the sides, warned at the edge first; scenery drifts down to
+shoot for shards. Enemy bullets are colored by what to do about them (red aimed,
+blue a fixed shape, violet spinning or bending, amber scattered). The Slam pauses on
+each strike instead of slowing time, and the style ranks have names, from DAMNED to
+SANCTUS.
 
 **v0.11, style:** a style rank, Devil May Cry's: playing with variety (kills,
 point-blank kills, slams, grazes, the beam, breaks) climbs it from D to SSS while it
@@ -144,7 +154,7 @@ See [SPRINTS.md](SPRINTS.md) for the plan.
 | Fire | Z | A | automatic while you steer |
 | Focus (slow + beam) | Shift | RB or RT | a second finger |
 | Bomb (8 frames after a hit still saves you) | X | B | BOMB button |
-| Slam (dash into a target; again, as time slows, to chain on) | C | X | SLAM button |
+| Slam (dash into a target; press again to chain on to the next) | C | X | SLAM button |
 | Next sandbox pattern (sandbox only) | `]` (`[` goes back) | LB | NEXT button |
 | Pause, sandbox and tuning | Esc | Start | II button |
 | Sound on/off | M | | |

@@ -480,6 +480,12 @@ fn foe_effects(w: &World, r: &mut Renderer) {
             let (x, y) = r.parts.somewhere(e.x, e.y, bw * 0.6, bh * 0.6);
             r.parts.wound(x, y);
         }
+        // a rushing lancer throws a wake of grit behind it
+        if let sim::enemy::Path::Rush { enter, wait, dir, .. } = e.path {
+            if e.t >= enter + wait {
+                r.parts.wake(e.x - dir.0 * 9.0, e.y - dir.1 * 9.0, dir);
+            }
+        }
         if e.path.entering(e.t) && e.kind == EnemyKind::Hull && w.frame % 2 == 0 {
             let (x, y) = r.parts.somewhere(e.x, e.y, bw, bh);
             r.parts.flake(x, y);
@@ -539,8 +545,8 @@ fn boss_effects(w: &World, r: &mut Renderer) {
 /// How big a kill's blast is.
 fn kill_size(kind: EnemyKind) -> Size {
     match kind {
-        EnemyKind::Drone | EnemyKind::Courier | EnemyKind::Usher => Size::Small,
-        EnemyKind::Gunship | EnemyKind::Buoy => Size::Medium,
+        EnemyKind::Drone | EnemyKind::Courier | EnemyKind::Usher | EnemyKind::Lancer | EnemyKind::Remora | EnemyKind::Debris => Size::Small,
+        EnemyKind::Gunship | EnemyKind::Buoy | EnemyKind::Satellite | EnemyKind::Monolith => Size::Medium,
         EnemyKind::Heavy | EnemyKind::Hull => Size::Large,
     }
 }
@@ -1093,12 +1099,6 @@ async fn amain() {
                     if slow_n % 4 != 0 {
                         continue;
                     }
-                } else if world.aiming() {
-                    // aiming a slam's next link: time slows right down
-                    slow_n += 1;
-                    if slow_n % tune::SLAM_SLOW != 0 {
-                        continue;
-                    }
                 } else if world.dip > 0 {
                     dip_skip = !dip_skip;
                     if dip_skip {
@@ -1303,6 +1303,10 @@ mod tests {
         assert_eq!(hitstop(&[kill(EnemyKind::Drone), kill(EnemyKind::Heavy), kill(EnemyKind::Gunship)], false), hitstop(&[kill(EnemyKind::Heavy)], false));
         assert!(hitstop(&[Event::BossBreak { x: 0.0, y: 0.0, timeout: false }], false) >= hitstop(&[kill(EnemyKind::Heavy)], false));
         assert_eq!(hitstop(&[Event::Graze { x: 0.0, y: 0.0 }], false), 0);
+        assert_eq!(hitstop(&[kill(EnemyKind::Lancer), kill(EnemyKind::Remora), kill(EnemyKind::Debris)], false), 0, "the Swarm's fodder never stops it");
+        // a slam strike lands with a short pause; its aim plays at full speed (no stop)
+        assert_eq!(hitstop(&[Event::Slam { x: 0.0, y: 0.0, link: 1 }], false), tune::HITSTOP_SLAM);
+        assert!(tune::HITSTOP_SLAM > 0 && tune::HITSTOP_SLAM <= 8);
         assert!(tune::HITSTOP.iter().chain([&tune::HITSTOP_BOSS]).all(|&f| f <= 8));
         // a bomb's sweep never stops: its ring would freeze on the screen
         assert_eq!(hitstop(&[kill(EnemyKind::Heavy), Event::BossBreak { x: 0.0, y: 0.0, timeout: false }], true), 0);

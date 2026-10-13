@@ -245,6 +245,14 @@ impl Particles {
         self.spawn(Kind::Dot, x, y, a, s, life, Color { a: 0.8, ..ASH }, 0.92);
     }
 
+    /// A lancer's wake as it rushes: grit thrown back behind it, against `dir`.
+    pub fn wake(&mut self, x: f32, y: f32, dir: (f32, f32)) {
+        let a = (-dir.1).atan2(-dir.0) + self.rng.range(-0.3, 0.3);
+        let s = self.rng.range(0.4, 1.2);
+        let life = self.rng.range(8.0, 16.0);
+        self.spawn(Kind::Dot, x, y, a, s, life, Color { a: 0.7, ..ASH }, 0.9);
+    }
+
     /// A flake of metal shed by the derelict as it rises out of the disk.
     pub fn flake(&mut self, x: f32, y: f32) {
         let a = self.rng.range(0.0, std::f32::consts::TAU);

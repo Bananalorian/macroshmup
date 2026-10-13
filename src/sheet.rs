@@ -85,8 +85,9 @@ fn draw_sheet(a: &Atlas) {
     text(a, &crate::render::hud::version_stamp(), 10, SHEET.1 as i32 - 9, 1, 2, SLATE);
 }
 
-/// Stage 1's enemies: every sprite, the derelict whole, cracked and stripped, and the
-/// breather's background extras.
+/// Stage 1's enemies: every sprite, the derelict whole, cracked and stripped, the
+/// Swarm (the lancer nose down and turned to aim, the remora), the scenery you can
+/// shoot, and the breather's background extras.
 fn draw_enemy_sheet(a: &Atlas) {
     use crate::render::palette::WHITE_A;
     let f = &a.r.foes;
@@ -106,6 +107,10 @@ fn draw_enemy_sheet(a: &Atlas) {
     }
     label("HEAVY", 300, 34);
     at(f.heavy.r, 330, 64);
+    label("SWARM", 368, 34);
+    at(f.lancer.r, 376, 62);
+    a.blit_rot(f.lancer.r, 398.0, 62.0, -0.7, WHITE_A);
+    at(f.remora.r, 424, 62);
     label("DERELICT  //  WHOLE, CRACKED, STRIPPED", 10, 90);
     for phase in 0..3 {
         let (cx, cy) = (72 + phase * 138, 156);
@@ -139,6 +144,10 @@ fn draw_enemy_sheet(a: &Atlas) {
     }
     at(f.figure, 300, 270);
     a.blit(f.figure, 318, 259, 2, WHITE_A);
+    label("SCENERY", 350, 232);
+    at(f.rock.r, 362, 270);
+    at(f.satellite.r, 393, 270);
+    at(f.monolith.r, 424, 270);
     a.fill(10, SHEET.1 as i32 - 13, SHEET.0 as i32 - 20, 1, DUSK);
     text(a, &crate::render::hud::version_stamp(), 10, SHEET.1 as i32 - 9, 1, 2, SLATE);
 }

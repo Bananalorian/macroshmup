@@ -3,6 +3,51 @@
 Session notes for Claude Code: what shipped, tuning that changed, known issues, what's next.
 Newest first.
 
+## v0.12.0 The Swarm (Sprint 11) - 2026-10-13
+
+**Jason:** "rank words yes. also the slam should pause briefly on slam attacks. the slowmo makes
+the game feel like it is lagging even though it isn't. sprint 11 go and look at this info if it
+is helpful. i need bullets with clear distinctions" + a pasted level-design guide (concept and
+signature enemy; roles popcorn/snipers/turrets/tanks; introduce-iterate-twist; 2-3 s warning for
+side/bottom entries; directionality; color-coded bullets). His picks (AskUserQuestion): rank words
+"Gothic pilgrimage"; bullets "Color by what to do".
+- Rank words: style::WORDS DAMNED CURSED BLESSED ANOINTED SAINT SERAPH SANCTUS (HUD under the
+  letter at y+60; portrait line "STYLE {rank} {word}  X{mult}").
+- Slam: aim slow-mo removed from main's tick loop (SLAM_SLOW gone), SLAM_AIM 60 at full speed,
+  HITSTOP_SLAM 8 on Event::Slam; slam::aiming() is #[cfg(test)] now.
+- Bullet colors: Gun has no hue field; `Gun::hue()` derives it: SlowAim/aimed Fan/Stream red,
+  Curve/Pull/Spiral/Flower violet, Cone amber, else blue. Hue {Red, Violet, Amber, Blue} (teal
+  gone; art frames [..;4]). CLAUDE.md rule 4 and SPRINTS §2 updated.
+- EnemyKind + Lancer, Remora (fodder), Debris, Satellite, Monolith (`scenery()`: harmless to
+  touch, never fire, not counted in spawned/killed, never slam targets, bot ignores their
+  bodies, kill drops WRECK_SHARDS [10,18,28] shards into `cancelled` + award_shards).
+  EnemyKind::ALL (test only).
+- Path::Rush {from, at, enter, wait, speed, dir}: dir set at t == enter+wait toward the player
+  (Enemy::step; (0,1) if on top of you). path.aiming(t). LANCER_RUSH (30,48,4.6), LANCER_TURN
+  12, LANCE_LINE 200.
+- Stage: Cue::{Lancer{lane,y}, Remoras{side,y,n,fire}, Wreck{lane,what}}; school() spline from
+  beyond a side (REMORA_SPEED 2.6, REMORA_GAP 6, variant 1 on even i when fire); side_entry();
+  unfair() allows side entries in the upper half only; Stage::incoming(within) feeds
+  foes::draw_incoming (chevrons, SIDE_WARNING 120). SCRIPT rebuilt: 432 enemies (was 294), 14
+  gunships (was 31), HEAVIES 3.6/4.7/7.1 fodder/s. WRECK_DRIFT 0.7, WRECK_SWAY 3, WRECK_SPIN.
+- Art (foes.rs): lancer 13x25, remora 13x15 (redrawn chunkier: bone() outlines every edge, so
+  parts under 3 px go all ink), rock 19x15, satellite 29x13, monolith 13x29 (a saint in its
+  niche, no red: scenery is harmless). Lancer/remora drawn with blit_rot via `heading()`;
+  `aim_line()` red dashes; `turned()`; particles::wake behind a rushing lancer. Enemy sheet
+  shows SWARM and SCENERY.
+- Tune: RUSH_FILL by HP [.08,.1,.12,.35,.4,.8,1.5,.1,.06,.15,.25,.3]; STYLE_KILL new kinds
+  [34,18,24,34,46] (first try 16/8 dropped the bot's best to A; tuned back near v0.11);
+  KILL_POINTS [1000,300,2500,5000,8000]. Stats LANCER (5,10,18) REMORA (2,11,9) DEBRIS
+  (30,18,14) SATELLITE (60,28,12) MONOLITH (90,12,28).
+- PG_SIM: KILLS/RUN column added. 393 kills (was ~265), avg bullets 31 (34), pacifist 46 (50),
+  0 deaths; best style S90 SS5; score 3.99M. Screenshots: swarm.png (stage:22 f90/150/275,
+  stage:70 f200, stage:141 f360, seed 7); style.png now frame 3722; tally from stage end at
+  frame 15210 (+72/+118/+152/+286).
+
+**Open:** the rings (he'll show me); rank thresholds; the ship's size (left as is: the
+always-on hitbox answers it unless he wants more). **Next:** Sprint 12 (augments & shield) on go;
+how they're earned needs his call first.
+
 ## v0.11.0 Style (Sprint 10) - 2026-10-13
 
 **Jason:** "lets continue to sprint 10. return the ship bullets back to what they were" (the

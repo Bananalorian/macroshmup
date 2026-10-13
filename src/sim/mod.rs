@@ -861,7 +861,17 @@ impl World {
             self.cancelled = out;
             self.award_shards(shards);
         }
-        if let Some(s) = &mut self.stage {
+        // scenery breaks into shards that fly to you
+        if kind.scenery() {
+            let n = WRECK_SHARDS[kind as usize - EnemyKind::Debris as usize];
+            for k in 0..n {
+                let (a, r) = (k as f32 * 2.4, (k as f32).sqrt() * 3.0);
+                self.cancelled.push((x + a.cos() * r, y + a.sin() * r));
+            }
+            self.cancel_shards = true;
+            self.award_shards(n as usize);
+        }
+        if let Some(s) = self.stage.as_mut().filter(|_| !kind.scenery()) {
             s.killed += 1;
             if kind == EnemyKind::Hull {
                 s.hurry();
@@ -958,7 +968,7 @@ impl World {
         }
         // crashing into an enemy's body is as bad as a bullet, and so is the boss's laser
         if !safe {
-            hit |= self.foes.list.iter().any(|e| e.alive() && e.body().dist(px, py) < HITBOX_R);
+            hit |= self.foes.list.iter().any(|e| e.alive() && !e.kind.scenery() && e.body().dist(px, py) < HITBOX_R);
             hit |= self.boss.as_ref().is_some_and(|b| b.crashes(px, py, HITBOX_R) || b.laser.is_some_and(|l| l.touches(px, py, HITBOX_R)));
         }
         if hit {

@@ -293,14 +293,15 @@ fn stage_report(seeds: u32) {
     let cleared = runs.iter().filter(|r| r.cleared).count();
     let clean = runs.iter().filter(|r| r.cleared && r.deaths == 0).count();
     let avg = |f: &dyn Fn(&bot::StageRun) -> f32| runs.iter().map(f).sum::<f32>() / n;
-    println!("{:>8} {:>8} {:>11} {:>10} {:>7} {:>7} {:>13} {:>5}", "CLEARED", "NO-MISS", "DEATHS/RUN", "BOMBS/RUN", "KILLED", "GRAZES", "AVG BULLETS", "PEAK");
+    println!("{:>8} {:>8} {:>11} {:>10} {:>7} {:>9} {:>7} {:>13} {:>5}", "CLEARED", "NO-MISS", "DEATHS/RUN", "BOMBS/RUN", "KILLED", "KILLS/RUN", "GRAZES", "AVG BULLETS", "PEAK");
     println!(
-        "{:>7.0}% {:>7.0}% {:>11.2} {:>10.2} {:>6.0}% {:>7.0} {:>13.0} {:>5}",
+        "{:>7.0}% {:>7.0}% {:>11.2} {:>10.2} {:>6.0}% {:>9.0} {:>7.0} {:>13.0} {:>5}",
         pct(cleared),
         pct(clean),
         avg(&|r| r.deaths as f32),
         avg(&|r| r.bombs as f32),
         avg(&|r| r.killed as f32 / r.spawned.max(1) as f32) * 100.0,
+        avg(&|r| r.killed as f32),
         avg(&|r| r.grazes as f32),
         avg(&|r| r.bullet_frames as f32 / r.frames.max(1) as f32),
         runs.iter().map(|r| r.peak).max().unwrap_or(0)

@@ -98,7 +98,7 @@ impl Bot {
             Some(super::Slam::Aim { .. }) => w.reticle.is_some(),
             Some(_) => false,
             None => w.slam_target((w.player.x, w.player.y), (0.0, 0.0), None).is_some_and(|(t, _)| match t {
-                super::Target::Foe(i, _) => !w.foes.list[i].kind.fodder(),
+                super::Target::Foe(i, _) => !w.foes.list[i].kind.fodder() && !w.foes.list[i].kind.scenery(),
                 _ => true,
             }),
         }
@@ -137,7 +137,7 @@ impl Bot {
                 }
             }
             bodies.clear();
-            bodies.extend(foes.list.iter().filter(|e| e.alive()).map(|e| e.body()).filter(|r| r.dist(p.x, p.y) < reach));
+            bodies.extend(foes.list.iter().filter(|e| e.alive() && !e.kind.scenery()).map(|e| e.body()).filter(|r| r.dist(p.x, p.y) < reach));
             if let Some(b) = boss.as_ref().filter(|b| matches!(b.act, Act::Fight | Act::Break)) {
                 bodies.extend(b.crash_boxes().into_iter().filter(|r| r.dist(p.x, p.y) < reach));
             }

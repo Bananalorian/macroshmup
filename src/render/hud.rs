@@ -587,7 +587,8 @@ pub fn stage(r: &Renderer, lay: &Layout, v: &HudView) {
                     (_, _, r) if r >= 4 => TEAL_HOT,
                     _ => CREAM,
                 };
-                text(a, &format!("STYLE {}  X{:.2}", crate::sim::style::RANKS[st.rank as usize], st.mult), 8, f.bottom() + 61, 1, 1, c);
+                let k = st.rank as usize;
+                text(a, &format!("STYLE {} {}  X{:.2}", crate::sim::style::RANKS[k], crate::sim::style::WORDS[k], st.mult), 8, f.bottom() + 61, 1, 1, c);
             }
             let stats = match v.stage {
                 Some(s) => format!("KILLS {}/{}  MISSES {}  GRAZE {}", s.killed, s.spawned, v.hits, v.grazes),
@@ -849,9 +850,9 @@ fn icons(a: &Atlas, icon: Rect, n: u8, right: i32, y: i32) {
 
 /// The style rank in the right panel, beside the playfield: STYLE and the multiplier,
 /// the rank in big letters (a new one slams in, a lost one flashes red and shakes),
-/// and the meter draining under it.
+/// the meter draining under it, and the rank's word.
 fn style_block(a: &Atlas, st: StyleView, r0: i32, r1: i32, y: i32) {
-    use crate::sim::style::RANKS;
+    use crate::sim::style::{RANKS, WORDS};
     hrule(a, r0, r1, y);
     small(a, "STYLE", r0, y + 8, ASH);
     text_r(a, &format!("X{:.2}", st.mult), r1, y + 8, if st.rank >= 4 { TEAL_HOT } else { SLATE });
@@ -871,6 +872,7 @@ fn style_block(a: &Atlas, st: StyleView, r0: i32, r1: i32, y: i32) {
     a.fill(r0, y + 52, w, 3, DUSK);
     a.fill(r0, y + 52, (w as f32 * st.fill).round() as i32, 3, base);
     text(a, RANKS[st.rank as usize], r0 + dx, y + 20, scale, TRACK, color);
+    small(a, WORDS[st.rank as usize], r0 + dx, y + 60, if fresh { color } else { base });
 }
 
 /// The rush gauge, right-aligned at `right`: a segment a slam link, teal when full,
@@ -1089,6 +1091,14 @@ mod tests {
             // the portrait thumb zone line, beside the buttons
             assert!(text_width(&format!("{} 13/13", p.name), 1, 1) <= port - 8 - 100, "{}", p.name);
             assert!(text_width("BULLETS 8192  HITS 999  GRAZE 9999", 1, 1) <= port - 16);
+        }
+        // the style rank's words and letters fit the right panel, and its phone line
+        // fits beside the buttons
+        for (k, w) in crate::sim::style::WORDS.iter().enumerate() {
+            assert!(text_width(w, 1, TRACK) <= room, "{w}");
+            assert!(text_width(crate::sim::style::RANKS[k], 4, TRACK) <= room);
+            assert!(w.starts_with(crate::sim::style::RANKS[k].chars().next().unwrap()), "{w} starts with its letter");
+            assert!(text_width(&format!("STYLE {} {}  X2.50", crate::sim::style::RANKS[k], w), 1, 1) <= port - 8 - 108, "{w} on a phone");
         }
         // the left panel's rows (the score, lives/bombs/rush, the stats, then the
         // sandbox flags) clear the controls listed under them

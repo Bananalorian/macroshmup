@@ -45,7 +45,6 @@ pub const INK: Color = hex(0x000000);
 pub fn hue_rims(h: Hue) -> (Color, Color) {
     match h {
         Hue::Red => (SIGNAL, EMBER),
-        Hue::Teal => (TEAL, TEAL_HOT),
         Hue::Violet => (hex(0xA65CFF), hex(0xCB98FF)),
         Hue::Amber => (hex(0xFFA62B), hex(0xFFD27A)),
         Hue::Blue => (hex(0x3F7DFF), hex(0x8DB4FF)),

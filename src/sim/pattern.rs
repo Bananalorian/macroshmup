@@ -50,14 +50,22 @@ pub struct Gun {
     /// Frames before the first shot.
     pub delay: u32,
     pub behavior: Behavior,
-    /// The color of its bullets.
-    pub hue: Hue,
 }
 
 impl Gun {
-    /// The same gun, firing bullets of another color.
-    pub const fn hue(self, hue: Hue) -> Gun {
-        Gun { hue, ..self }
+    /// Its bullets' color, by what you have to do about them: red if they're aimed at
+    /// you (aimed fans, streams, a pause then a dart at you), violet if they spin or
+    /// bend (spirals, a flower, curving or pulled), amber if they're scattered at
+    /// random, blue for fixed shapes (rings, curtains, fans thrown straight).
+    pub fn hue(&self) -> Hue {
+        match (self.behavior, self.shape) {
+            (Behavior::SlowAim { .. }, _) => Hue::Red,
+            (Behavior::Curve { .. } | Behavior::Pull { .. }, _) => Hue::Violet,
+            (_, Shape::Fan { aimed: true, .. } | Shape::Stream { .. }) => Hue::Red,
+            (_, Shape::Spiral { .. } | Shape::Flower { .. }) => Hue::Violet,
+            (_, Shape::Cone { .. }) => Hue::Amber,
+            _ => Hue::Blue,
+        }
     }
 }
 
@@ -205,7 +213,7 @@ impl Hazards {
             let a = self.rng.range(60.0, 120.0);
             let v = self.rng.range(0.8, 2.6);
             let (c, s) = deg(a);
-            let hue = Hue::ALL[(self.rng.next_u64() % 5) as usize];
+            let hue = Hue::ALL[(self.rng.next_u64() % Hue::ALL.len() as u64) as usize];
             self.bullets.push(Spawn { x, y: -BULLET_MARGIN * 0.5, vx: c * v, vy: s * v, kind: k, behavior: Behavior::Straight, owner: 0, hue });
         }
     }
@@ -248,7 +256,7 @@ impl Emitter {
         let aim = (player.1 - self.y).atan2(player.0 - self.x).to_degrees();
         let shot = |angle: f32, speed: f32, out: &mut Vec<Spawn>| {
             let (c, s) = deg(angle);
-            Hazards::fire(out, Spawn { x: self.x, y: self.y, vx: c * speed, vy: s * speed, kind: g.kind, behavior: g.behavior, owner: self.owner, hue: g.hue }, player);
+            Hazards::fire(out, Spawn { x: self.x, y: self.y, vx: c * speed, vy: s * speed, kind: g.kind, behavior: g.behavior, owner: self.owner, hue: g.hue() }, player);
         };
         let fired = match g.shape {
             Shape::Stream { burst, gap } => {
@@ -301,7 +309,7 @@ impl Emitter {
                 let slip = if jitter > 0.0 { rng.range(-jitter, jitter) } else { 0.0 };
                 for i in (0..n).filter(|i| !(from..from + gap).contains(i)) {
                     let dx = (i as f32 - (n - 1) as f32 * 0.5) * spacing + slip;
-                    Hazards::fire(out, Spawn { x: self.x + dx, y: self.y, vx: 0.0, vy: g.speed, kind: g.kind, behavior: g.behavior, owner: self.owner, hue: g.hue }, player);
+                    Hazards::fire(out, Spawn { x: self.x + dx, y: self.y, vx: 0.0, vy: g.speed, kind: g.kind, behavior: g.behavior, owner: self.owner, hue: g.hue() }, player);
                 }
                 self.shots += 1;
                 true
@@ -384,7 +392,7 @@ mod tests {
 
     #[test]
     fn spirals_reverse_and_streams_burst() {
-        let spiral = Gun { mount: Mount::At(135.0, 60.0), shape: Shape::Spiral { arms: 1, spin: 10.0, flip: 3 }, kind: Kind::Rice, speed: 2.0, every: 1, delay: 0, behavior: Behavior::Straight, hue: Hue::Red };
+        let spiral = Gun { mount: Mount::At(135.0, 60.0), shape: Shape::Spiral { arms: 1, spin: 10.0, flip: 3 }, kind: Kind::Rice, speed: 2.0, every: 1, delay: 0, behavior: Behavior::Straight };
         let mut e = Emitter::new(spiral, 0, 0.0);
         let mut out = vec![];
         let mut rng = Rng::new(1);
@@ -413,7 +421,7 @@ mod tests {
 
     #[test]
     fn curtains_leave_a_drifting_lane_and_flowers_bloom() {
-        let curtain = Gun { mount: Mount::At(135.0, 60.0), shape: Shape::Curtain { n: 9, spacing: 10.0, gap: 3, period: 8, jitter: 0.0 }, kind: Kind::Rice, speed: 1.5, every: 1, delay: 0, behavior: Behavior::Straight, hue: Hue::Teal };
+        let curtain = Gun { mount: Mount::At(135.0, 60.0), shape: Shape::Curtain { n: 9, spacing: 10.0, gap: 3, period: 8, jitter: 0.0 }, kind: Kind::Rice, speed: 1.5, every: 1, delay: 0, behavior: Behavior::Straight };
         let mut e = Emitter::new(curtain, 0, 0.0);
         let (mut rng, mut out) = (Rng::new(1), vec![]);
         let mut gaps = vec![];
@@ -439,9 +447,29 @@ mod tests {
         assert_eq!(e.angle, 10.0, "and it turns");
     }
 
+    /// Every bullet's color says what to do about it: the jaws' aimed fans and every
+    /// needle stream are red, the windows' rings and the curtain blue, the fins'
+    /// spirals and anything bending into the hole violet, the heavies' sprinkle amber;
+    /// and no enemy bullet is ever the Pilgrim's teal.
+    #[test]
+    fn every_bullets_color_says_what_to_do() {
+        use crate::tune::{HEAVY_GUNS, JAWS_P1, JAWS_P2, JAWS_P3, JAWS_P4};
+        assert_eq!(JAWS_P1[0].gun.hue(), Hue::Red, "aimed fans");
+        assert_eq!(JAWS_P1[1].gun.hue(), Hue::Blue, "a ring");
+        assert_eq!(JAWS_P2[0].gun.hue(), Hue::Violet, "a spiral");
+        assert_eq!(JAWS_P2[2].gun.hue(), Hue::Red, "a needle stream");
+        assert_eq!(JAWS_P3[0].gun.hue(), Hue::Blue, "the curtain");
+        assert_eq!(JAWS_P3[1].gun.hue(), Hue::Amber, "a scatter");
+        assert_eq!(JAWS_P4[0].gun.hue(), Hue::Violet, "a flower bending into the hole");
+        assert_eq!(HEAVY_GUNS[0].gun.hue(), Hue::Blue, "a heavy's ring");
+        assert_eq!(HEAVY_GUNS[1].gun.hue(), Hue::Red, "its needles");
+        assert_eq!(HEAVY_GUNS[3].gun.hue(), Hue::Amber, "its sprinkle");
+        assert_eq!(Hue::ALL.len(), 4, "red, violet, amber, blue: no teal");
+    }
+
     #[test]
     fn until_next_counts_down_to_each_shot() {
-        let g = Gun { mount: Mount::Owner { dx: 0.0, dy: 5.0 }, shape: Shape::Fan { n: 3, spread: 20.0, aimed: true }, kind: Kind::Small, speed: 2.0, every: 10, delay: 4, behavior: Behavior::Straight, hue: Hue::Teal };
+        let g = Gun { mount: Mount::Owner { dx: 0.0, dy: 5.0 }, shape: Shape::Fan { n: 3, spread: 20.0, aimed: true }, kind: Kind::Small, speed: 2.0, every: 10, delay: 4, behavior: Behavior::Straight };
         let mut e = Emitter::new(g, 7, 0.0);
         let (mut rng, mut out) = (Rng::new(1), vec![]);
         for _ in 0..40 {
@@ -458,7 +486,7 @@ mod tests {
             assert_eq!(fired_at, promised, "it fires exactly when it said it would");
         }
         assert!(out.iter().all(|s| s.owner == 7 && s.y == 55.0), "owned, and fired from the enemy plus the offset");
-        assert!(out.iter().all(|s| s.hue == Hue::Teal), "in its gun's color");
+        assert!(out.iter().all(|s| s.hue == Hue::Red), "aimed at you: red");
         // a gun whose enemy may not fire stays quiet
         let mut e = Emitter::new(g, 7, 0.0);
         out.clear();

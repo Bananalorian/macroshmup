@@ -3,6 +3,86 @@
 Every version is one build sprint. Newest first. Versions are tagged in git, and
 each tag publishes a GitHub Release with downloads.
 
+## [0.12.0] - 2026-10-13 - The Swarm
+
+### Added
+- **The lancer, Stage 1's signature enemy** ([in play](docs/screenshots/swarm.png)).
+  It's a bone lance that flies in, stops, and swings round to point at you. A red
+  dashed line marks its aim and its eye blazes. Then it locks on and rushes where
+  you were: move after it locks and it misses. It never fires. Lancers come alone
+  first, then in pairs, then three and four at once.
+- **Remoras:** little bone fish (they ride with sharks) that swim across in schools
+  of 8 to 14, from beyond the sides, in the upper half. In some schools every other
+  fish fires one aimed shot.
+- **Warnings at the edges.** Red chevrons mark where a school is about to come in,
+  2 seconds ahead, marching inward faster as it nears.
+- **Scenery to shoot:** a rock, a dead satellite, and a monolith with a saint carved
+  in its niche drift down through the stage.
+  - They never fire, and touching them is harmless.
+  - Shot down, they break into 10, 18 or 28 shards that fly to you (50 points each),
+    on top of their kill points.
+  - They aren't counted among the stage's kills, and the Slam never picks them.
+- The balance report shows kills per run.
+
+### Changed
+- **Stage 1 is rebuilt as a swarm.** It sends 432 enemies instead of 294, and only
+  14 gunships instead of 31.
+  - Each new enemy comes alone first, then in numbers, then mixed in with the rest.
+  - The breather fills with scenery to shoot; the derelict keeps its section to
+    itself.
+  - HEAVIES rises to an overrun: the fodder comes faster all through it, and its
+    end is the busiest stretch of the stage.
+- **Enemy bullets are colored by what to do about them** (Jason's call):
+  - red: aimed at you (aimed fans, streams, a pause then a dart). Keep moving.
+  - blue: a fixed shape (rings, curtains, fans thrown straight). Read it and route
+    through.
+  - violet: it spins or bends (spirals, the flower, curving, pulled into the hole).
+  - amber: a random scatter.
+  - Teal is the Pilgrim's alone now: no enemy bullet uses it.
+- **The Slam pauses instead of slowing time.** The slow-mo felt like lag. Now the aim
+  runs at full speed, with a second to pick the next link, and each strike freezes
+  for 8 frames, like a big kill.
+- **The style ranks have names:** DAMNED (D), CURSED (C), BLESSED (B), ANOINTED (A),
+  SAINT (S), SERAPH (SS) and SANCTUS (SSS). The name sits under the letter in the
+  right panel and on a phone's line.
+- **The new kills are worth style:** a lancer or a satellite as much as a gunship,
+  the monolith more, remoras and the rock less. The bot's best rank holds about
+  where it was.
+- **The rush gauge:** bigger kills fill it more, ordered by hit points across every
+  kind.
+
+### Checked
+- **Tests prove:**
+  - a lancer holds still while it aims, locks on to where you are when its aim runs
+    out, rushes there in a straight line at its speed, and never fires;
+  - a school crosses in the upper half and swims out the far side, and in a firing
+    school every other fish fires once;
+  - every school from a side is warned a full 2 seconds ahead, and only remoras come
+    in from a side, always in the upper half (the fairness check catches one lower);
+  - scenery never fires, is harmless to touch, isn't worth a slam, pays its shards,
+    and isn't counted among the kills;
+  - the stage rises to an overrun: the last fighting section sends the most fodder a
+    second, it rises through that section, and the busiest 10 seconds of the stage end
+    in its last 5;
+  - every enemy bullet's color matches what it does;
+  - the Swarm's kills never hit-stop, and a slam strike stops for 8 frames;
+  - the rank names fit the right panel.
+- **Captures:** [the Swarm](docs/screenshots/swarm.png): a school warned at the left
+  edge, the school swimming in, a lancer's aim line on the Pilgrim, scenery in the
+  breather, and the overrun. The new sprites are on the
+  [enemy sheet](docs/screenshots/enemy-sheet.png). Every screenshot is retaken.
+- **PG_SIM=200, against v0.11.0:**
+  - cleared 100%, with no deaths and no bombs. The pacifist bot, which only dodges,
+    clears it too;
+  - kills per run rose from about 265 (90% of 294) to 393 (91% of 432);
+  - bullets on screen fell from 34 on average to 31 (the pacifist's from 50 to 46).
+    The peak is still 174, in the boss fight;
+  - JAWSTHIC's phases take 18.5 / 23.2 / 23.1 / 21.3 s;
+  - the bot's best style rank is S in 90% of runs and SS in 5% (it was 74% and 16%),
+    and the median score is 3.99M (it was 4.06M).
+- Native and web builds are warning-free, and all 274 tests pass in both debug and
+  release.
+
 ## [0.11.0] - 2026-10-13 - Style
 
 ### Added
