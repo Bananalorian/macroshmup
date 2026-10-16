@@ -3,6 +3,25 @@
 Session notes for Claude Code: what shipped, tuning that changed, known issues, what's next.
 Newest first.
 
+## Studio onboarding (no release) - 2026-10-16
+
+**Jason:** had me install the AI Studio (`.studio/`, `/studio-*` skills); he and Codex moved the shared
+rules into `PROJECT_RULES.md` (TASK-0001); then onboarding with permanent task records
+(TASK-0002, his five gaps: conflicting docs, position, task records, preserved history, workflow).
+- Task records: `.studio/production/tasks/TASK-NNNN-*.md` from `TEMPLATE.md`; the backlog is the
+  ID registry (next TASK-0008) and holds the ledger of v0.1.0 to v0.13.0. Decisions are
+  `.studio/decisions/DEC-NNNN-*.md`. Workflow rules: `.studio/OPERATING_MANUAL.md`.
+- `SPRINTS.md` reconciled, old wording kept and marked: §1/§3 bullet color (DEC-0001 to 0003),
+  §3 hitbox always shown (DEC-0004), §3/§8 "full power from the start" amended by the kit
+  (DEC-0005), §5 hooks point to `PROJECT_RULES.md`, the UX plan's status, §2's `art/` PNG
+  override noted as not built.
+- Checked: `cargo test` 284 passed / 2 ignored; CI green on all 31 tags; source = `cf49e4f`.
+- Nothing committed (Codex left TASK-0001 uncommitted; committing is his call).
+
+**Open:** his acceptance of TASK-0001/0002, DEC-0005's wording, DEC-0007's layout, committing
+(backlog Q-08); design questions Q-01 to Q-16 in the backlog. **Next:** his discussion list,
+then Sprint 13 (TASK-0003) on go.
+
 ## v0.13.0 Augments & shield (Sprint 12) - 2026-10-13
 
 **Jason:** "ok i have lots to discuss but lets get sprint 12 done". His picks (AskUserQuestion):

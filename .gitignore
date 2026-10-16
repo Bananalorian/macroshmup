@@ -3,3 +3,8 @@
 /site
 /shots
 *.zip
+
+# Installed toolkit is a separate repository; Studio records are tracked here.
+/.ai-studio-toolkit/
+__pycache__/
+*.py[cod]

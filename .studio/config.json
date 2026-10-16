@@ -1,0 +1,10 @@
+{
+  "studio_version": "0.1.1",
+  "bootstrap": "powershell",
+  "mode": "adopt",
+  "onboarded": "2026-10-16",
+  "onboarding_task": "TASK-0002",
+  "toolkit_version": "0.2.0",
+  "toolkit_commit": "95739b553cd00f3e7071334c76b12bf5258af2a1",
+  "toolkit_upgrade_task": "TASK-0008"
+}

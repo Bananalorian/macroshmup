@@ -21,7 +21,8 @@ sprint ends in a tagged version.
 ### Contrast
 The idea everything hangs on, taken straight from your two reference images.
 - **Value:** a warm black field with cream highlights. The brightest pixels on screen are always enemy bullet cores.
-- **Color:** only two hues exist, red and teal, and only on the Pilgrim, the boss, enemy bullets and explosion fringes. Everything else is engraved monochrome.
+- **Color:** only on the Pilgrim, the boss, enemy bullets and explosion fringes. Teal is the Pilgrim's; red marks danger; enemy bullets are colored by what to do about them (§2 Color rules). Everything else is engraved monochrome.
+  - *Superseded, kept for history:* the plan began with "only two hues exist, red and teal". Enemy bullets went to five hues in v0.6.4, then to color by what to do in v0.12.0 (Jason's calls; [DEC-0001](.studio/decisions/DEC-0001-two-hues.md) → [DEC-0003](.studio/decisions/DEC-0003-bullet-color-by-action.md)).
 - **Energy:** a slow, calm, engraved background against a violent, fast foreground. Breathers between barrages.
 - **Scale:** a tiny ship against a black hole and a cathedral-sized boss.
 
@@ -80,7 +81,7 @@ enemy bullets (big, slow ones below small, fast ones) → HUD.
 - Logical canvas **640×360**, playfield **360×360** (square, full height) in the middle, with 140 px HUD panels either side. Integer scaling only (2× at 720p, 3× at 1080p, 4× at 1440p, 6× at 4K), nearest filtering. At 1080p the play area is 1080×1080. (It was 270×360, 3:4, until v0.7.2: your call, for a bigger play area and smaller panels.)
 - The desktop game opens full screen; F11 switches to a window and the choice is remembered.
 - Everything snaps to the low-res grid, shader distortion included, as Shinjuku's post shader does.
-- All art is generated in code at startup, like Shinjuku. A debug key exports every sprite sheet as PNG so you can paint over it in Aseprite; a PNG placed back in `art/` replaces the coded version at build time.
+- All art is generated in code at startup, like Shinjuku. A debug key exports every sprite sheet as PNG so you can paint over it in Aseprite; a PNG placed back in `art/` replaces the coded version at build time. (Planned, not built: as of v0.13.0 F9 exports the sheets, but nothing in `src/` loads a PNG back.)
 
 ### The Pilgrim
 **The split sword** (v0.7.1, from [your sheet](docs/reference/ship/Split-sword%20starship_%20flight%20to%20laser.png); redrawn in v0.8.4 from your [parts atlas](docs/reference/ship/Modular%20sword%20spacecraft%20sprite%20atlas.png) and [firing strip](docs/reference/ship/Closed%20Swordship%20Firing%20Animation%20Strip.png)), 29 × 45 px, bone white like Stage 1's enemies:
@@ -115,13 +116,14 @@ a version stamp bottom-left (`V0.1 // PILGRIM`) and a tagline bottom-right.
 **Movement and space**
 - No inertia. Normalized diagonals. The same speed on both axes.
 - Focus means slower movement plus a concentrated beam, with the speed change blended over a few frames.
-- The hitbox sits exactly in the center of the ship and shows while focused.
+- The hitbox sits exactly in the center of the ship and shows all the time by default; Options can limit it to focus (v0.10.2, Jason's call; [DEC-0004](.studio/decisions/DEC-0004-hitbox-always-shown.md)). *Superseded, kept for history:* "and shows while focused".
 - Smooth movement comes from visuals: banking matched to speed, afterimages, trails, the blades closing for focus. (Since v0.8.3 a bank never takes the white stone outside a blade's channel, so the dipping side stays clean.)
 
 **Shooting**
 - Player shots are fast, long, dense and a little messy. Big shot hitboxes, big enemy hurtboxes, low emitters, so you can hit an enemy you're sitting right under. They leave from where the Pilgrim's art says: the bolts from the blade tips, the pod streams from the antenna tips (v0.8.6).
 - Point-blank play is rewarded: a beam aura (from DoDonPachi) and a point-blank score bonus.
 - No power-ups in v1; you start at full power. If they're added later, the gains are mostly visual (Boghog's "lie about power").
+  - *Amended in v0.13.0:* there are still no pickups, but the ship's kit (two augments, then a shield) is earned by style as you play, adding about a fifth to your damage, so you no longer start at full power (Jason's call; [DEC-0005](.studio/decisions/DEC-0005-kit-earned-by-style.md)).
 
 **Lives and bombs**
 - A death cancels every bullet, then gives generous invincibility so you can reposition.
@@ -129,7 +131,7 @@ a version stamp bottom-left (`V0.1 // PILGRIM`) and a tagline bottom-right.
 - Bombs make you invincible while active, and they work both ways: panic button and boss damage.
 
 **Bullets**
-- A bright core beside a dark border (value contrast), in the red family.
+- A bright core beside a dark border (value contrast), the rim's hue saying what to do about it (§2). *Superseded, kept for history:* "in the red family" ([DEC-0003](.studio/decisions/DEC-0003-bullet-color-by-action.md)).
 - Grouped into lines, rings and chunks. No lone strays. Odd trajectories get trails. Every bullet wobbles a little.
 - Seven kinds: small, orb, large, rice, needle, and since v0.8.6 the star (a slow, twinkling, turning sparkle; only its middle hurts) and the diamond (a crystal shard pointed along its flight). Big and slow draw under small and fast.
 - Patterns are aimed, static or random, layered together. Design in lanes, and never wall off big chunks of the screen.
@@ -209,6 +211,8 @@ web/template.html  build_web.py  .github/workflows/build.yml  .github/package.py
 
 **Debug hooks (native)**
 
+The current list is in [`PROJECT_RULES.md`](PROJECT_RULES.md) → Debug hooks (it adds `PG_SCENE=options`, `PG_RUSH` and `PG_KIT`). This table is the Sprint 0 plan.
+
 | Hook | What it does |
 |---|---|
 | `PG_SCENE=title` / `stage:<seconds>` / `midboss` / `boss:<phase>` / `sandbox:<pattern>` / `stress` | jump straight there |
@@ -258,7 +262,7 @@ F6 skip to the next section · F7 next sandbox pattern · F8 performance overlay
 
 1. **Music:** **synthesized in code, like Shinjuku**, or your own tracks dropped into the repo (from Suno or anywhere).
 2. **Contrast as a mechanic** (Ikaruga-style polarity): **no, contrast stays visual.** A yes would reshape Sprints 2, 4 and 6.
-3. **Power-ups:** **none; full power from the start.**
+3. **Power-ups:** **none; full power from the start.** *Amended in v0.13.0:* still no pickups, but the kit is earned by style ([DEC-0005](.studio/decisions/DEC-0005-kit-earned-by-style.md)).
 4. **Boss:** **JAWSTHIC**, your concept (Sprint 6, v0.7.0). The Cathedral proposal is retired.
 5. **Shot controls:** **a separate Focus button** (Touhou-style), with a CAVE-style "hold Fire to beam" option (both in the options since v0.8.0).
 6. **Continues:** **none (arcade retry)**, plus Boss Practice once you've reached the boss.
@@ -470,7 +474,9 @@ You check: does the HUD look like your sheet?
 
 ---
 
-### The UX plan (Jason, after v0.8.8) · *proposal*
+### The UX plan (Jason, after v0.8.8)
+*Status:* written as a *proposal* on 2026-10-12. Jason approved Sprints 8 to 12 one at a time, and they shipped as v0.9.0 to v0.13.0. Sprint 13 is still a *proposal*.
+
 **The game in one line:** a shmup you play like Hades. You shred swarms, slam through
 the big ships, stay stylish, and get slowly overrun. Fast, juicy, twitchy, arcade.
 

@@ -28,6 +28,13 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Studio record checker regression tests
+        run: python -B -m unittest discover -s tools -p "test_studio_records.py" -v
+      - name: Validate Studio records
+        run: python -B tools/check_studio_records.py
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: "1.91.1"
