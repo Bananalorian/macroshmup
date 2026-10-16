@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | ID | TASK-0001 |
-| Status | verified (awaiting Jason's acceptance) |
+| Status | accepted (Jason, 2026-10-16) |
 | Owner | Codex (implementation); Claude Code (verification) |
 | Requested by | Jason, with Codex, 2026-10-16 (Codex's event in `.studio/events.jsonl`; Jason's onboarding message) |
 | Version / release | none (instruction files only) |
@@ -13,6 +13,7 @@
 - 2026-10-16 — approved — Jason (Codex's event: "User-approved instruction reconciliation"; Jason: "Codex and I reconciled the assistant instructions"). Recorded after the fact by Claude Code during onboarding; no record was opened before the work.
 - 2026-10-16 12:50 UTC — implemented — Codex (event in `.studio/events.jsonl`).
 - 2026-10-16 — verified — Claude Code (V1-V3 below).
+- 2026-10-16T14:15:39Z — accepted — Jason: "I accept TASK-0001, TASK-0002, TASK-0007 and TASK-0008, and approve the task-record layout in DEC-0007." Recorded by Claude Code.
 
 ## Objective (as approved)
 From Jason's message (2026-10-16):
@@ -62,12 +63,15 @@ Not performed: nothing else applies (no code changed; `git diff HEAD -- src` is 
 
 ## Unresolved issues
 - Commit: Jason's call (left uncommitted on purpose).
+- 2026-10-16: resolved. Committed in `ea1072f` (TASK-0007); accepted by Jason. Nothing open.
 
 ## Handoff log
 No leadership handoff or implementation report was written for this task.
 
 ## Final status
 Verified 2026-10-16. Waiting on Jason's acceptance.
+
+Accepted 2026-10-16T14:15:39Z by Jason (quoted in Status history). Closed.
 
 ## Commit authorization update — 2026-10-16 (TASK-0007)
 Jason authorized committing the Studio files while excluding the toolkit clone. This record and its prior contents are included in that initial Studio commit. Earlier references to uncommitted work describe the state at the time; acceptance and design questions remain separate.

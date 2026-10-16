@@ -28,3 +28,7 @@ This log covers the Studio's own documents and procedures; game releases are in 
 - Existing CI test job runs the checks before game tests; dependent Pages/Release jobs are gated by that job.
 - Documented enforced structure versus remaining human review responsibilities.
 - Jason authorized the initial Studio commit; toolkit clone is ignored, editor workspace excluded, and historical onboarding records preserved.
+
+## 2026-10-16 — Acceptance recorded
+- Jason accepted TASK-0001, TASK-0002, TASK-0007 and TASK-0008 and approved DEC-0007 (14:15 UTC). Each record gained a dated `accepted` entry and a closing line; earlier entries are unchanged.
+- The backlog's task table splits into Open (the proposed sprints) and Accepted (linked records); STATE lists no active task. DEC-0005 stays open for the game-design discussion.

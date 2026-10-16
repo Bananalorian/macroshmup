@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | ID | TASK-0002 |
-| Status | verified (awaiting Jason's acceptance) |
+| Status | accepted (Jason, 2026-10-16) |
 | Owner | Claude Code, working alone and in sequence (no `studio-*` subagents were spawned) |
 | Requested by | Jason, in chat, 2026-10-16 (quoted below) |
 | Version / release | none (documents and Studio procedure only) |
@@ -14,6 +14,7 @@
 - 2026-10-16 ~12:58 UTC — started — Claude Code. Not logged to `events.jsonl` when it happened; see A13.
 - 2026-10-16 ~13:20 UTC — implemented — Claude Code (files below).
 - 2026-10-16 ~13:25 UTC — verified — Claude Code: V1 to V12 run, results below. Criterion 7 (the brief) is delivered in chat with this status.
+- 2026-10-16T14:15:39Z — accepted — Jason: "I accept TASK-0001, TASK-0002, TASK-0007 and TASK-0008, and approve the task-record layout in DEC-0007." Recorded by Claude Code. DEC-0007 is approved by the same words; DEC-0005 stays open for the game-design discussion.
 
 ## Objective (as approved)
 Jason's message, 2026-10-16, verbatim:
@@ -111,6 +112,7 @@ These are audit findings from Claude Code's own pass. No independent review (Jas
 - Jason's acceptance of this task, of DEC-0007's layout and of DEC-0005's wording.
 - Committing: Q-08.
 - Open design questions Q-01 to Q-16 in the backlog.
+- 2026-10-16 update: this task accepted and DEC-0007 approved (Jason, 14:15 UTC); committing resolved by TASK-0007 (`ea1072f`). Still open, outside this task: DEC-0005's wording (left for the game-design discussion) and Q-01 to Q-16 (Q-08 now resolved).
 
 ## Handoff log
 - 2026-10-16 — `LEADERSHIP_HANDOFF.md`: no handoff for this task (Jason briefed Claude Code directly; the brief is quoted above). The file was rewritten from the empty template to name its record rules. The template read:
@@ -124,6 +126,8 @@ These are audit findings from Claude Code's own pass. No independent review (Jas
 
 ## Final status
 Open: waiting on Jason's acceptance.
+
+Accepted 2026-10-16T14:15:39Z by Jason (quoted in Status history). Closed.
 
 ## Independent recordkeeping review — 2026-10-16T13:37:16+00:00
 Codex reviewed the installed task records and procedures during [TASK-0008](TASK-0008-toolkit-upgrade-review.md). Required record sections, file links, event task references, review/verification procedures and archive-before-replacement rules checked. Two procedure clarifications and the original event association were added without rewriting this history. See TASK-0008 V1–V5 and R1–R7 for scope and limits; this is not a rerun of all game/release tests or Jason's acceptance.

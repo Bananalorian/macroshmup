@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | ID | TASK-0007 |
-| Status | verified; awaiting Jason's acceptance |
+| Status | accepted (Jason, 2026-10-16) |
 | Owner | Codex |
 | Requested by | Jason, current chat, 2026-10-16 |
 | Version / release | Studio maintenance; no game release |
@@ -14,6 +14,7 @@
 
 - 2026-10-16T13:53:01+00:00 — implemented — checker, regression suite and CI integration added.
 - 2026-10-16T13:53:01+00:00 — verified — 26 regression tests passed; real records returned zero errors (V1–V3).
+- 2026-10-16T14:15:39Z — accepted — Jason: "I accept TASK-0001, TASK-0002, TASK-0007 and TASK-0008, and approve the task-record layout in DEC-0007." Recorded by Claude Code.
 
 ## Objective (as approved)
 Implement automatic task-record checks and commit the Studio setup, excluding the nested toolkit clone.
@@ -71,6 +72,8 @@ Current TASK-0002 implementation report and leadership handoff retained; this ta
 
 ## Final status
 Verified 2026-10-16T13:53:01+00:00. Included in the initial Studio commit with its existing onboarding documents. Jason's acceptance remains separate; no push or game release.
+
+Accepted 2026-10-16T14:15:39Z by Jason (quoted in Status history), after the publication follow-up below. Closed.
 
 ## Publication follow-up — 2026-10-16
 Jason authorized the next step: "ok push it to github and check that all the CI checks pass. and this is just the studio updates and upgrades not the actual game correct?"

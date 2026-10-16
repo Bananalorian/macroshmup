@@ -3,7 +3,7 @@
 | Field | Value |
 |---|---|
 | ID | TASK-0008 |
-| Status | verified; awaiting Jason's acceptance |
+| Status | accepted (Jason, 2026-10-16) |
 | Owner | Codex |
 | Requested by | Jason, current chat, 2026-10-16 |
 | Version / release | Toolkit v0.2.0; no game release |
@@ -14,6 +14,7 @@
 
 - 2026-10-16T13:37:16+00:00 — implemented — toolkit fast-forward and bounded documentation clarifications complete.
 - 2026-10-16T13:37:16+00:00 — verified — V1 to V5 below passed; no gameplay changes.
+- 2026-10-16T14:15:39Z — accepted — Jason: "I accept TASK-0001, TASK-0002, TASK-0007 and TASK-0008, and approve the task-record layout in DEC-0007." Recorded by Claude Code.
 
 ## Objective (as approved)
 Update the nested toolkit checkout and review installed task recordkeeping while preserving Claude's onboarding work.
@@ -72,6 +73,8 @@ Existing leadership handoff and TASK-0002 implementation report retained unchang
 
 ## Final status
 Verified 2026-10-16T13:37:16+00:00. Toolkit updated and recordkeeping procedure reviewed. Awaiting Jason's acceptance; no game commit or new gameplay work.
+
+Accepted 2026-10-16T14:15:39Z by Jason (quoted in Status history). Closed.
 
 ## Final verification addendum — 2026-10-16T13:37:26Z
 After writing the completion records, the structural audit passed again: 3 task records, 8 reserved backlog IDs, next ID TASK-0009, 67 Markdown file links and 7 JSON events; zero errors or warnings. The original event's missing task ID is resolved by its appended correlation event. Of 48 preexisting onboarding/instruction files, 41 remain byte-identical; the other 7 are the explicitly listed maintenance files. All 128 preexisting tracked files remain byte-identical to their pre-update working-tree versions. Current leadership handoff and implementation report are unchanged. No game source or existing uncommitted gameplay/document changes were reset.

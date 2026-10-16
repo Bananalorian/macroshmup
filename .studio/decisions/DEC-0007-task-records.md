@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| State | proposed. Jason approved the scope on 2026-10-16 (bounded documentation and Studio-procedure changes for recordkeeping); this layout is Claude Code's proposal and waits for his acceptance. |
+| State | approved by Jason, 2026-10-16T14:15:39Z (see Approval below). Before that: proposed. Jason had approved the scope (bounded documentation and Studio-procedure changes for recordkeeping); the layout was Claude Code's proposal. |
 | Date | 2026-10-16 |
 | Task | [TASK-0002](../production/tasks/TASK-0002-studio-onboarding.md) |
 
@@ -36,3 +36,8 @@ outcome live, so it survives later tasks?
 **Affected:** `.studio/OPERATING_MANUAL.md`, `.studio/production/`, `.studio/qa/README.md`,
 the handoff and report files, the `studio-*` skills and agents, and `PROJECT_RULES.md`'s
 definition of done (one bullet).
+
+**Approval (2026-10-16T14:15:39Z):** Jason: "I accept TASK-0001, TASK-0002, TASK-0007 and
+TASK-0008, and approve the task-record layout in DEC-0007." The layout above stands as written
+(the "Decision (proposed)" heading is kept as it was), with Codex's clarifications in the manual
+(TASK-0008) and the automatic checks (TASK-0007).

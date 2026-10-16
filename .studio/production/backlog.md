@@ -8,16 +8,25 @@
 
 ## Tasks
 
+### Open
+No task is approved or in progress. These are proposed and wait for Jason's go.
+
 | ID | Task | Status | Owner | Record | Source |
 |---|---|---|---|---|---|
-| TASK-0001 | Shared project rules in `PROJECT_RULES.md` | verified; awaiting Jason's acceptance | Codex (verified by Claude Code) | [record](tasks/TASK-0001-shared-project-rules.md) | Jason with Codex, 2026-10-16 |
-| TASK-0002 | Studio onboarding and permanent task records | verified; awaiting Jason's acceptance | Claude Code | [record](tasks/TASK-0002-studio-onboarding.md) | Jason, 2026-10-16 |
 | TASK-0003 | Sprint 13: Arcade shell (v0.14.0): CRT shaders, a Zero Ranger-like title, the WARNING lottery, a pause button | proposed (`SPRINTS.md` marks it *proposal*) | — | not yet | `SPRINTS.md` Sprint 13; UX plan, 2026-10-12 |
 | TASK-0004 | Sprint 14: Music & mix (v0.15.0) | proposed (in the plan; waits for Jason's go) | — | not yet | `SPRINTS.md` Sprint 14 |
 | TASK-0005 | Sprint 15: Tuning (v0.16.0) | proposed (in the plan; waits for Jason's go) | — | not yet | `SPRINTS.md` Sprint 15 |
 | TASK-0006 | Sprint 16: 1.0 (v1.0.0) | proposed (in the plan; waits for Jason's go) | — | not yet | `SPRINTS.md` Sprint 16 |
-| TASK-0007 | Automatic task-record checks and initial Studio commit | verified; awaiting acceptance | Codex | [record](tasks/TASK-0007-automatic-record-checks.md) | Jason, 2026-10-16; TASK-0002 A11 |
-| TASK-0008 | Toolkit v0.2.0 upgrade and task-recordkeeping review | verified; awaiting acceptance | Codex | [record](tasks/TASK-0008-toolkit-upgrade-review.md) | Jason, 2026-10-16 |
+
+### Accepted
+Closed. Each record keeps its full history and evidence.
+
+| ID | Task | Status | Owner | Record | Source |
+|---|---|---|---|---|---|
+| TASK-0001 | Shared project rules in `PROJECT_RULES.md` | accepted (Jason, 2026-10-16) | Codex (verified by Claude Code) | [record](tasks/TASK-0001-shared-project-rules.md) | Jason with Codex, 2026-10-16 |
+| TASK-0002 | Studio onboarding and permanent task records | accepted (Jason, 2026-10-16) | Claude Code | [record](tasks/TASK-0002-studio-onboarding.md) | Jason, 2026-10-16 |
+| TASK-0007 | Automatic task-record checks and initial Studio commit | accepted (Jason, 2026-10-16) | Codex | [record](tasks/TASK-0007-automatic-record-checks.md) | Jason, 2026-10-16; TASK-0002 A11 |
+| TASK-0008 | Toolkit v0.2.0 upgrade and task-recordkeeping review | accepted (Jason, 2026-10-16) | Codex | [record](tasks/TASK-0008-toolkit-upgrade-review.md) | Jason, 2026-10-16 |
 
 **Before anything new:** Jason said after v0.13.0 that he has "lots to discuss" (`MEMORY.md`,
 v0.13.0). His list comes first; Sprint 13 waits for his go.

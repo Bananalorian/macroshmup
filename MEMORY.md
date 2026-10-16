@@ -22,6 +22,12 @@ rules into `PROJECT_RULES.md` (TASK-0001); then onboarding with permanent task r
 (backlog Q-08); design questions Q-01 to Q-16 in the backlog. **Next:** his discussion list,
 then Sprint 13 (TASK-0003) on go.
 
+**Later the same day:** Codex added the record checker in CI (TASK-0007, run
+`tools/check_studio_records.py` before committing records) and upgraded the toolkit (TASK-0008);
+the Studio files are committed (`ea1072f`). Jason accepted TASK-0001, 0002, 0007 and 0008 and
+approved DEC-0007. Still open: DEC-0005's wording (for the design talk) and Q-01 to Q-16. No
+gameplay work authorized; Sprint 13 waits for his go.
+
 ## v0.13.0 Augments & shield (Sprint 12) - 2026-10-13
 
 **Jason:** "ok i have lots to discuss but lets get sprint 12 done". His picks (AskUserQuestion):

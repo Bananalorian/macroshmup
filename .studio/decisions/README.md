@@ -31,4 +31,4 @@ them is changed, superseded or found in conflict.
 | [DEC-0004](DEC-0004-hitbox-always-shown.md) | The hitbox shows all the time by default | approved | 2026-10-13 (v0.10.2) |
 | [DEC-0005](DEC-0005-kit-earned-by-style.md) | The ship's kit is earned by style; no item pickups | approved | 2026-10-13 (v0.13.0) |
 | [DEC-0006](DEC-0006-shared-project-rules.md) | Shared project rules live in PROJECT_RULES.md | approved | 2026-10-16 |
-| [DEC-0007](DEC-0007-task-records.md) | Permanent task records in `.studio/production/tasks/` | proposed (inside Jason's approved scope) | 2026-10-16 |
+| [DEC-0007](DEC-0007-task-records.md) | Permanent task records in `.studio/production/tasks/` | approved (Jason, 2026-10-16; proposed until then) | 2026-10-16 |
