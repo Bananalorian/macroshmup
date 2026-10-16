@@ -71,3 +71,20 @@ Current TASK-0002 implementation report and leadership handoff retained; this ta
 
 ## Final status
 Verified 2026-10-16T13:53:01+00:00. Included in the initial Studio commit with its existing onboarding documents. Jason's acceptance remains separate; no push or game release.
+
+## Publication follow-up — 2026-10-16
+Jason authorized the next step: "ok push it to github and check that all the CI checks pass. and this is just the studio updates and upgrades not the actual game correct?"
+
+The earlier no-push scope is superseded by this explicit request. Commit `ea1072fc1fae765f53dbbe31b4aad7e2fe89e141` was pushed to `origin/main`. Its diff contains Studio instructions, onboarding/reconciliation documents, checker/tests, ignore rules and CI integration. No gameplay source, assets, tuning, Cargo files, Rust toolchain or game version changed. Existing main-branch CI also rebuilds/deploys Pages; no release tag was created.
+
+CI run: https://github.com/Bananalorian/macroshmup/actions/runs/38911706123 (pending at time of this entry).
+
+## Publication verification — 2026-10-16
+Commit `ea1072fc1fae765f53dbbe31b4aad7e2fe89e141` passed [Build run 38911706123](https://github.com/Bananalorian/macroshmup/actions/runs/38911706123).
+- Studio regression suite on CI Python 3.12: 26 tests passed (0.137 seconds).
+- Studio record validation: 0 errors.
+- Linux game tests: 282 passed, 0 failed, 2 ignored (11.65 seconds). This is the CI result for this commit; earlier local test counts remain historical observations.
+- Browser build, Windows desktop build, macOS universal build, Linux desktop build, and GitHub Pages deployment: success.
+- GitHub Release: skipped as designed because no version tag was pushed.
+
+These results supersede the earlier "remote CI not performed" note for this follow-up. No gameplay source, assets, tuning or game version changed. This evidence-only follow-up commit will receive its own CI run; the exact-head result is available in GitHub Actions and the publication conversation. Avoid an endless chain of commits recording their own CI outcomes.
